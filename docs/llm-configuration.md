@@ -18,7 +18,7 @@ Aotanami uses LLMs (Large Language Models) for intelligent diagnosis and remedia
 ### Via AotanamiConfig CRD
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: AotanamiConfig
 metadata:
   name: default

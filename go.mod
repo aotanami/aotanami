@@ -1,4 +1,4 @@
-module github.com/zelyo-ai/aotanami
+module github.com/aotanami/aotanami
 
 go 1.25.3
 

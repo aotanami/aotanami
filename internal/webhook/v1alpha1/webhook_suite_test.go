@@ -39,7 +39,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	aotanamiv1alpha1 "github.com/zelyo-ai/aotanami/api/v1alpha1"
+	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

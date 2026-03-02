@@ -20,7 +20,7 @@
 
 🔧 Next Steps:
   1. Apply a SecurityPolicy:
-     kubectl apply -f https://raw.githubusercontent.com/zelyo-ai/aotanami/main/config/samples/aotanami_v1alpha1_securitypolicy.yaml
+     kubectl apply -f https://raw.githubusercontent.com/aotanami/aotanami/main/config/samples/aotanami_v1alpha1_securitypolicy.yaml
 
   2. Check operator logs:
      kubectl logs -f deploy/{{ include "aotanami.fullname" . }} -n {{ .Release.Namespace }}
@@ -28,4 +28,4 @@
   3. View CRDs:
      kubectl get securitypolicies,clusterscans,scanreports -A
 
-📖 Documentation: https://github.com/zelyo-ai/aotanami/tree/main/docs
+📖 Documentation: https://github.com/aotanami/aotanami/tree/main/docs

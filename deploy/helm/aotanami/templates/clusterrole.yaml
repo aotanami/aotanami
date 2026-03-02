@@ -80,7 +80,7 @@ rules:
     verbs: ["get", "list"]
 
   # Aotanami CRDs — full access (manage own resources)
-  - apiGroups: ["aotanami.zelyo.ai"]
+  - apiGroups: ["aotanami.com"]
     resources:
       - securitypolicies
       - remediationpolicies
@@ -94,7 +94,7 @@ rules:
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
   # Aotanami CRD statuses
-  - apiGroups: ["aotanami.zelyo.ai"]
+  - apiGroups: ["aotanami.com"]
     resources:
       - securitypolicies/status
       - remediationpolicies/status

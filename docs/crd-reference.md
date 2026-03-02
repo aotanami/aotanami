@@ -7,7 +7,7 @@ Complete field reference for all Aotanami Custom Resource Definitions.
 Defines security rules to evaluate and enforce on Kubernetes workloads.
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: SecurityPolicy
 metadata:
   name: enforce-security
@@ -40,7 +40,7 @@ spec:
 Configures how Aotanami generates and submits GitOps PRs.
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: RemediationPolicy
 metadata:
   name: auto-fix
@@ -65,7 +65,7 @@ spec:
 Triggers security and compliance scans.
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: ClusterScan
 metadata:
   name: nightly-scan
@@ -87,7 +87,7 @@ spec:
 Onboards an existing GitOps repository.
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: GitOpsRepository
 metadata:
   name: infra-repo
@@ -112,7 +112,7 @@ spec:
 Configures cost monitoring and workload rightsizing.
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: CostPolicy
 metadata:
   name: optimize-costs
@@ -136,7 +136,7 @@ spec:
 Configures real-time monitoring and anomaly detection.
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: MonitoringPolicy
 metadata:
   name: realtime-watch
@@ -168,7 +168,7 @@ Configures alert destinations.
 
 ```yaml
 # Slack example
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: NotificationChannel
 metadata:
   name: slack-alerts
@@ -192,7 +192,7 @@ spec:
 Global operator configuration (cluster-scoped).
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: AotanamiConfig
 metadata:
   name: default

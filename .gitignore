@@ -43,3 +43,6 @@ cover.out
 # Temporary
 tmp/
 temp/
+
+# MkDocs build output
+site/

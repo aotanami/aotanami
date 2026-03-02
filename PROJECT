@@ -7,7 +7,7 @@ domain: zelyo.ai
 layout:
 - go.kubebuilder.io/v4
 projectName: aotanami
-repo: github.com/zelyo-ai/aotanami
+repo: github.com/aotanami/aotanami
 resources:
 - api:
     crdVersion: v1
@@ -16,7 +16,7 @@ resources:
   domain: zelyo.ai
   group: aotanami
   kind: SecurityPolicy
-  path: github.com/zelyo-ai/aotanami/api/v1alpha1
+  path: github.com/aotanami/aotanami/api/v1alpha1
   version: v1alpha1
   webhooks:
     defaulting: true
@@ -29,7 +29,7 @@ resources:
   domain: zelyo.ai
   group: aotanami
   kind: RemediationPolicy
-  path: github.com/zelyo-ai/aotanami/api/v1alpha1
+  path: github.com/aotanami/aotanami/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -38,7 +38,7 @@ resources:
   domain: zelyo.ai
   group: aotanami
   kind: ClusterScan
-  path: github.com/zelyo-ai/aotanami/api/v1alpha1
+  path: github.com/aotanami/aotanami/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -47,7 +47,7 @@ resources:
   domain: zelyo.ai
   group: aotanami
   kind: ScanReport
-  path: github.com/zelyo-ai/aotanami/api/v1alpha1
+  path: github.com/aotanami/aotanami/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -56,7 +56,7 @@ resources:
   domain: zelyo.ai
   group: aotanami
   kind: CostPolicy
-  path: github.com/zelyo-ai/aotanami/api/v1alpha1
+  path: github.com/aotanami/aotanami/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -65,7 +65,7 @@ resources:
   domain: zelyo.ai
   group: aotanami
   kind: MonitoringPolicy
-  path: github.com/zelyo-ai/aotanami/api/v1alpha1
+  path: github.com/aotanami/aotanami/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -74,7 +74,7 @@ resources:
   domain: zelyo.ai
   group: aotanami
   kind: NotificationChannel
-  path: github.com/zelyo-ai/aotanami/api/v1alpha1
+  path: github.com/aotanami/aotanami/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -83,7 +83,7 @@ resources:
   domain: zelyo.ai
   group: aotanami
   kind: AotanamiConfig
-  path: github.com/zelyo-ai/aotanami/api/v1alpha1
+  path: github.com/aotanami/aotanami/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -92,6 +92,6 @@ resources:
   domain: zelyo.ai
   group: aotanami
   kind: GitOpsRepository
-  path: github.com/zelyo-ai/aotanami/api/v1alpha1
+  path: github.com/aotanami/aotanami/api/v1alpha1
   version: v1alpha1
 version: "3"

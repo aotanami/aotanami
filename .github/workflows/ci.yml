@@ -87,7 +87,7 @@ jobs:
         run: make build
 
       - name: Build Docker image
-        run: make docker-build IMG=ghcr.io/zelyo-ai/aotanami:ci-${{ github.sha }}
+        run: make docker-build IMG=ghcr.io/aotanami/aotanami:ci-${{ github.sha }}
 
   helm-lint:
     name: Helm Lint

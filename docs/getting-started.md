@@ -14,7 +14,7 @@
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/zelyo-ai/aotanami.git
+git clone https://github.com/aotanami/aotanami.git
 cd aotanami
 ```
 
@@ -43,7 +43,7 @@ make run
 
 ```yaml
 # config/samples/aotanami_v1alpha1_securitypolicy.yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: SecurityPolicy
 metadata:
   name: baseline-security
@@ -107,7 +107,7 @@ helm install aotanami oci://ghcr.io/zelyo-ai/charts/aotanami \
 To enable autonomous PR-based remediation, onboard a GitOps repository:
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: GitOpsRepository
 metadata:
   name: my-infra

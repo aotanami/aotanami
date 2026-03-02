@@ -23,7 +23,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	aotanamiv1alpha1 "github.com/zelyo-ai/aotanami/api/v1alpha1"
+	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
 )
 
 // log is for logging in this package.
@@ -39,7 +39,7 @@ func SetupSecurityPolicyWebhookWithManager(mgr ctrl.Manager) error {
 
 // TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
-// +kubebuilder:webhook:path=/mutate-aotanami-zelyo-ai-v1alpha1-securitypolicy,mutating=true,failurePolicy=fail,sideEffects=None,groups=aotanami.zelyo.ai,resources=securitypolicies,verbs=create;update,versions=v1alpha1,name=msecuritypolicy-v1alpha1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-aotanami-zelyo-ai-v1alpha1-securitypolicy,mutating=true,failurePolicy=fail,sideEffects=None,groups=aotanami.com,resources=securitypolicies,verbs=create;update,versions=v1alpha1,name=msecuritypolicy-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // SecurityPolicyCustomDefaulter struct is responsible for setting default values on the custom resource of the
 // Kind SecurityPolicy when those are created or updated.
@@ -61,7 +61,7 @@ func (d *SecurityPolicyCustomDefaulter) Default(_ context.Context, obj *aotanami
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: If you want to customise the 'path', use the flags '--defaulting-path' or '--validation-path'.
-// +kubebuilder:webhook:path=/validate-aotanami-zelyo-ai-v1alpha1-securitypolicy,mutating=false,failurePolicy=fail,sideEffects=None,groups=aotanami.zelyo.ai,resources=securitypolicies,verbs=create;update,versions=v1alpha1,name=vsecuritypolicy-v1alpha1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-aotanami-zelyo-ai-v1alpha1-securitypolicy,mutating=false,failurePolicy=fail,sideEffects=None,groups=aotanami.com,resources=securitypolicies,verbs=create;update,versions=v1alpha1,name=vsecuritypolicy-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // SecurityPolicyCustomValidator struct is responsible for validating the SecurityPolicy resource
 // when it is created, updated, or deleted.

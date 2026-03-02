@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: securitypolicies.aotanami.zelyo.ai
+  name: securitypolicies.aotanami.com
 spec:
-  group: aotanami.zelyo.ai
+  group: aotanami.com
   names:
     kind: SecurityPolicy
     listKind: SecurityPolicyList

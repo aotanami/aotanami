@@ -4,35 +4,38 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: clusterscans.aotanami.zelyo.ai
+  name: gitopsrepositories.aotanami.com
 spec:
-  group: aotanami.zelyo.ai
+  group: aotanami.com
   names:
-    kind: ClusterScan
-    listKind: ClusterScanList
-    plural: clusterscans
-    singular: clusterscan
+    kind: GitOpsRepository
+    listKind: GitOpsRepositoryList
+    plural: gitopsrepositories
+    singular: gitopsrepository
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.schedule
-      name: Schedule
+    - jsonPath: .spec.url
+      name: URL
+      type: string
+    - jsonPath: .spec.branch
+      name: Branch
       type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .status.findingsCount
-      name: Findings
+    - jsonPath: .status.driftCount
+      name: Drifts
       type: integer
-    - jsonPath: .status.lastScheduleTime
-      name: Last Run
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
       type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
         description: |-
-          ClusterScan is the Schema for the clusterscans API.
-          It triggers and manages security and compliance scans across the cluster.
+          GitOpsRepository is the Schema for the gitopsrepositories API.
+          It represents an onboarded GitOps repository for drift detection and PR-based remediation.
         properties:
           apiVersion:
             description: |-
@@ -53,61 +56,83 @@ spec:
             type: object
           spec:
             description: |-
-              ClusterScanSpec defines the desired state of ClusterScan.
-              A ClusterScan triggers security, compliance, and configuration scans
-              on a schedule or on-demand.
+              GitOpsRepositorySpec defines the desired state of GitOpsRepository.
+              A GitOpsRepository represents an onboarded GitOps repository that Aotanami
+              uses for config drift detection and submitting remediation PRs.
             properties:
-              complianceFrameworks:
-                description: complianceFrameworks lists compliance frameworks to evaluate
-                  against.
+              authSecret:
+                description: |-
+                  authSecret is the name of the Kubernetes Secret containing authentication credentials.
+                  For GitHub App, use the GitHub App credentials. For PAT, use a token.
+                type: string
+              branch:
+                default: main
+                description: branch is the target branch for PRs and drift comparison.
+                type: string
+              enableDriftDetection:
+                default: true
+                description: enableDriftDetection when true, enables comparing live
+                  cluster state against repo manifests.
+                type: boolean
+              namespaceMapping:
+                description: namespaceMapping maps repository paths to Kubernetes
+                  namespaces for drift detection.
                 items:
-                  type: string
+                  description: NamespaceMap maps a path in the GitOps repo to a Kubernetes
+                    namespace.
+                  properties:
+                    namespace:
+                      description: namespace is the Kubernetes namespace this path
+                        corresponds to.
+                      type: string
+                    repoPath:
+                      description: repoPath is the path within the git repository.
+                      type: string
+                  required:
+                  - namespace
+                  - repoPath
+                  type: object
                 type: array
-              historyLimit:
-                default: 10
-                description: historyLimit is the number of ScanReport resources to
-                  retain.
-                format: int32
-                minimum: 1
-                type: integer
-              scanners:
-                description: scanners lists which scanning modules to run.
+              paths:
+                description: paths lists the directories within the repo containing
+                  Kubernetes manifests.
                 items:
                   type: string
                 minItems: 1
                 type: array
-              schedule:
-                description: schedule is a cron expression for periodic scans. If
-                  empty, the scan runs once.
+              pollIntervalSeconds:
+                default: 300
+                description: pollIntervalSeconds is how frequently to poll the repo
+                  for changes (when syncStrategy is poll).
+                format: int32
+                minimum: 30
+                type: integer
+              provider:
+                default: github
+                description: provider identifies the Git hosting provider.
+                enum:
+                - github
+                - gitlab
+                - bitbucket
                 type: string
-              scope:
-                description: scope restricts the scan to specific namespaces.
-                properties:
-                  excludeNamespaces:
-                    description: excludeNamespaces to exclude from the scan.
-                    items:
-                      type: string
-                    type: array
-                  namespaces:
-                    description: namespaces to include. Empty means all namespaces.
-                    items:
-                      type: string
-                    type: array
-                type: object
-              suspend:
-                default: false
-                description: suspend pauses scheduled scans when true.
-                type: boolean
+              syncStrategy:
+                default: poll
+                description: syncStrategy defines how Aotanami syncs with the repository.
+                enum:
+                - poll
+                - webhook
+                type: string
+              url:
+                description: url is the Git repository URL (HTTPS or SSH).
+                type: string
             required:
-            - scanners
+            - authSecret
+            - paths
+            - url
             type: object
           status:
-            description: ClusterScanStatus defines the observed state of ClusterScan.
+            description: GitOpsRepositoryStatus defines the observed state of GitOpsRepository.
             properties:
-              completedAt:
-                description: completedAt is when the last scan finished.
-                format: date-time
-                type: string
               conditions:
                 description: conditions represent the current state of the resource.
                 items:
@@ -168,26 +193,34 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              findingsCount:
-                description: findingsCount is the total number of findings from the
-                  last scan.
+              discoveredManifests:
+                description: discoveredManifests is the number of K8s manifests discovered
+                  in the repo.
                 format: int32
                 type: integer
-              lastReportName:
-                description: lastReportName is the name of the most recent ScanReport
-                  resource.
+              driftCount:
+                description: driftCount is the number of resources with config drift
+                  from the repo.
+                format: int32
+                type: integer
+              lastError:
+                description: lastError describes the most recent sync error, if any.
                 type: string
-              lastScheduleTime:
-                description: lastScheduleTime is when the scan was last triggered.
+              lastSyncTime:
+                description: lastSyncTime is when the repo was last synced.
                 format: date-time
                 type: string
+              lastSyncedCommit:
+                description: lastSyncedCommit is the SHA of the last successfully
+                  synced commit.
+                type: string
               phase:
-                description: phase indicates the current scan lifecycle.
+                description: phase indicates the current lifecycle phase.
                 enum:
                 - Pending
-                - Running
-                - Completed
-                - Failed
+                - Syncing
+                - Synced
+                - Error
                 type: string
             type: object
         required:

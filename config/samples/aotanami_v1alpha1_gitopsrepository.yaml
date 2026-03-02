@@ -1,4 +1,4 @@
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: GitOpsRepository
 metadata:
   labels:

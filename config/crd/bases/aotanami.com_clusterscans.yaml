@@ -4,35 +4,35 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: remediationpolicies.aotanami.zelyo.ai
+  name: clusterscans.aotanami.com
 spec:
-  group: aotanami.zelyo.ai
+  group: aotanami.com
   names:
-    kind: RemediationPolicy
-    listKind: RemediationPolicyList
-    plural: remediationpolicies
-    singular: remediationpolicy
+    kind: ClusterScan
+    listKind: ClusterScanList
+    plural: clusterscans
+    singular: clusterscan
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.gitOpsRepository
-      name: GitOps Repo
+    - jsonPath: .spec.schedule
+      name: Schedule
       type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .status.remediationsApplied
-      name: PRs Created
+    - jsonPath: .status.findingsCount
+      name: Findings
       type: integer
-    - jsonPath: .metadata.creationTimestamp
-      name: Age
+    - jsonPath: .status.lastScheduleTime
+      name: Last Run
       type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
         description: |-
-          RemediationPolicy is the Schema for the remediationpolicies API.
-          It configures how Aotanami generates and submits GitOps PRs for detected violations.
+          ClusterScan is the Schema for the clusterscans API.
+          It triggers and manages security and compliance scans across the cluster.
         properties:
           apiVersion:
             description: |-
@@ -53,76 +53,61 @@ spec:
             type: object
           spec:
             description: |-
-              RemediationPolicySpec defines the desired state of RemediationPolicy.
-              A RemediationPolicy configures how Aotanami generates and submits fixes
-              via GitOps when policy violations are detected.
+              ClusterScanSpec defines the desired state of ClusterScan.
+              A ClusterScan triggers security, compliance, and configuration scans
+              on a schedule or on-demand.
             properties:
-              autoMerge:
-                default: false
-                description: autoMerge when true, enables auto-merge on PRs after
-                  all checks pass.
-                type: boolean
-              dryRun:
-                default: false
-                description: dryRun when true, generates fixes but does not create
-                  actual PRs.
-                type: boolean
-              gitOpsRepository:
-                description: gitOpsRepository is the name of the GitOpsRepository
-                  resource to submit PRs against.
-                type: string
-              maxConcurrentPRs:
-                default: 5
-                description: maxConcurrentPRs limits the number of open PRs at any
-                  time.
-                format: int32
-                minimum: 1
-                type: integer
-              prTemplate:
-                description: prTemplate configures how pull requests are created.
-                properties:
-                  assignees:
-                    description: assignees for created PRs.
-                    items:
-                      type: string
-                    type: array
-                  branchPrefix:
-                    default: aotanami/fix-
-                    description: branchPrefix for fix branches (e.g., "aotanami/fix-").
-                    type: string
-                  labels:
-                    description: labels applied to created PRs.
-                    items:
-                      type: string
-                    type: array
-                  titlePrefix:
-                    default: '[Aotanami]'
-                    description: titlePrefix is prepended to all PR titles (e.g.,
-                      "[Aotanami]").
-                    type: string
-                type: object
-              severityFilter:
-                default: high
-                description: severityFilter only creates PRs for findings at or above
-                  this severity level.
-                enum:
-                - critical
-                - high
-                - medium
-                - low
-                type: string
-              targetPolicies:
-                description: targetPolicies lists the SecurityPolicy names this remediation
-                  applies to. Empty means all.
+              complianceFrameworks:
+                description: complianceFrameworks lists compliance frameworks to evaluate
+                  against.
                 items:
                   type: string
                 type: array
+              historyLimit:
+                default: 10
+                description: historyLimit is the number of ScanReport resources to
+                  retain.
+                format: int32
+                minimum: 1
+                type: integer
+              scanners:
+                description: scanners lists which scanning modules to run.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+              schedule:
+                description: schedule is a cron expression for periodic scans. If
+                  empty, the scan runs once.
+                type: string
+              scope:
+                description: scope restricts the scan to specific namespaces.
+                properties:
+                  excludeNamespaces:
+                    description: excludeNamespaces to exclude from the scan.
+                    items:
+                      type: string
+                    type: array
+                  namespaces:
+                    description: namespaces to include. Empty means all namespaces.
+                    items:
+                      type: string
+                    type: array
+                type: object
+              suspend:
+                default: false
+                description: suspend pauses scheduled scans when true.
+                type: boolean
             required:
-            - gitOpsRepository
+            - scanners
             type: object
           status:
-            description: RemediationPolicyStatus defines the observed state of RemediationPolicy.
+            description: ClusterScanStatus defines the observed state of ClusterScan.
             properties:
+              completedAt:
+                description: completedAt is when the last scan finished.
+                format: date-time
+                type: string
               conditions:
                 description: conditions represent the current state of the resource.
                 items:
@@ -183,26 +168,27 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              lastRun:
-                description: lastRun is the timestamp of the last remediation cycle.
+              findingsCount:
+                description: findingsCount is the total number of findings from the
+                  last scan.
+                format: int32
+                type: integer
+              lastReportName:
+                description: lastReportName is the name of the most recent ScanReport
+                  resource.
+                type: string
+              lastScheduleTime:
+                description: lastScheduleTime is when the scan was last triggered.
                 format: date-time
                 type: string
-              openPRs:
-                description: openPRs is the count of currently open PRs.
-                format: int32
-                type: integer
               phase:
-                description: phase indicates the current lifecycle phase.
+                description: phase indicates the current scan lifecycle.
                 enum:
                 - Pending
-                - Active
-                - Error
+                - Running
+                - Completed
+                - Failed
                 type: string
-              remediationsApplied:
-                description: remediationsApplied is the total number of PRs successfully
-                  created.
-                format: int32
-                type: integer
             type: object
         required:
         - spec

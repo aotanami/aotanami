@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo-placeholder.png" alt="Aotanami" width="200" />
+  <img src="assets/logo.png" alt="Aotanami" width="200" />
 </p>
 
 <h1 align="center">Aotanami</h1>
@@ -13,11 +13,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/zelyo-ai/aotanami/actions/workflows/ci.yml"><img src="https://github.com/zelyo-ai/aotanami/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/zelyo-ai/aotanami/releases"><img src="https://img.shields.io/github/v/release/zelyo-ai/aotanami?style=flat-square" alt="Release" /></a>
-  <a href="https://goreportcard.com/report/github.com/zelyo-ai/aotanami"><img src="https://goreportcard.com/badge/github.com/zelyo-ai/aotanami" alt="Go Report Card" /></a>
+  <a href="https://github.com/aotanami/aotanami/actions/workflows/ci.yml"><img src="https://github.com/aotanami/aotanami/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/aotanami/aotanami/releases"><img src="https://img.shields.io/github/v/release/aotanami/aotanami?style=flat-square" alt="Release" /></a>
+  <a href="https://goreportcard.com/report/github.com/aotanami/aotanami"><img src="https://goreportcard.com/badge/github.com/aotanami/aotanami" alt="Go Report Card" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License" /></a>
-  <a href="https://artifacthub.io/packages/helm/zelyo-ai/aotanami"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/zelyo-ai&style=flat-square" alt="Artifact Hub" /></a>
+  <a href="https://artifacthub.io/packages/helm/aotanami/aotanami"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/zelyo-ai&style=flat-square" alt="Artifact Hub" /></a>
 </p>
 
 ---
@@ -123,7 +123,7 @@ kubectl get pods -n aotanami-system
 ### Verify Image Signature
 
 ```bash
-cosign verify ghcr.io/zelyo-ai/aotanami:<tag> \
+cosign verify ghcr.io/aotanami/aotanami:<tag> \
   --certificate-identity-regexp='.*' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com'
 ```
@@ -131,7 +131,7 @@ cosign verify ghcr.io/zelyo-ai/aotanami:<tag> \
 ### Apply a Security Policy
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: SecurityPolicy
 metadata:
   name: enforce-non-root
@@ -149,7 +149,7 @@ spec:
 ### Onboard a GitOps Repository
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: GitOpsRepository
 metadata:
   name: my-infra-repo
@@ -182,7 +182,7 @@ spec:
 
 ```bash
 # Clone the repository
-git clone https://github.com/zelyo-ai/aotanami.git
+git clone https://github.com/aotanami/aotanami.git
 cd aotanami
 
 # Install dependencies
@@ -208,10 +208,10 @@ make lint
 make build
 
 # Build the Docker image
-make docker-build IMG=ghcr.io/zelyo-ai/aotanami:dev
+make docker-build IMG=ghcr.io/aotanami/aotanami:dev
 
 # Build and push
-make docker-push IMG=ghcr.io/zelyo-ai/aotanami:dev
+make docker-push IMG=ghcr.io/aotanami/aotanami:dev
 ```
 
 ---

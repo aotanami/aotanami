@@ -15,7 +15,7 @@ webhooks:
   name: msecuritypolicy-v1alpha1.kb.io
   rules:
   - apiGroups:
-    - aotanami.zelyo.ai
+    - aotanami.com
     apiVersions:
     - v1alpha1
     operations:
@@ -41,7 +41,7 @@ webhooks:
   name: vsecuritypolicy-v1alpha1.kb.io
   rules:
   - apiGroups:
-    - aotanami.zelyo.ai
+    - aotanami.com
     apiVersions:
     - v1alpha1
     operations:

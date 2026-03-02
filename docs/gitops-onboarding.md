@@ -40,7 +40,7 @@ kubectl create secret generic github-pat \
 ## Step 2: Create GitOpsRepository Resource
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: GitOpsRepository
 metadata:
   name: production-manifests
@@ -78,7 +78,7 @@ kubectl get gitopsrepositories -n aotanami-system
 Create a RemediationPolicy to start receiving fix PRs:
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: RemediationPolicy
 metadata:
   name: auto-remediate

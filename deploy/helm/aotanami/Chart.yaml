@@ -4,9 +4,9 @@ description: Aotanami — Autonomous Kubernetes Protection powered by Agentic AI
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
-home: https://github.com/zelyo-ai/aotanami
+home: https://github.com/aotanami/aotanami
 sources:
-  - https://github.com/zelyo-ai/aotanami
+  - https://github.com/aotanami/aotanami
 maintainers:
   - name: Zelyo AI
     email: engineering@zelyo.ai
@@ -20,7 +20,7 @@ keywords:
   - gitops
   - compliance
 annotations:
-  org.opencontainers.image.source: https://github.com/zelyo-ai/aotanami
+  org.opencontainers.image.source: https://github.com/aotanami/aotanami
   org.opencontainers.image.description: "Aotanami — Autonomous Kubernetes Protection"
   org.opencontainers.image.licenses: Apache-2.0
   artifacthub.io/license: Apache-2.0

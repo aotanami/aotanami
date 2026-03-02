@@ -113,7 +113,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/zelyo-ai/aotanami
+        - github.com/aotanami/aotanami
 
 issues:
   max-issues-per-linter: 0

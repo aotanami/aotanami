@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	aotanamiv1alpha1 "github.com/zelyo-ai/aotanami/api/v1alpha1"
+	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
 )
 
 // RemediationPolicyReconciler reconciles a RemediationPolicy object
@@ -33,9 +33,9 @@ type RemediationPolicyReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=aotanami.zelyo.ai,resources=remediationpolicies,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=aotanami.zelyo.ai,resources=remediationpolicies/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=aotanami.zelyo.ai,resources=remediationpolicies/finalizers,verbs=update
+// +kubebuilder:rbac:groups=aotanami.com,resources=remediationpolicies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=aotanami.com,resources=remediationpolicies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=aotanami.com,resources=remediationpolicies/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	aotanamiv1alpha1 "github.com/zelyo-ai/aotanami/api/v1alpha1"
+	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
 	// TODO (user): Add any additional imports if needed
 )
 

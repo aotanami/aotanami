@@ -1,0 +1,133 @@
+site_name: Aotanami
+site_url: https://aotanami.github.io/aotanami
+site_description: Autonomous Kubernetes Protection — Powered by Agentic AI
+site_author: Zelyo AI
+copyright: Copyright &copy; 2026 Zelyo AI — Apache 2.0 License
+
+repo_name: aotanami/aotanami
+repo_url: https://github.com/aotanami/aotanami
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  logo: assets/logo.png
+  favicon: assets/logo.png
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - toc.follow
+    - announce.dismiss
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/aotanami/aotanami
+    - icon: fontawesome/solid/globe
+      link: https://aotanami.com
+    - icon: fontawesome/solid/shield-halved
+      link: https://zelyo.ai
+  generator: false
+  status:
+    new: Recently added
+    deprecated: Deprecated
+  analytics:
+    provider: google
+    property: G-XXXXXXXXXX
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started.md
+      - Quick Start: quickstart.md
+  - User Guide:
+      - Architecture: architecture.md
+      - CRD Reference: crd-reference.md
+      - LLM Configuration: llm-configuration.md
+      - GitOps Onboarding: gitops-onboarding.md
+      - Compliance Frameworks: compliance.md
+      - Integrations: integrations.md
+  - API:
+      - REST API Reference: api-reference.md
+  - Security:
+      - Supply Chain Security: supply-chain-security.md
+      - Security Policy: security.md
+  - Community:
+      - Contributing: contributing.md
+      - Code of Conduct: code-of-conduct.md

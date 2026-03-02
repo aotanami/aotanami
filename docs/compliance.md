@@ -15,7 +15,7 @@ Aotanami evaluates your cluster against industry-standard compliance frameworks 
 ## Running a Compliance Scan
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: ClusterScan
 metadata:
   name: compliance-audit
@@ -59,7 +59,7 @@ Covers:
 You can extend compliance checks with custom CEL expressions in SecurityPolicy resources:
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: SecurityPolicy
 metadata:
   name: custom-compliance

@@ -4,26 +4,26 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: costpolicies.aotanami.zelyo.ai
+  name: monitoringpolicies.aotanami.com
 spec:
-  group: aotanami.zelyo.ai
+  group: aotanami.com
   names:
-    kind: CostPolicy
-    listKind: CostPolicyList
-    plural: costpolicies
-    singular: costpolicy
+    kind: MonitoringPolicy
+    listKind: MonitoringPolicyList
+    plural: monitoringpolicies
+    singular: monitoringpolicy
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.resizeStrategy
-      name: Strategy
-      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .status.estimatedMonthlyCostUSD
-      name: Est. Monthly
-      type: string
+    - jsonPath: .status.activeIncidents
+      name: Active Incidents
+      type: integer
+    - jsonPath: .status.eventsProcessed
+      name: Events Processed
+      type: integer
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -31,8 +31,8 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          CostPolicy is the Schema for the costpolicies API.
-          It configures cost monitoring, budget alerts, and workload rightsizing rules.
+          MonitoringPolicy is the Schema for the monitoringpolicies API.
+          It configures real-time monitoring, event filtering, log analysis, and anomaly detection.
         properties:
           apiVersion:
             description: |-
@@ -53,85 +53,138 @@ spec:
             type: object
           spec:
             description: |-
-              CostPolicySpec defines the desired state of CostPolicy.
-              A CostPolicy configures cost monitoring thresholds and workload
-              rightsizing rules for targeted namespaces.
+              MonitoringPolicySpec defines the desired state of MonitoringPolicy.
+              A MonitoringPolicy configures real-time monitoring of Kubernetes events,
+              pod logs, node conditions, and anomaly detection thresholds.
             properties:
-              budgetLimits:
-                description: budgetLimits defines cost budget thresholds for alerting.
+              anomalyDetection:
+                description: anomalyDetection configures the anomaly detection engine.
                 properties:
-                  costIncreaseThresholdPercent:
-                    default: 20
-                    description: costIncreaseThresholdPercent triggers an alert when
-                      costs increase by this percentage.
+                  baselineDurationHours:
+                    default: 168
+                    description: baselineDurationHours is how many hours of data to
+                      use for baseline calculation.
                     format: int32
-                    maximum: 100
-                    minimum: 1
-                    type: integer
-                  dailyBudgetUSD:
-                    description: dailyBudgetUSD is the maximum daily cost in USD before
-                      alerting.
-                    type: string
-                  monthlyBudgetUSD:
-                    description: monthlyBudgetUSD is the maximum monthly cost in USD
-                      before alerting.
-                    type: string
-                type: object
-              idleDetection:
-                description: idleDetection configures idle workload detection.
-                properties:
-                  cpuThresholdPercent:
-                    default: 5
-                    description: cpuThresholdPercent — a workload using less than
-                      this % CPU is considered idle.
-                    format: int32
-                    maximum: 50
                     minimum: 1
                     type: integer
                   enabled:
                     default: true
-                    description: enabled toggles idle workload detection.
+                    description: enabled toggles anomaly detection.
                     type: boolean
-                  idleDurationMinutes:
-                    default: 60
-                    description: idleDurationMinutes — the workload must be idle for
-                      this many minutes before flagging.
+                  sensitivityPercent:
+                    default: 80
+                    description: sensitivityPercent controls how sensitive anomaly
+                      detection is (lower = more sensitive).
                     format: int32
-                    minimum: 5
-                    type: integer
-                  memoryThresholdPercent:
-                    default: 5
-                    description: memoryThresholdPercent — a workload using less than
-                      this % memory is considered idle.
-                    format: int32
-                    maximum: 50
+                    maximum: 100
                     minimum: 1
                     type: integer
                 type: object
+              eventFilters:
+                description: eventFilters configures which Kubernetes events to watch.
+                properties:
+                  involvedObjectKinds:
+                    description: involvedObjectKinds filters events by the kind of
+                      involved object.
+                    items:
+                      type: string
+                    type: array
+                  reasons:
+                    description: reasons filters events by reason (e.g., OOMKilled,
+                      CrashLoopBackOff, FailedScheduling).
+                    items:
+                      type: string
+                    type: array
+                  types:
+                    default:
+                    - Warning
+                    description: types lists the event types to watch (Normal, Warning).
+                    items:
+                      type: string
+                    type: array
+                type: object
+              logMonitoring:
+                description: logMonitoring configures pod log streaming and pattern
+                  matching.
+                properties:
+                  enabled:
+                    default: true
+                    description: enabled toggles log monitoring.
+                    type: boolean
+                  excludeContainers:
+                    description: excludeContainers excludes specific container names
+                      from log monitoring.
+                    items:
+                      type: string
+                    type: array
+                  patterns:
+                    description: patterns defines regex patterns to watch for in logs.
+                    items:
+                      description: LogPattern defines a pattern to match in pod logs.
+                      properties:
+                        name:
+                          description: name is a human-readable identifier for this
+                            pattern.
+                          type: string
+                        regex:
+                          description: regex is the regular expression pattern to
+                            match.
+                          type: string
+                        severity:
+                          default: medium
+                          description: severity assigned when this pattern matches.
+                          enum:
+                          - critical
+                          - high
+                          - medium
+                          - low
+                          - info
+                          type: string
+                      required:
+                      - name
+                      - regex
+                      type: object
+                    type: array
+                type: object
+              nodeMonitoring:
+                description: nodeMonitoring configures node condition monitoring.
+                properties:
+                  conditions:
+                    default:
+                    - MemoryPressure
+                    - DiskPressure
+                    - PIDPressure
+                    - NetworkUnavailable
+                    description: conditions lists node conditions to watch (e.g.,
+                      MemoryPressure, DiskPressure, PIDPressure).
+                    items:
+                      type: string
+                    type: array
+                  enabled:
+                    default: true
+                    description: enabled toggles node monitoring.
+                    type: boolean
+                type: object
               notificationChannels:
                 description: notificationChannels lists NotificationChannel names
-                  for cost alerts.
+                  for monitoring alerts.
                 items:
                   type: string
                 type: array
-              resizeStrategy:
-                default: conservative
-                description: resizeStrategy defines how workloads should be rightsized.
-                enum:
-                - conservative
-                - moderate
-                - aggressive
-                type: string
               targetNamespaces:
-                description: targetNamespaces restricts cost monitoring to specific
-                  namespaces. Empty means all.
+                description: targetNamespaces restricts monitoring to specific namespaces.
+                  Empty means all.
                 items:
                   type: string
                 type: array
             type: object
           status:
-            description: CostPolicyStatus defines the observed state of CostPolicy.
+            description: MonitoringPolicyStatus defines the observed state of MonitoringPolicy.
             properties:
+              activeIncidents:
+                description: activeIncidents is the count of currently active incidents.
+                format: int32
+                type: integer
               conditions:
                 description: conditions represent the current state of the resource.
                 items:
@@ -192,16 +245,13 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              estimatedMonthlyCostUSD:
-                description: estimatedMonthlyCostUSD is the current estimated monthly
-                  cost.
-                type: string
-              idleWorkloads:
-                description: idleWorkloads is the count of detected idle workloads.
-                format: int32
+              eventsProcessed:
+                description: eventsProcessed is the total number of events processed.
+                format: int64
                 type: integer
-              lastEvaluated:
-                description: lastEvaluated is the timestamp of the last cost evaluation.
+              lastEventTime:
+                description: lastEventTime is the timestamp of the last processed
+                  event.
                 format: date-time
                 type: string
               phase:
@@ -211,11 +261,6 @@ spec:
                 - Active
                 - Error
                 type: string
-              rightsizingRecommendations:
-                description: rightsizingRecommendations is the count of pending rightsizing
-                  recommendations.
-                format: int32
-                type: integer
             type: object
         required:
         - spec

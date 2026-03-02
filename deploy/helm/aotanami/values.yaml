@@ -1,12 +1,12 @@
 # Aotanami Helm Chart — Default Values
-# https://github.com/zelyo-ai/aotanami
+# https://github.com/aotanami/aotanami
 
 # -- Number of Aotanami operator replicas
 replicaCount: 1
 
 image:
   # -- Container image repository
-  repository: ghcr.io/zelyo-ai/aotanami
+  repository: ghcr.io/aotanami/aotanami
   # -- Image pull policy
   pullPolicy: IfNotPresent
   # -- Overrides the image tag (defaults to chart appVersion)

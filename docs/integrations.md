@@ -5,7 +5,7 @@ Aotanami supports sending alerts to multiple notification channels simultaneousl
 ## Slack
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: NotificationChannel
 metadata:
   name: slack-security
@@ -24,7 +24,7 @@ spec:
 ## Microsoft Teams
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: NotificationChannel
 metadata:
   name: teams-ops
@@ -40,7 +40,7 @@ spec:
 ## PagerDuty
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: NotificationChannel
 metadata:
   name: pagerduty-critical
@@ -56,7 +56,7 @@ spec:
 ## AlertManager
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: NotificationChannel
 metadata:
   name: alertmanager
@@ -70,7 +70,7 @@ spec:
 ## Telegram
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: NotificationChannel
 metadata:
   name: telegram-alerts
@@ -84,7 +84,7 @@ spec:
 ## WhatsApp
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: NotificationChannel
 metadata:
   name: whatsapp-oncall
@@ -98,7 +98,7 @@ spec:
 ## Webhook (Generic)
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: NotificationChannel
 metadata:
   name: custom-webhook
@@ -114,7 +114,7 @@ spec:
 ## Email
 
 ```yaml
-apiVersion: aotanami.zelyo.ai/v1alpha1
+apiVersion: aotanami.com/v1alpha1
 kind: NotificationChannel
 metadata:
   name: email-team
