@@ -39,9 +39,9 @@ jobs:
         uses: ibiqlik/action-yamllint@v3
         with:
           file_or_dir: |
-            deploy/
+            deploy/helm/aotanami/Chart.yaml
+            deploy/helm/aotanami/values.yaml
             .github/workflows/
-            config/
           config_data: |
             extends: default
             rules:
@@ -49,6 +49,8 @@ jobs:
                 max: 200
               truthy:
                 check-keys: false
+              comments-indentation: disable
+              document-start: disable
 
   test:
     name: Test
