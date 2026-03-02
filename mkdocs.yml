@@ -9,7 +9,6 @@ repo_url: https://github.com/aotanami/aotanami
 
 theme:
   name: material
-  custom_dir: docs/overrides
   logo: assets/logo.png
   favicon: assets/logo.png
   icon:
