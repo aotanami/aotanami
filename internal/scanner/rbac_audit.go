@@ -59,13 +59,15 @@ func (s *RBACAuditScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[stri
 			continue
 		}
 
+		const defaultSA = "default"
+
 		saName := pod.Spec.ServiceAccountName
 		if saName == "" {
-			saName = "default"
+			saName = defaultSA
 		}
 
 		// Check: Using default service account.
-		if saName == "default" {
+		if saName == defaultSA {
 			findings = append(findings, Finding{
 				RuleType:          s.RuleType(),
 				Severity:          aotanamiv1alpha1.SeverityMedium,
