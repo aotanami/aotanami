@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.25.3-alpine AS builder
+FROM golang:1.25.7-alpine AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=dev
@@ -7,9 +7,6 @@ ARG COMMIT=unknown
 ARG BUILD_DATE=unknown
 
 WORKDIR /workspace
-
-# Install ca-certificates for HTTPS calls in the final image
-RUN apk add --no-cache ca-certificates
 
 # Copy the Go Modules manifests
 COPY go.mod go.mod
@@ -21,6 +18,7 @@ RUN go mod download
 COPY . .
 
 # Build with version info injected via ldflags
+# CGO_ENABLED=0 produces a fully static binary — no libc/OS dependencies
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w \
     -X github.com/aotanami/aotanami/internal/version.Version=${VERSION} \
@@ -28,9 +26,11 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
     -X github.com/aotanami/aotanami/internal/version.Date=${BUILD_DATE}" \
     -a -o manager cmd/main.go
 
-# Use distroless as minimal base image
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static-debian12:nonroot
+# ── Final stage: scratch (zero OS packages = zero OS CVEs) ──────────────────
+# Since the binary is statically compiled (CGO_ENABLED=0), we don't need any
+# OS libraries. Using scratch instead of distroless eliminates ALL OS-level
+# vulnerabilities from the image scan.
+FROM scratch
 
 # OCI Image Spec labels
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md
@@ -42,6 +42,16 @@ LABEL org.opencontainers.image.vendor="Zelyo AI"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.documentation="https://github.com/aotanami/aotanami/tree/main/docs"
 
+# Copy CA certificates for TLS (Aotanami makes HTTPS calls to LLM APIs)
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Copy timezone data for time.LoadLocation
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+
+# Copy passwd for numeric USER to have a name
+COPY --from=builder /etc/passwd /etc/passwd
+
+# Copy the statically-linked binary
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
