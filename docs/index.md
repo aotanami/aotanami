@@ -11,7 +11,6 @@ hide:
 # Aotanami
 
 <p class="hero-subtitle">Autonomous Kubernetes Protection — Powered by Agentic AI</p>
-<p class="hero-byline">The flagship open source product of <a href="https://zelyo.ai">Zelyo AI</a></p>
 
 <div class="badges">
   <a href="https://github.com/aotanami/aotanami/actions/workflows/ci.yml"><img src="https://github.com/aotanami/aotanami/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
