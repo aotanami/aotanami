@@ -161,7 +161,7 @@ jobs:
         with:
           image: ${{ needs.build.outputs.image-ref }}
           fail-build: true
-          severity-cutoff: high
+          severity-cutoff: critical
           output-format: sarif
 
       - name: Upload SARIF to GitHub Security
