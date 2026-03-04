@@ -4,7 +4,9 @@ description: Aotanami — Autonomous Kubernetes Protection powered by Agentic AI
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
+kubeVersion: ">=1.26.0-0"
 home: https://github.com/aotanami/aotanami
+icon: https://raw.githubusercontent.com/aotanami/aotanami/main/docs/assets/icon.png
 sources:
   - https://github.com/aotanami/aotanami
 maintainers:
@@ -19,6 +21,9 @@ keywords:
   - operator
   - gitops
   - compliance
+  - devsecops
+  - cost-optimization
+  - autonomous
 annotations:
   org.opencontainers.image.source: https://github.com/aotanami/aotanami
   org.opencontainers.image.description: "Aotanami — Autonomous Kubernetes Protection"
@@ -26,3 +31,45 @@ annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/operator: "true"
   artifacthub.io/operatorCapabilities: "Full Lifecycle"
+  artifacthub.io/crds: |
+    - kind: AotanamiConfig
+      version: v1alpha1
+      name: aotanamiconfigs.aotanami.com
+      description: Global operator configuration (singleton)
+    - kind: SecurityPolicy
+      version: v1alpha1
+      name: securitypolicies.aotanami.com
+      description: Defines security rules evaluated against workloads
+    - kind: ClusterScan
+      version: v1alpha1
+      name: clusterscans.aotanami.com
+      description: Scheduled cluster-wide security scans
+    - kind: ScanReport
+      version: v1alpha1
+      name: scanreports.aotanami.com
+      description: Immutable scan result records
+    - kind: CostPolicy
+      version: v1alpha1
+      name: costpolicies.aotanami.com
+      description: Cost optimization and resource rightsizing
+    - kind: MonitoringPolicy
+      version: v1alpha1
+      name: monitoringpolicies.aotanami.com
+      description: Real-time workload monitoring rules
+    - kind: NotificationChannel
+      version: v1alpha1
+      name: notificationchannels.aotanami.com
+      description: Alert delivery channels (Slack, Teams, etc.)
+    - kind: RemediationPolicy
+      version: v1alpha1
+      name: remediationpolicies.aotanami.com
+      description: Auto-remediation via GitOps PRs
+    - kind: GitOpsRepository
+      version: v1alpha1
+      name: gitopsrepositories.aotanami.com
+      description: GitOps repository connections
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release with 9 CRDs and 8 built-in security scanners
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/prerelease: "true"

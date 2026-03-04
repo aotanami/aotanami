@@ -26,65 +26,74 @@ graph TB
         Pods[Running Pods]
         Secrets[Kubernetes Secrets]
         NS[Namespaces]
+        Events[K8s Events]
+        Logs[Pod Logs & Metrics]
     end
 
-    subgraph "Aotanami Operator"
+    subgraph "Aotanami Operator Layer"
         direction TB
 
-        subgraph "Controllers — 9 total"
-            ConfigCtrl[AotanamiConfig Controller]
-            SecPolCtrl[SecurityPolicy Controller]
-            ScanCtrl[ClusterScan Controller]
-            ReportCtrl[ScanReport Controller]
-            MonCtrl[MonitoringPolicy Controller]
-            NotifCtrl[NotificationChannel Controller]
-            CostCtrl[CostPolicy Controller]
-            RemCtrl[RemediationPolicy Controller]
-            GitCtrl[GitOpsRepository Controller]
+        subgraph "Controllers (The Eyes)"
+            ConfigCtrl[AotanamiConfig]
+            SecPolCtrl[SecurityPolicy]
+            ScanCtrl[ClusterScan]
+            CostCtrl[CostPolicy]
+            GitCtrl[GitOpsRepository]
+            MonCtrl[MonitoringPolicy]
         end
 
-        subgraph "Scanner Engine — 8 scanners"
-            SC[SecurityContext]
-            RL[ResourceLimits]
-            IP[ImagePinning]
-            PS[PodSecurity]
-            PE[PrivilegeEscalation]
-            SE[SecretsExposure]
-            NP[NetworkPolicy]
-            RA[RBACAudit]
-        end
-
-        subgraph "Supporting Infrastructure"
-            Cond[Condition Helpers]
-            Metrics[Prometheus Metrics]
-            Webhook[Admission Webhook]
+        subgraph "Aotanami Brain (internal/*)"
+            Watch[monitor]
+            Scan[scanner: 8 engines]
+            Anomaly[anomaly]
+            Cost[costoptimizer]
+            Threat[threat]
+            Drift[drift]
+            Correlator[correlator]
+            LLM[llm: BYO Keys]
+            Remediation[remediation]
+            GitOps[gitops]
+            Notify[notifier]
         end
     end
 
-    subgraph "Outputs"
-        Events[Kubernetes Events]
-        Status[CRD Status Fields]
-        Prom[Prometheus /metrics]
-        Reports[ScanReport Resources]
+    subgraph "External Integrations"
+        GitHub["GitHub App (GitOps PRs)"]
+        Alerts["Slack/Teams/PagerDuty"]
+        Prometheus["Metrics"]
     end
 
-    Pods --> SecPolCtrl
-    Pods --> ScanCtrl
-    Pods --> CostCtrl
-    Secrets --> ConfigCtrl
-    Secrets --> NotifCtrl
-    Secrets --> GitCtrl
-    NS --> SecPolCtrl
-    NS --> ScanCtrl
+    Pods --> SecPolCtrl & ScanCtrl & CostCtrl
+    Events & Logs --> Watch
+    Secrets --> ConfigCtrl & GitCtrl
 
-    SecPolCtrl --> SC & RL & IP & PS & PE & SE & NP & RA
-    ScanCtrl --> SC & RL & IP & PS & PE & SE & NP & RA
-    ScanCtrl --> Reports
+    SecPolCtrl & ScanCtrl --> Scan
+    CostCtrl --> Cost
 
-    SecPolCtrl --> Events & Status & Prom
-    ScanCtrl --> Events & Status & Prom
-    ConfigCtrl --> Events & Status
+    Watch --> Anomaly
+    Scan & Anomaly & Cost & Threat & Drift --> Correlator
+    Correlator --> LLM
+
+    LLM -->|Fix Plans| Remediation
+    Remediation -->|Pull Requests| GitOps
+    GitOps --> GitHub
+
+    LLM --> Notify
+    Notify --> Alerts
+    Watch & Scan --> Prometheus
 ```
+
+## The Digital Employee Brain (Phase 2)
+
+Aotanami's true power goes beyond simple static scanning. The operator contains a full embedded intelligence pipeline designed to autonomously operate your cluster:
+
+1. **LLM Engine (`internal/llm`)**: Built-in support for OpenRouter, Anthropic, and OpenAI with token budgeting, exponential backoff retries, and circuit breakers for production resilience.
+2. **Incident Correlation (`internal/correlator`)**: Correlates isolated security findings and anomalous metrics into holistic incidents, drastically reducing alert fatigue.
+3. **Auto-Remediation (`internal/remediation`)**: Analyzes structured findings and uses the LLM to generate precise, syntactically-valid Kubernetes YAML patches to fix the issue.
+4. **GitOps Automation (`internal/gitops`)**: Uses a GitHub App integration to securely check out your infrastructure repository, apply the generated YAML fixes, and open fully-documented Pull Requests.
+5. **Multi-Channel Notifier (`internal/notifier`)**: Smart alerting to Slack, Microsoft Teams, PagerDuty, webhooks, and email, with rate limiting and deduplication.
+
+This pipeline effectively acts as a tireless, 24/7 Security/SRE engineer that identifies issues and proposes the code to fix them.
 
 ## Controllers — What Each One Does
 

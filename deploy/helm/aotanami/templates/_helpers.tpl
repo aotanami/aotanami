@@ -39,6 +39,7 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: aotanami
+app.kubernetes.io/component: operator
 {{- end }}
 
 {{/*
@@ -58,4 +59,32 @@ Create the name of the service account to use
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
+{{- end }}
+
+{{/*
+Webhook certificate secret name
+*/}}
+{{- define "aotanami.webhookCertSecret" -}}
+{{- printf "%s-webhook-tls" (include "aotanami.fullname" .) }}
+{{- end }}
+
+{{/*
+Webhook service name
+*/}}
+{{- define "aotanami.webhookServiceName" -}}
+{{- printf "%s-webhook" (include "aotanami.fullname" .) }}
+{{- end }}
+
+{{/*
+Metrics service name
+*/}}
+{{- define "aotanami.metricsServiceName" -}}
+{{- printf "%s-metrics" (include "aotanami.fullname" .) }}
+{{- end }}
+
+{{/*
+Namespace — always use release namespace
+*/}}
+{{- define "aotanami.namespace" -}}
+{{- .Release.Namespace }}
 {{- end }}

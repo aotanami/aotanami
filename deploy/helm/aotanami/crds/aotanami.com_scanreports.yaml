@@ -1,0 +1,273 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: scanreports.aotanami.com
+spec:
+  group: aotanami.com
+  names:
+    kind: ScanReport
+    listKind: ScanReportList
+    plural: scanreports
+    singular: scanreport
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.scanRef
+      name: Scan
+      type: string
+    - jsonPath: .spec.summary.totalFindings
+      name: Findings
+      type: integer
+    - jsonPath: .spec.summary.critical
+      name: Critical
+      type: integer
+    - jsonPath: .spec.summary.high
+      name: High
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ScanReport is the Schema for the scanreports API.
+          It stores findings from a ClusterScan run as a queryable Kubernetes resource.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              ScanReportSpec defines the desired state of ScanReport.
+              A ScanReport stores the results of a ClusterScan run.
+            properties:
+              compliance:
+                description: compliance contains compliance framework evaluation results.
+                items:
+                  description: ComplianceResult captures compliance status for a specific
+                    framework.
+                  properties:
+                    failedControls:
+                      description: failedControls is the number of controls that failed.
+                      format: int32
+                      type: integer
+                    framework:
+                      description: framework identifies the compliance standard.
+                      type: string
+                    passRate:
+                      description: passRate is the percentage of controls that passed
+                        (0-100).
+                      format: int32
+                      type: integer
+                    totalControls:
+                      description: totalControls is the total number of controls evaluated.
+                      format: int32
+                      type: integer
+                  required:
+                  - framework
+                  type: object
+                type: array
+              findings:
+                description: findings is the list of issues discovered during the
+                  scan.
+                items:
+                  description: Finding represents a single issue discovered during
+                    a scan.
+                  properties:
+                    category:
+                      description: category of the finding (e.g., security, misconfiguration,
+                        compliance).
+                      type: string
+                    description:
+                      description: description is a detailed explanation of the finding.
+                      type: string
+                    id:
+                      description: id is a unique identifier for this finding.
+                      type: string
+                    recommendation:
+                      description: recommendation is the suggested fix.
+                      type: string
+                    remediated:
+                      default: false
+                      description: remediated indicates whether this finding has been
+                        auto-remediated.
+                      type: boolean
+                    resource:
+                      description: resource identifies the affected Kubernetes resource.
+                      properties:
+                        apiVersion:
+                          description: apiVersion of the resource.
+                          type: string
+                        kind:
+                          description: kind of the resource.
+                          type: string
+                        name:
+                          description: name of the resource.
+                          type: string
+                        namespace:
+                          description: namespace of the resource.
+                          type: string
+                      type: object
+                    severity:
+                      description: severity of the finding.
+                      enum:
+                      - critical
+                      - high
+                      - medium
+                      - low
+                      - info
+                      type: string
+                    title:
+                      description: title is a short human-readable summary.
+                      type: string
+                  required:
+                  - category
+                  - description
+                  - id
+                  - severity
+                  - title
+                  type: object
+                type: array
+              scanRef:
+                description: scanRef is the name of the ClusterScan that produced
+                  this report.
+                type: string
+              summary:
+                description: summary provides an overview of the scan results.
+                properties:
+                  critical:
+                    description: critical count.
+                    format: int32
+                    type: integer
+                  high:
+                    description: high count.
+                    format: int32
+                    type: integer
+                  info:
+                    description: info count.
+                    format: int32
+                    type: integer
+                  low:
+                    description: low count.
+                    format: int32
+                    type: integer
+                  medium:
+                    description: medium count.
+                    format: int32
+                    type: integer
+                  resourcesScanned:
+                    description: resourcesScanned is the number of resources evaluated.
+                    format: int32
+                    type: integer
+                  totalFindings:
+                    description: totalFindings is the total number of findings.
+                    format: int32
+                    type: integer
+                type: object
+            required:
+            - scanRef
+            type: object
+          status:
+            description: ScanReportStatus defines the observed state of ScanReport.
+            properties:
+              acknowledged:
+                default: false
+                description: acknowledged indicates whether the report has been reviewed.
+                type: boolean
+              conditions:
+                description: conditions represent the current state of the resource.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: observedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
+              phase:
+                description: phase indicates whether the report is complete.
+                enum:
+                - Pending
+                - Complete
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aotanami.fullname" . }}-config
+  namespace: {{ include "aotanami.namespace" . }}
+  labels:
+    {{- include "aotanami.labels" . | nindent 4 }}
+data:
+  # ── Operating Mode ──
+  AOTANAMI_MODE: {{ .Values.config.mode | quote }}
+
+  # ── LLM Configuration ──
+  AOTANAMI_LLM_PROVIDER: {{ .Values.config.llm.provider | quote }}
+  AOTANAMI_LLM_MODEL: {{ .Values.config.llm.model | quote }}
+  AOTANAMI_LLM_API_KEY_SECRET: {{ .Values.config.llm.apiKeySecret | quote }}
+  AOTANAMI_LLM_ENDPOINT: {{ .Values.config.llm.endpoint | quote }}
+  AOTANAMI_LLM_TEMPERATURE: {{ .Values.config.llm.temperature | quote }}
+  AOTANAMI_LLM_MAX_TOKENS: {{ .Values.config.llm.maxTokensPerRequest | quote }}
+
+  # ── Token Budget ──
+  AOTANAMI_TOKEN_HOURLY_LIMIT: {{ .Values.config.tokenBudget.hourlyTokenLimit | quote }}
+  AOTANAMI_TOKEN_DAILY_LIMIT: {{ .Values.config.tokenBudget.dailyTokenLimit | quote }}
+  AOTANAMI_TOKEN_MONTHLY_LIMIT: {{ .Values.config.tokenBudget.monthlyTokenLimit | quote }}
+  AOTANAMI_TOKEN_ALERT_THRESHOLD: {{ .Values.config.tokenBudget.alertThresholdPercent | quote }}
+  AOTANAMI_TOKEN_CACHING: {{ .Values.config.tokenBudget.enableCaching | quote }}
+  AOTANAMI_TOKEN_BATCHING: {{ .Values.config.tokenBudget.batchingEnabled | quote }}
+
+  # ── Dashboard ──
+  AOTANAMI_DASHBOARD_ENABLED: {{ .Values.config.dashboard.enabled | quote }}
+  AOTANAMI_DASHBOARD_PORT: {{ .Values.config.dashboard.port | quote }}
+  AOTANAMI_DASHBOARD_BASE_PATH: {{ .Values.config.dashboard.basePath | quote }}
+
+  # ── GitHub Integration ──
+  AOTANAMI_GITHUB_ENABLED: {{ .Values.config.github.enabled | quote }}
+  AOTANAMI_GITHUB_APP_ID: {{ .Values.config.github.appID | quote }}
+  AOTANAMI_GITHUB_INSTALLATION_ID: {{ .Values.config.github.installationID | quote }}
+  AOTANAMI_GITHUB_PRIVATE_KEY_SECRET: {{ .Values.config.github.privateKeySecret | quote }}
+
+  # ── Telemetry ──
+  AOTANAMI_PROMETHEUS_ENABLED: {{ .Values.config.telemetry.prometheusEnabled | quote }}
+  AOTANAMI_OTEL_ENABLED: {{ .Values.config.telemetry.otelEnabled | quote }}
+  AOTANAMI_OTEL_ENDPOINT: {{ .Values.config.telemetry.otelEndpoint | quote }}
