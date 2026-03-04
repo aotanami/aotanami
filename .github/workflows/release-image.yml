@@ -156,7 +156,7 @@ jobs:
 
       # ── Vulnerability scanning ──
       - name: Run Grype vulnerability scan
-        uses: anchore/scan-action@v6
+        uses: anchore/scan-action@v7
         id: grype
         with:
           image: ${{ needs.build.outputs.image-ref }}
