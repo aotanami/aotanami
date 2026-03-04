@@ -3,16 +3,26 @@ package llm
 import (
 	"context"
 	"errors"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
 type stubClient struct {
-	provider Provider
-	err      error
+	provider  Provider
+	err       error
+	blockCh   <-chan struct{}
+	startedCh chan<- struct{}
 }
 
 func (s *stubClient) Complete(_ context.Context, _ Request) (*Response, error) {
+	if s.startedCh != nil {
+		s.startedCh <- struct{}{}
+	}
+	if s.blockCh != nil {
+		<-s.blockCh
+	}
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -22,37 +32,63 @@ func (s *stubClient) Complete(_ context.Context, _ Request) (*Response, error) {
 func (s *stubClient) Provider() Provider { return s.provider }
 func (s *stubClient) Close() error       { return nil }
 
-func TestCircuitBreakerHalfOpenAllowsSingleProbe(t *testing.T) {
+func TestCircuitBreakerOpenStateRejectsUntilResetTimeout(t *testing.T) {
 	cb := &circuitBreakerClient{
 		inner:            &stubClient{provider: ProviderOpenAI, err: errors.New("boom")},
 		failureThreshold: 1,
-		resetTimeout:     20 * time.Millisecond,
+		resetTimeout:     30 * time.Second,
 	}
 
-	// First failure opens the circuit.
 	_, err := cb.Complete(context.Background(), Request{})
 	if err == nil {
-		t.Fatal("expected first request to fail")
+		t.Fatal("expected failure to open circuit")
 	}
 
-	// Immediate retries should be blocked while OPEN.
 	_, err = cb.Complete(context.Background(), Request{})
-	if err == nil {
-		t.Fatal("expected open circuit to reject")
+	if err == nil || !strings.Contains(err.Error(), "circuit breaker OPEN") {
+		t.Fatalf("expected open-circuit rejection, got: %v", err)
 	}
 
-	time.Sleep(25 * time.Millisecond)
+	cb.mu.Lock()
+	cb.lastFailure = time.Now().Add(-cb.resetTimeout - time.Second)
+	cb.mu.Unlock()
 
-	// After reset timeout, a single probe is allowed and transitions to HALF-OPEN.
 	_, err = cb.Complete(context.Background(), Request{})
 	if err == nil {
-		t.Fatal("expected half-open probe to fail with stub error")
+		t.Fatal("expected probe request to fail with stub client error")
+	}
+}
+
+func TestCircuitBreakerHalfOpenAllowsOnlyOneInFlightProbe(t *testing.T) {
+	unblock := make(chan struct{})
+	started := make(chan struct{}, 1)
+	cb := &circuitBreakerClient{
+		inner:            &stubClient{provider: ProviderOpenAI, blockCh: unblock, startedCh: started},
+		failureThreshold: 1,
+		resetTimeout:     time.Second,
+		state:            circuitHalfOpen,
 	}
 
-	// While HALF-OPEN probe result is pending/recorded, further requests should be rejected.
-	_, err = cb.Complete(context.Background(), Request{})
-	if err == nil {
-		t.Fatal("expected half-open circuit to reject concurrent probes")
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	var firstErr error
+	go func() {
+		defer wg.Done()
+		_, firstErr = cb.Complete(context.Background(), Request{})
+	}()
+
+	<-started
+
+	_, err := cb.Complete(context.Background(), Request{})
+	if err == nil || !strings.Contains(err.Error(), "circuit breaker HALF-OPEN") {
+		t.Fatalf("expected half-open rejection while probe is in flight, got: %v", err)
+	}
+
+	close(unblock)
+	wg.Wait()
+	if firstErr != nil {
+		t.Fatalf("expected probe to succeed, got: %v", firstErr)
 	}
 }
 
@@ -61,20 +97,21 @@ func TestCircuitBreakerClosesAfterSuccessfulProbe(t *testing.T) {
 	cb := &circuitBreakerClient{
 		inner:            stub,
 		failureThreshold: 1,
-		resetTimeout:     20 * time.Millisecond,
+		resetTimeout:     time.Second,
 	}
 
-	_, _ = cb.Complete(context.Background(), Request{}) // open circuit
-	time.Sleep(25 * time.Millisecond)
+	_, _ = cb.Complete(context.Background(), Request{})
 
-	// Make probe succeed.
+	cb.mu.Lock()
+	cb.lastFailure = time.Now().Add(-cb.resetTimeout - time.Second)
+	cb.mu.Unlock()
+
 	stub.err = nil
 	_, err := cb.Complete(context.Background(), Request{})
 	if err != nil {
 		t.Fatalf("expected successful probe, got error: %v", err)
 	}
 
-	// Circuit should now be fully closed and allow normal traffic.
 	_, err = cb.Complete(context.Background(), Request{})
 	if err != nil {
 		t.Fatalf("expected closed circuit to allow requests, got: %v", err)
