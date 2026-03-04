@@ -3,7 +3,7 @@
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
 cliVersion: 4.13.0
-domain: zelyo.ai
+domain: aotanami.com
 layout:
 - go.kubebuilder.io/v4
 projectName: aotanami
