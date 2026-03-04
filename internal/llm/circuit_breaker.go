@@ -28,6 +28,7 @@ type circuitBreakerClient struct {
 
 	mu               sync.Mutex
 	state            circuitState
+	halfOpenInFlight bool
 	consecutiveFails int
 	lastFailure      time.Time
 }
@@ -56,12 +57,17 @@ func (cb *circuitBreakerClient) allowRequest() error {
 		// Check if enough time has passed to try again.
 		if time.Since(cb.lastFailure) > cb.resetTimeout {
 			cb.state = circuitHalfOpen
+			cb.halfOpenInFlight = true
 			return nil
 		}
 		return fmt.Errorf("llm: circuit breaker OPEN — provider %s has %d consecutive failures, retrying after %s",
 			cb.inner.Provider(), cb.consecutiveFails, cb.resetTimeout-time.Since(cb.lastFailure))
 
 	case circuitHalfOpen:
+		if cb.halfOpenInFlight {
+			return fmt.Errorf("llm: circuit breaker HALF-OPEN — awaiting probe result for provider %s", cb.inner.Provider())
+		}
+		cb.halfOpenInFlight = true
 		return nil
 	}
 
@@ -75,6 +81,7 @@ func (cb *circuitBreakerClient) recordResult(err error) {
 	if err != nil {
 		cb.consecutiveFails++
 		cb.lastFailure = time.Now()
+		cb.halfOpenInFlight = false
 
 		threshold := cb.failureThreshold
 		if threshold == 0 {
@@ -88,6 +95,7 @@ func (cb *circuitBreakerClient) recordResult(err error) {
 		// Success — reset to closed.
 		cb.consecutiveFails = 0
 		cb.state = circuitClosed
+		cb.halfOpenInFlight = false
 	}
 }
 
