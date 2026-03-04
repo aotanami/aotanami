@@ -23,7 +23,7 @@ jobs:
       id-token: write          # Cosign keyless signing (Fulcio OIDC)
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0  # v2.12.0
+        uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b  # v2.15.0
         with:
           egress-policy: audit
 
@@ -41,7 +41,7 @@ jobs:
         uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb  # v3.8.2
 
       - name: Install Syft
-        uses: anchore/sbom-action/download-syft@e11c554f704a0b820cbf8c51673f6945e0731532  # v0.20.0
+        uses: anchore/sbom-action/download-syft@17ae1740179002c89186b61233e0f892c3118b11  # v0.23.0
 
       - name: Log in to GHCR (Helm OCI)
         run: |
