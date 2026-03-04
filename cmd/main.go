@@ -190,7 +190,7 @@ func main() {
 	if err := (&controller.SecurityPolicyReconciler{
 		Client:          mgr.GetClient(),
 		Scheme:          mgr.GetScheme(),
-		Recorder:        mgr.GetEventRecorderFor("securitypolicy-controller"),
+		Recorder:        mgr.GetEventRecorderFor("securitypolicy-controller"), //nolint:staticcheck,nolintlint
 		ScannerRegistry: scannerRegistry,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "SecurityPolicy")
@@ -199,7 +199,7 @@ func main() {
 	if err := (&controller.RemediationPolicyReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("remediationpolicy-controller"),
+		Recorder: mgr.GetEventRecorderFor("remediationpolicy-controller"), //nolint:staticcheck,nolintlint
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "RemediationPolicy")
 		os.Exit(1)
@@ -207,7 +207,7 @@ func main() {
 	if err := (&controller.ClusterScanReconciler{
 		Client:          mgr.GetClient(),
 		Scheme:          mgr.GetScheme(),
-		Recorder:        mgr.GetEventRecorderFor("clusterscan-controller"),
+		Recorder:        mgr.GetEventRecorderFor("clusterscan-controller"), //nolint:staticcheck,nolintlint
 		ScannerRegistry: scannerRegistry,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "ClusterScan")
@@ -216,7 +216,7 @@ func main() {
 	if err := (&controller.ScanReportReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("scanreport-controller"),
+		Recorder: mgr.GetEventRecorderFor("scanreport-controller"), //nolint:staticcheck,nolintlint
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "ScanReport")
 		os.Exit(1)
@@ -224,7 +224,7 @@ func main() {
 	if err := (&controller.CostPolicyReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("costpolicy-controller"),
+		Recorder: mgr.GetEventRecorderFor("costpolicy-controller"), //nolint:staticcheck,nolintlint
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "CostPolicy")
 		os.Exit(1)
@@ -232,7 +232,7 @@ func main() {
 	if err := (&controller.MonitoringPolicyReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("monitoringpolicy-controller"),
+		Recorder: mgr.GetEventRecorderFor("monitoringpolicy-controller"), //nolint:staticcheck,nolintlint
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "MonitoringPolicy")
 		os.Exit(1)
@@ -240,7 +240,7 @@ func main() {
 	if err := (&controller.NotificationChannelReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("notificationchannel-controller"),
+		Recorder: mgr.GetEventRecorderFor("notificationchannel-controller"), //nolint:staticcheck,nolintlint
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "NotificationChannel")
 		os.Exit(1)
@@ -248,7 +248,7 @@ func main() {
 	if err := (&controller.AotanamiConfigReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("aotanamiconfig-controller"),
+		Recorder: mgr.GetEventRecorderFor("aotanamiconfig-controller"), //nolint:staticcheck,nolintlint
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "AotanamiConfig")
 		os.Exit(1)
@@ -256,7 +256,7 @@ func main() {
 	if err := (&controller.GitOpsRepositoryReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("gitopsrepository-controller"),
+		Recorder: mgr.GetEventRecorderFor("gitopsrepository-controller"), //nolint:staticcheck,nolintlint
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "GitOpsRepository")
 		os.Exit(1)
