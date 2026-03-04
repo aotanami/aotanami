@@ -104,7 +104,7 @@ kubectl create secret generic aotanami-llm \
   --from-literal=api-key=<YOUR_OPENROUTER_API_KEY>
 
 # Install Aotanami from OCI registry
-helm install aotanami oci://ghcr.io/zelyo-ai/charts/aotanami \
+helm install aotanami oci://ghcr.io/aotanami/charts/aotanami \
   --namespace aotanami-system \
   --create-namespace \
   --set config.llm.provider=openrouter \
