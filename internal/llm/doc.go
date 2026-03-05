@@ -1,7 +1,7 @@
-// Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+// Copyright 2026 Zelyo AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package llm provides the LLM client abstraction for Aotanami's AI-powered
+// Package llm provides the LLM client abstraction for Zelyo Operator's AI-powered
 // diagnosis and remediation capabilities.
 //
 // # Architecture
@@ -36,6 +36,6 @@
 //
 // # Usage
 //
-// The Client is initialized from the AotanamiConfig CRD's LLM configuration
+// The Client is initialized from the ZelyoConfig CRD's LLM configuration
 // and injected into controllers that require AI-powered analysis.
 package llm

@@ -10,7 +10,7 @@ permissions: {}
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: aotanami/aotanami
+  IMAGE_NAME: zelyo-ai/zelyo-operator
 
 jobs:
   # ─── Job 1: Build, Push & Sign ───────────────────────────────────────────────
@@ -60,11 +60,11 @@ jobs:
             type=semver,pattern={{major}}
             type=sha,prefix=sha-
           labels: |
-            org.opencontainers.image.title=Aotanami
+            org.opencontainers.image.title=Zelyo Operator
             org.opencontainers.image.description=Autonomous Kubernetes Protection — Powered by Agentic AI
             org.opencontainers.image.vendor=Zelyo AI
             org.opencontainers.image.licenses=Apache-2.0
-            org.opencontainers.image.documentation=https://github.com/aotanami/aotanami/tree/main/docs
+            org.opencontainers.image.documentation=https://github.com/zelyo-ai/zelyo-operator/tree/main/docs
 
       # Reproducible builds: set SOURCE_DATE_EPOCH from the git commit timestamp
       - name: Set SOURCE_DATE_EPOCH
@@ -194,7 +194,7 @@ jobs:
       packages: write
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
-      image: ghcr.io/aotanami/aotanami
+      image: ghcr.io/zelyo-ai/zelyo-operator
       digest: ${{ needs.build.outputs.digest }}
       registry-username: ${{ github.actor }}
     secrets:

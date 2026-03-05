@@ -1,10 +1,10 @@
-/* ─── Aotanami Brand Colors ─── */
+/* ─── Zelyo Operator Brand Colors ─── */
 :root {
   --md-primary-fg-color: #0066FF;
   --md-primary-fg-color--light: #3388FF;
   --md-primary-fg-color--dark: #0044CC;
   --md-accent-fg-color: #00D4AA;
-  --aotanami-gradient: linear-gradient(135deg, #0066FF, #00D4AA);
+  --zelyo-operator-gradient: linear-gradient(135deg, #0066FF, #00D4AA);
 }
 
 [data-md-color-scheme="slate"] {
@@ -30,7 +30,7 @@
   font-size: 3rem;
   font-weight: 800;
   margin: 0;
-  background: var(--aotanami-gradient);
+  background: var(--zelyo-operator-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -74,7 +74,7 @@
 }
 
 .md-typeset .hero-actions .primary-btn {
-  background: var(--aotanami-gradient);
+  background: var(--zelyo-operator-gradient);
   color: #fff !important;
   box-shadow: 0 4px 15px rgba(0, 102, 255, 0.35);
 }

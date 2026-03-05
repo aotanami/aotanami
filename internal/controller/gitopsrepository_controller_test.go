@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,8 +29,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
-	"github.com/aotanami/aotanami/internal/gitops/source"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo-operator/internal/gitops/source"
 )
 
 var _ = Describe("GitOpsRepository Controller", func() {
@@ -43,7 +43,7 @@ var _ = Describe("GitOpsRepository Controller", func() {
 			Name:      resourceName,
 			Namespace: "default",
 		}
-		gitopsrepository := &aotanamiv1alpha1.GitOpsRepository{}
+		gitopsrepository := &zelyov1alpha1.GitOpsRepository{}
 
 		BeforeEach(func() {
 			By("creating the auth secret for the GitOpsRepository")
@@ -64,12 +64,12 @@ var _ = Describe("GitOpsRepository Controller", func() {
 			By("creating the custom resource for the Kind GitOpsRepository")
 			err = k8sClient.Get(ctx, typeNamespacedName, gitopsrepository)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &aotanamiv1alpha1.GitOpsRepository{
+				resource := &zelyov1alpha1.GitOpsRepository{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					Spec: aotanamiv1alpha1.GitOpsRepositorySpec{
+					Spec: zelyov1alpha1.GitOpsRepositorySpec{
 						URL:        "https://github.com/test/repo",
 						Paths:      []string{"clusters/"},
 						AuthSecret: "test-auth",
@@ -80,7 +80,7 @@ var _ = Describe("GitOpsRepository Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &aotanamiv1alpha1.GitOpsRepository{}
+			resource := &zelyov1alpha1.GitOpsRepository{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -119,7 +119,7 @@ var _ = Describe("GitOpsRepository Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Fetch the updated resource.
-			updated := &aotanamiv1alpha1.GitOpsRepository{}
+			updated := &zelyov1alpha1.GitOpsRepository{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, updated)).To(Succeed())
 
 			// Source type should be auto-detected.
@@ -157,9 +157,9 @@ var _ = Describe("GitOpsRepository Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Fetch the updated resource.
-			updated := &aotanamiv1alpha1.GitOpsRepository{}
+			updated := &zelyov1alpha1.GitOpsRepository{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, updated)).To(Succeed())
-			Expect(updated.Status.Phase).To(Equal(aotanamiv1alpha1.PhaseSynced))
+			Expect(updated.Status.Phase).To(Equal(zelyov1alpha1.PhaseSynced))
 
 			// Cleanup secret.
 			Expect(k8sClient.Delete(ctx, secret)).To(Succeed())
@@ -167,17 +167,17 @@ var _ = Describe("GitOpsRepository Controller", func() {
 
 		It("should handle explicit helm source type", func() {
 			By("Creating a GitOps repo with helm source type")
-			helmRepo := &aotanamiv1alpha1.GitOpsRepository{
+			helmRepo := &zelyov1alpha1.GitOpsRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "helm-test",
 					Namespace: "default",
 				},
-				Spec: aotanamiv1alpha1.GitOpsRepositorySpec{
+				Spec: zelyov1alpha1.GitOpsRepositorySpec{
 					URL:        "https://github.com/test/helm-repo",
 					Paths:      []string{"charts/myapp/"},
 					AuthSecret: "test-auth",
-					SourceType: aotanamiv1alpha1.ManifestSourceHelm,
-					Helm: &aotanamiv1alpha1.HelmSource{
+					SourceType: zelyov1alpha1.ManifestSourceHelm,
+					Helm: &zelyov1alpha1.HelmSource{
 						ChartPath:        "charts/myapp/",
 						ReleaseName:      "myapp",
 						ReleaseNamespace: "production",
@@ -198,9 +198,9 @@ var _ = Describe("GitOpsRepository Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			updated := &aotanamiv1alpha1.GitOpsRepository{}
+			updated := &zelyov1alpha1.GitOpsRepository{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "helm-test", Namespace: "default"}, updated)).To(Succeed())
-			Expect(updated.Status.DetectedSourceType).To(Equal(aotanamiv1alpha1.ManifestSourceHelm))
+			Expect(updated.Status.DetectedSourceType).To(Equal(zelyov1alpha1.ManifestSourceHelm))
 
 			By("Cleanup")
 			Expect(k8sClient.Delete(ctx, helmRepo)).To(Succeed())

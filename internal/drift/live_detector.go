@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	yamlutil "sigs.k8s.io/yaml"
 
-	"github.com/aotanami/aotanami/internal/gitops"
+	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
 )
 
 // LiveDetector implements the Detector interface by comparing live cluster

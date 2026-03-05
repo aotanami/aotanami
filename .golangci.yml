@@ -1,4 +1,4 @@
-# .golangci.yml — Production-grade linter configuration for Aotanami
+# .golangci.yml — Production-grade linter configuration for Zelyo Operator
 # https://golangci-lint.run/usage/configuration/
 # Compatible with golangci-lint v2.x
 
@@ -113,7 +113,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/aotanami/aotanami
+        - github.com/zelyo-ai/zelyo-operator
 
 issues:
   max-issues-per-linter: 0

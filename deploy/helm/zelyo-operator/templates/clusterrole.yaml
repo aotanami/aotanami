@@ -1,0 +1,129 @@
+# Zelyo Operator ClusterRole — READ-ONLY cluster access
+# The operator never mutates cluster resources directly.
+# All remediation happens via GitOps PRs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "zelyo-operator.fullname" . }}
+  labels:
+    {{- include "zelyo-operator.labels" . | nindent 4 }}
+rules:
+  # Core resources — read-only
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - services
+      - endpoints
+      - configmaps
+      - secrets
+      - serviceaccounts
+      - namespaces
+      - nodes
+      - events
+      - persistentvolumeclaims
+      - persistentvolumes
+      - resourcequotas
+      - limitranges
+    verbs: ["get", "list", "watch"]
+
+  # Workload resources — read-only
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+    verbs: ["get", "list", "watch"]
+
+  # Batch resources — read-only
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ["get", "list", "watch"]
+
+  # Networking — read-only
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - networkpolicies
+      - ingresses
+    verbs: ["get", "list", "watch"]
+
+  # RBAC — read-only (for RBAC audit)
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - clusterroles
+      - clusterrolebindings
+      - roles
+      - rolebindings
+    verbs: ["get", "list", "watch"]
+
+  # Policy — read-only
+  - apiGroups: ["policy"]
+    resources:
+      - podsecuritypolicies
+      - poddisruptionbudgets
+    verbs: ["get", "list", "watch"]
+
+  # Autoscaling — read-only
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs: ["get", "list", "watch"]
+
+  # Metrics — read-only (for cost optimization)
+  - apiGroups: ["metrics.k8s.io"]
+    resources:
+      - nodes
+      - pods
+    verbs: ["get", "list"]
+
+  # Zelyo Operator CRDs — full access (manage own resources)
+  - apiGroups: ["zelyo.ai"]
+    resources:
+      - securitypolicies
+      - remediationpolicies
+      - clusterscans
+      - scanreports
+      - costpolicies
+      - monitoringpolicies
+      - notificationchannels
+      - zelyoconfigs
+      - gitopsrepositories
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Zelyo Operator CRD statuses
+  - apiGroups: ["zelyo.ai"]
+    resources:
+      - securitypolicies/status
+      - remediationpolicies/status
+      - clusterscans/status
+      - scanreports/status
+      - costpolicies/status
+      - monitoringpolicies/status
+      - notificationchannels/status
+      - zelyoconfigs/status
+      - gitopsrepositories/status
+    verbs: ["get", "update", "patch"]
+
+  # Leader election
+  - apiGroups: ["coordination.k8s.io"]
+    resources:
+      - leases
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "zelyo-operator.fullname" . }}
+  labels:
+    {{- include "zelyo-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "zelyo-operator.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "zelyo-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}

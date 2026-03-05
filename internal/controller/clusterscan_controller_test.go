@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,8 +28,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
-	"github.com/aotanami/aotanami/internal/scanner"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
 )
 
 var _ = Describe("ClusterScan Controller", func() {
@@ -42,18 +42,18 @@ var _ = Describe("ClusterScan Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		clusterscan := &aotanamiv1alpha1.ClusterScan{}
+		clusterscan := &zelyov1alpha1.ClusterScan{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind ClusterScan")
 			err := k8sClient.Get(ctx, typeNamespacedName, clusterscan)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &aotanamiv1alpha1.ClusterScan{
+				resource := &zelyov1alpha1.ClusterScan{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					Spec: aotanamiv1alpha1.ClusterScanSpec{
+					Spec: zelyov1alpha1.ClusterScanSpec{
 						Scanners: []string{"rbac"},
 					},
 				}
@@ -63,7 +63,7 @@ var _ = Describe("ClusterScan Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &aotanamiv1alpha1.ClusterScan{}
+			resource := &zelyov1alpha1.ClusterScan{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 

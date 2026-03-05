@@ -1,0 +1,374 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  Zelyo Operator — Autonomous Kubernetes Protection                       ║
+# ║  https://github.com/zelyo-ai/zelyo-operator                              ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
+# ── CRD Management ──────────────────────────────────────────────────────
+crds:
+  # -- Install CRDs with the chart. Disable if you manage CRDs separately.
+  install: true
+  # -- Keep CRDs on helm uninstall (prevents accidental CR deletion)
+  keep: true
+  # -- Annotations to add to all CRD resources
+  annotations: {}
+
+# ── Operator Image ──────────────────────────────────────────────────────
+image:
+  # -- Container image repository
+  repository: ghcr.io/zelyo-ai/zelyo-operator
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Overrides the image tag (defaults to chart appVersion)
+  tag: ""
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Override the name of the chart
+nameOverride: ""
+# -- Override the full name of the chart
+fullnameOverride: ""
+
+# ── Replicas & Scaling ──────────────────────────────────────────────────
+# -- Number of operator replicas. >1 requires leader election.
+replicaCount: 1
+
+autoscaling:
+  # -- Enable Horizontal Pod Autoscaler
+  enabled: false
+  # -- Minimum replicas
+  minReplicas: 1
+  # -- Maximum replicas
+  maxReplicas: 3
+  # -- Target CPU utilization percentage
+  targetCPUUtilizationPercentage: 80
+  # -- Target memory utilization percentage
+  targetMemoryUtilizationPercentage: 80
+
+# ── Service Account ─────────────────────────────────────────────────────
+serviceAccount:
+  # -- Create a ServiceAccount
+  create: true
+  # -- Annotations (e.g. for workload identity: azure.workload.identity/client-id)
+  annotations: {}
+  # -- Name of the ServiceAccount (generated if not set)
+  name: ""
+  # -- Automount API credentials for the ServiceAccount
+  automountServiceAccountToken: true
+
+# ── Pod Configuration ───────────────────────────────────────────────────
+# -- Pod annotations
+podAnnotations: {}
+
+# -- Pod labels (in addition to template labels)
+podLabels: {}
+
+# -- Pod security context (applied at pod level)
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container security context (applied at container level)
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  capabilities:
+    drop:
+      - ALL
+
+# -- Resource requests and limits
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+# -- Priority class name for the operator pods
+priorityClassName: ""
+
+# -- Termination grace period in seconds
+terminationGracePeriodSeconds: 30
+
+# -- DNS policy (ClusterFirst, Default, ClusterFirstWithHostNet, None)
+dnsPolicy: ""
+
+# -- DNS config overrides
+dnsConfig: {}
+
+# -- Node selector
+nodeSelector: {}
+
+# -- Tolerations
+tolerations: []
+
+# -- Affinity rules
+affinity: {}
+
+# -- Topology spread constraints for HA deployments
+topologySpreadConstraints: []
+
+# -- Extra volumes to mount (e.g. custom CA bundles)
+extraVolumes: []
+# - name: custom-ca
+#   configMap:
+#     name: my-ca-bundle
+
+# -- Extra volume mounts
+extraVolumeMounts: []
+# - name: custom-ca
+#   mountPath: /etc/ssl/certs/custom-ca.crt
+#   subPath: ca.crt
+
+# -- Extra environment variables
+extraEnv: []
+# - name: HTTPS_PROXY
+#   value: "http://proxy:3128"
+
+# -- Extra environment variables from secrets/configmaps
+extraEnvFrom: []
+# - secretRef:
+#     name: my-external-secret
+
+# -- Init containers (e.g. for schema migrations or cert population)
+initContainers: []
+
+# ── Zelyo Operator Configuration ─────────────────────────────────────────────
+config:
+  # -- Operating mode: "audit" (alert-only) or "protect" (GitOps auto-remediation)
+  mode: audit
+
+  llm:
+    # -- LLM provider: openrouter, openai, anthropic, azure-openai, ollama, custom
+    provider: openrouter
+    # -- LLM model identifier
+    model: "anthropic/claude-sonnet-4-20250514"
+    # -- Name of the K8s Secret containing the LLM API key (key: "api-key")
+    apiKeySecret: zelyo-llm
+    # -- Custom API endpoint (required for ollama/custom providers)
+    endpoint: ""
+    # -- LLM temperature (0.0 = deterministic, 1.0 = creative)
+    temperature: "0.1"
+    # -- Max tokens per LLM request
+    maxTokensPerRequest: 4096
+
+  tokenBudget:
+    # -- Max tokens per hour (0 = unlimited)
+    hourlyTokenLimit: 50000
+    # -- Max tokens per day (0 = unlimited)
+    dailyTokenLimit: 500000
+    # -- Max tokens per month (0 = unlimited)
+    monthlyTokenLimit: 10000000
+    # -- Alert when usage reaches this % of budget
+    alertThresholdPercent: 80
+    # -- Enable prompt/response caching
+    enableCaching: true
+    # -- Enable batching multiple findings per LLM call
+    batchingEnabled: true
+
+  dashboard:
+    # -- Enable the built-in dashboard API
+    enabled: true
+    # -- Dashboard HTTP port
+    port: 8080
+    # -- URL path prefix
+    basePath: "/"
+
+  github:
+    # -- Enable GitHub App integration (required for Protect Mode)
+    enabled: false
+    # -- GitHub App ID
+    appID: 0
+    # -- GitHub App Installation ID
+    installationID: 0
+    # -- Name of K8s Secret with GitHub App private key (key: "private-key")
+    privateKeySecret: ""
+
+  telemetry:
+    # -- Enable Prometheus metrics
+    prometheusEnabled: true
+    # -- Enable OpenTelemetry tracing
+    otelEnabled: false
+    # -- OTLP collector endpoint
+    otelEndpoint: ""
+
+# ── Leader Election ─────────────────────────────────────────────────────
+leaderElection:
+  # -- Enable leader election (required when replicaCount > 1)
+  enabled: true
+
+# ── Webhook Configuration ──────────────────────────────────────────────
+webhook:
+  # -- Enable admission webhooks (ValidatingWebhookConfiguration)
+  enabled: true
+
+  # -- Failure policy: Fail or Ignore
+  failurePolicy: Fail
+
+  # -- Timeout in seconds for webhook calls
+  timeoutSeconds: 10
+
+  # -- Webhook service port
+  port: 9443
+
+  certManager:
+    # -- Use cert-manager to manage webhook TLS certificates
+    enabled: false
+    # -- cert-manager Issuer kind (Issuer or ClusterIssuer)
+    issuerKind: Issuer
+    # -- cert-manager Issuer name (auto-created if not set)
+    issuerName: ""
+
+  # -- Use self-signed certificates (when cert-manager is disabled)
+  selfSigned: true
+
+# ── Metrics & Monitoring ───────────────────────────────────────────────
+metrics:
+  # -- Metrics bind address (:8443 for HTTPS, :8080 for HTTP, 0 to disable)
+  bindAddress: ":8443"
+
+  # -- Enable secure metrics serving (HTTPS with authn/authz)
+  secure: true
+
+  service:
+    # -- Create a Service for metrics scraping
+    enabled: true
+    # -- Metrics service port
+    port: 8443
+    # -- Annotations for the metrics service
+    annotations: {}
+
+  serviceMonitor:
+    # -- Create a Prometheus ServiceMonitor
+    enabled: false
+    # -- Scrape interval
+    interval: 30s
+    # -- Scrape timeout
+    scrapeTimeout: 10s
+    # -- Additional labels for the ServiceMonitor (e.g. release: prometheus)
+    labels: {}
+    # -- Metric relabel configs
+    metricRelabelings: []
+    # -- Relabel configs
+    relabelings: []
+    # -- Namespace for ServiceMonitor (defaults to release namespace)
+    namespace: ""
+    # -- Honor labels
+    honorLabels: false
+
+  prometheusRule:
+    # -- Create PrometheusRule for alerting
+    enabled: false
+    # -- Additional labels for the PrometheusRule
+    labels: {}
+    # -- Namespace for PrometheusRule (defaults to release namespace)
+    namespace: ""
+
+# ── Dashboard Service ──────────────────────────────────────────────────
+service:
+  # -- Service type for the dashboard
+  type: ClusterIP
+  # -- Dashboard port
+  port: 8080
+  # -- Additional annotations
+  annotations: {}
+
+# ── Ingress ────────────────────────────────────────────────────────────
+ingress:
+  # -- Enable ingress for dashboard access
+  enabled: false
+  # -- Ingress class name
+  className: ""
+  # -- Ingress annotations
+  annotations: {}
+  hosts:
+    - host: zelyo-operator.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ── Pod Disruption Budget ──────────────────────────────────────────────
+podDisruptionBudget:
+  # -- Create a PodDisruptionBudget
+  enabled: false
+  # -- Minimum available pods (set one of minAvailable or maxUnavailable)
+  minAvailable: 1
+  # -- Maximum unavailable pods
+  maxUnavailable: ""
+
+# ── Network Policy ─────────────────────────────────────────────────────
+networkPolicy:
+  # -- Create a NetworkPolicy for the operator
+  enabled: false
+
+  # -- Ingress rules
+  ingress:
+    # -- Allow metrics scraping from any pod with prometheus label
+    metricsFrom: []
+    # - namespaceSelector:
+    #     matchLabels:
+    #       kubernetes.io/metadata.name: monitoring
+    #   podSelector:
+    #     matchLabels:
+    #       app.kubernetes.io/name: prometheus
+
+    # -- Allow webhook calls from the API server (cidr-based)
+    webhookFrom: []
+    # - ipBlock:
+    #     cidr: 10.0.0.0/8
+
+  # -- Egress rules
+  egress:
+    # -- Allow DNS resolution
+    dns: true
+    # -- Allow Kubernetes API access
+    kubeAPI: true
+    # -- Additional egress rules (e.g. LLM API, GitHub API)
+    extraRules: []
+    # - to:
+    #   - ipBlock:
+    #       cidr: 0.0.0.0/0
+    #   ports:
+    #   - port: 443
+    #     protocol: TCP
+
+# ── Health Probes ──────────────────────────────────────────────────────
+healthProbes:
+  # -- Health probe bind address
+  bindAddress: ":8081"
+
+  liveness:
+    # -- Initial delay before first liveness check
+    initialDelaySeconds: 15
+    # -- Period between liveness checks
+    periodSeconds: 20
+    # -- Timeout for liveness check
+    timeoutSeconds: 3
+    # -- Failure threshold before restarting
+    failureThreshold: 3
+
+  readiness:
+    # -- Initial delay before first readiness check
+    initialDelaySeconds: 5
+    # -- Period between readiness checks
+    periodSeconds: 10
+    # -- Timeout for readiness check
+    timeoutSeconds: 3
+    # -- Failure threshold before marking unready
+    failureThreshold: 3
+
+  startup:
+    # -- Enable startup probe (recommended for LLM-connected operators)
+    enabled: true
+    # -- Initial delay before first startup check
+    initialDelaySeconds: 5
+    # -- Period between startup checks
+    periodSeconds: 5
+    # -- Failure threshold before killing the pod
+    failureThreshold: 30

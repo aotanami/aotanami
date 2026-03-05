@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ limitations under the License.
 //   - Raw YAML/JSON manifests (fallback)
 //
 // The discovery engine walks the directory tree and returns all detected sources
-// with their paths and metadata. This enables Aotanami to work with monorepos
+// with their paths and metadata. This enables Zelyo Operator to work with monorepos
 // containing multiple apps with different source types.
 package discovery
 

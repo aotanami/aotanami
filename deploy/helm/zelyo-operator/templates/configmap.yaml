@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "zelyo-operator.fullname" . }}-config
+  namespace: {{ include "zelyo-operator.namespace" . }}
+  labels:
+    {{- include "zelyo-operator.labels" . | nindent 4 }}
+data:
+  # ── Operating Mode ──
+  ZELYO_OPERATOR_MODE: {{ .Values.config.mode | quote }}
+
+  # ── LLM Configuration ──
+  ZELYO_OPERATOR_LLM_PROVIDER: {{ .Values.config.llm.provider | quote }}
+  ZELYO_OPERATOR_LLM_MODEL: {{ .Values.config.llm.model | quote }}
+  ZELYO_OPERATOR_LLM_API_KEY_SECRET: {{ .Values.config.llm.apiKeySecret | quote }}
+  ZELYO_OPERATOR_LLM_ENDPOINT: {{ .Values.config.llm.endpoint | quote }}
+  ZELYO_OPERATOR_LLM_TEMPERATURE: {{ .Values.config.llm.temperature | quote }}
+  ZELYO_OPERATOR_LLM_MAX_TOKENS: {{ .Values.config.llm.maxTokensPerRequest | quote }}
+
+  # ── Token Budget ──
+  ZELYO_OPERATOR_TOKEN_HOURLY_LIMIT: {{ .Values.config.tokenBudget.hourlyTokenLimit | quote }}
+  ZELYO_OPERATOR_TOKEN_DAILY_LIMIT: {{ .Values.config.tokenBudget.dailyTokenLimit | quote }}
+  ZELYO_OPERATOR_TOKEN_MONTHLY_LIMIT: {{ .Values.config.tokenBudget.monthlyTokenLimit | quote }}
+  ZELYO_OPERATOR_TOKEN_ALERT_THRESHOLD: {{ .Values.config.tokenBudget.alertThresholdPercent | quote }}
+  ZELYO_OPERATOR_TOKEN_CACHING: {{ .Values.config.tokenBudget.enableCaching | quote }}
+  ZELYO_OPERATOR_TOKEN_BATCHING: {{ .Values.config.tokenBudget.batchingEnabled | quote }}
+
+  # ── Dashboard ──
+  ZELYO_OPERATOR_DASHBOARD_ENABLED: {{ .Values.config.dashboard.enabled | quote }}
+  ZELYO_OPERATOR_DASHBOARD_PORT: {{ .Values.config.dashboard.port | quote }}
+  ZELYO_OPERATOR_DASHBOARD_BASE_PATH: {{ .Values.config.dashboard.basePath | quote }}
+
+  # ── GitHub Integration ──
+  ZELYO_OPERATOR_GITHUB_ENABLED: {{ .Values.config.github.enabled | quote }}
+  ZELYO_OPERATOR_GITHUB_APP_ID: {{ .Values.config.github.appID | quote }}
+  ZELYO_OPERATOR_GITHUB_INSTALLATION_ID: {{ .Values.config.github.installationID | quote }}
+  ZELYO_OPERATOR_GITHUB_PRIVATE_KEY_SECRET: {{ .Values.config.github.privateKeySecret | quote }}
+
+  # ── Telemetry ──
+  ZELYO_OPERATOR_PROMETHEUS_ENABLED: {{ .Values.config.telemetry.prometheusEnabled | quote }}
+  ZELYO_OPERATOR_OTEL_ENABLED: {{ .Values.config.telemetry.otelEnabled | quote }}
+  ZELYO_OPERATOR_OTEL_ENDPOINT: {{ .Values.config.telemetry.otelEndpoint | quote }}

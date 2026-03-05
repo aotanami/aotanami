@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 )
 
 // ImagePinningScanner checks container images for:
@@ -41,7 +41,7 @@ func (s *ImagePinningScanner) Name() string {
 
 // RuleType implements Scanner.
 func (s *ImagePinningScanner) RuleType() string {
-	return aotanamiv1alpha1.RuleTypeImageVulnerability
+	return zelyov1alpha1.RuleTypeImageVulnerability
 }
 
 // Scan implements Scanner.
@@ -60,7 +60,7 @@ func (s *ImagePinningScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[s
 			if isLatestTag(image) {
 				findings = append(findings, Finding{
 					RuleType:          s.RuleType(),
-					Severity:          aotanamiv1alpha1.SeverityHigh,
+					Severity:          zelyov1alpha1.SeverityHigh,
 					Title:             fmt.Sprintf("Container %q uses :latest tag", container.Name),
 					Description:       fmt.Sprintf("Image %q uses the :latest tag (or no tag). This is unreliable because the underlying image can change without notice.", image),
 					ResourceKind:      "Pod",
@@ -74,7 +74,7 @@ func (s *ImagePinningScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[s
 			if !isDigestPinned(image) {
 				findings = append(findings, Finding{
 					RuleType:          s.RuleType(),
-					Severity:          aotanamiv1alpha1.SeverityMedium,
+					Severity:          zelyov1alpha1.SeverityMedium,
 					Title:             fmt.Sprintf("Container %q image not pinned by digest", container.Name),
 					Description:       fmt.Sprintf("Image %q is not pinned by digest (sha256:...). Tags are mutable — the same tag can point to different images over time.", image),
 					ResourceKind:      "Pod",

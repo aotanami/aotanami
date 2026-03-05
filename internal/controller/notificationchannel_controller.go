@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,9 +30,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
-	"github.com/aotanami/aotanami/internal/conditions"
-	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
+	aotmetrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
 )
 
 // NotificationChannelReconciler reconciles a NotificationChannel object.
@@ -43,9 +43,9 @@ type NotificationChannelReconciler struct {
 	Recorder record.EventRecorder
 }
 
-// +kubebuilder:rbac:groups=aotanami.com,resources=notificationchannels,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=aotanami.com,resources=notificationchannels/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=aotanami.com,resources=notificationchannels/finalizers,verbs=update
+// +kubebuilder:rbac:groups=zelyo.ai,resources=notificationchannels,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=zelyo.ai,resources=notificationchannels/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=zelyo.ai,resources=notificationchannels/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 // Reconcile validates the notification channel configuration.
@@ -56,7 +56,7 @@ func (r *NotificationChannelReconciler) Reconcile(ctx context.Context, req ctrl.
 		aotmetrics.ReconcileDuration.WithLabelValues("notificationchannel").Observe(time.Since(start).Seconds())
 	}()
 
-	channel := &aotanamiv1alpha1.NotificationChannel{}
+	channel := &zelyov1alpha1.NotificationChannel{}
 	if err := r.Get(ctx, req.NamespacedName, channel); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -74,14 +74,14 @@ func (r *NotificationChannelReconciler) Reconcile(ctx context.Context, req ctrl.
 	secretKey := types.NamespacedName{Name: channel.Spec.CredentialSecret, Namespace: channel.Namespace}
 	if err := r.Get(ctx, secretKey, secret); err != nil {
 		if errors.IsNotFound(err) {
-			r.Recorder.Event(channel, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonSecretMissing,
+			r.Recorder.Event(channel, corev1.EventTypeWarning, zelyov1alpha1.EventReasonSecretMissing,
 				fmt.Sprintf("Credential Secret %q not found", channel.Spec.CredentialSecret))
-			conditions.MarkFalse(&channel.Status.Conditions, aotanamiv1alpha1.ConditionSecretResolved,
-				aotanamiv1alpha1.ReasonSecretNotFound,
+			conditions.MarkFalse(&channel.Status.Conditions, zelyov1alpha1.ConditionSecretResolved,
+				zelyov1alpha1.ReasonSecretNotFound,
 				fmt.Sprintf("Secret %q not found", channel.Spec.CredentialSecret), channel.Generation)
-			conditions.MarkFalse(&channel.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-				aotanamiv1alpha1.ReasonSecretNotFound, "Credential secret not available", channel.Generation)
-			channel.Status.Phase = aotanamiv1alpha1.PhaseError
+			conditions.MarkFalse(&channel.Status.Conditions, zelyov1alpha1.ConditionReady,
+				zelyov1alpha1.ReasonSecretNotFound, "Credential secret not available", channel.Generation)
+			channel.Status.Phase = zelyov1alpha1.PhaseError
 			channel.Status.LastError = fmt.Sprintf("Secret %q not found", channel.Spec.CredentialSecret)
 			channel.Status.ObservedGeneration = channel.Generation
 			if statusErr := r.Status().Update(ctx, channel); statusErr != nil {
@@ -93,22 +93,22 @@ func (r *NotificationChannelReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	// Mark secret as resolved.
-	conditions.MarkTrue(&channel.Status.Conditions, aotanamiv1alpha1.ConditionSecretResolved,
-		aotanamiv1alpha1.ReasonSecretResolved, "Credential secret is available", channel.Generation)
+	conditions.MarkTrue(&channel.Status.Conditions, zelyov1alpha1.ConditionSecretResolved,
+		zelyov1alpha1.ReasonSecretResolved, "Credential secret is available", channel.Generation)
 
 	// Mark as active.
-	channel.Status.Phase = aotanamiv1alpha1.PhaseActive
+	channel.Status.Phase = zelyov1alpha1.PhaseActive
 	channel.Status.LastError = ""
 	channel.Status.ObservedGeneration = channel.Generation
-	conditions.MarkTrue(&channel.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-		aotanamiv1alpha1.ReasonReconcileSuccess,
+	conditions.MarkTrue(&channel.Status.Conditions, zelyov1alpha1.ConditionReady,
+		zelyov1alpha1.ReasonReconcileSuccess,
 		fmt.Sprintf("Channel type %q is configured and ready", channel.Spec.Type), channel.Generation)
 
 	if err := r.Status().Update(ctx, channel); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 	}
 
-	r.Recorder.Event(channel, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonReconciled,
+	r.Recorder.Event(channel, corev1.EventTypeNormal, zelyov1alpha1.EventReasonReconciled,
 		fmt.Sprintf("NotificationChannel configured (type=%s)", channel.Spec.Type))
 
 	aotmetrics.ReconcileTotal.WithLabelValues("notificationchannel", "success").Inc()
@@ -118,7 +118,7 @@ func (r *NotificationChannelReconciler) Reconcile(ctx context.Context, req ctrl.
 // SetupWithManager sets up the controller with the Manager.
 func (r *NotificationChannelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aotanamiv1alpha1.NotificationChannel{}).
+		For(&zelyov1alpha1.NotificationChannel{}).
 		Named("notificationchannel").
 		Complete(r)
 }

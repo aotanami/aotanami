@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -33,12 +33,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
-	"github.com/aotanami/aotanami/internal/conditions"
-	gitopscontroller "github.com/aotanami/aotanami/internal/gitops/controller"
-	"github.com/aotanami/aotanami/internal/gitops/discovery"
-	"github.com/aotanami/aotanami/internal/gitops/source"
-	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
+	gitopscontroller "github.com/zelyo-ai/zelyo-operator/internal/gitops/controller"
+	"github.com/zelyo-ai/zelyo-operator/internal/gitops/discovery"
+	"github.com/zelyo-ai/zelyo-operator/internal/gitops/source"
+	aotmetrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
 )
 
 // GitOpsRepositoryReconciler reconciles a GitOpsRepository object.
@@ -52,9 +52,9 @@ type GitOpsRepositoryReconciler struct {
 	ControllerRegistry *gitopscontroller.Registry
 }
 
-// +kubebuilder:rbac:groups=aotanami.com,resources=gitopsrepositories,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=aotanami.com,resources=gitopsrepositories/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=aotanami.com,resources=gitopsrepositories/finalizers,verbs=update
+// +kubebuilder:rbac:groups=zelyo.ai,resources=gitopsrepositories,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=zelyo.ai,resources=gitopsrepositories/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=zelyo.ai,resources=gitopsrepositories/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=argoproj.io,resources=applications,verbs=get;list;watch
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories,verbs=get;list;watch
@@ -70,7 +70,7 @@ func (r *GitOpsRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		aotmetrics.ReconcileDuration.WithLabelValues("gitopsrepository").Observe(time.Since(start).Seconds())
 	}()
 
-	repo := &aotanamiv1alpha1.GitOpsRepository{}
+	repo := &zelyov1alpha1.GitOpsRepository{}
 	if err := r.Get(ctx, req.NamespacedName, repo); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -92,9 +92,9 @@ func (r *GitOpsRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Phase 2: Validate paths are specified.
 	if len(repo.Spec.Paths) == 0 {
-		conditions.MarkFalse(&repo.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-			aotanamiv1alpha1.ReasonInvalidConfig, "At least one path must be specified", repo.Generation)
-		repo.Status.Phase = aotanamiv1alpha1.PhaseError
+		conditions.MarkFalse(&repo.Status.Conditions, zelyov1alpha1.ConditionReady,
+			zelyov1alpha1.ReasonInvalidConfig, "At least one path must be specified", repo.Generation)
+		repo.Status.Phase = zelyov1alpha1.PhaseError
 		repo.Status.ObservedGeneration = repo.Generation
 		if err := r.Status().Update(ctx, repo); err != nil {
 			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
@@ -111,22 +111,22 @@ func (r *GitOpsRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Phase 5: Mark as synced.
 	now := metav1.Now()
-	repo.Status.Phase = aotanamiv1alpha1.PhaseSynced
+	repo.Status.Phase = zelyov1alpha1.PhaseSynced
 	repo.Status.LastSyncTime = &now
 	repo.Status.LastError = ""
 	repo.Status.ObservedGeneration = repo.Generation
 
-	conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionGitOpsConnected,
-		aotanamiv1alpha1.ReasonReconcileSuccess,
+	conditions.MarkTrue(&repo.Status.Conditions, zelyov1alpha1.ConditionGitOpsConnected,
+		zelyov1alpha1.ReasonReconcileSuccess,
 		fmt.Sprintf("Repository %s (branch: %s) is connected", repo.Spec.URL, repo.Spec.Branch), repo.Generation)
-	conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-		aotanamiv1alpha1.ReasonReconcileSuccess, "Repository is synced and ready", repo.Generation)
+	conditions.MarkTrue(&repo.Status.Conditions, zelyov1alpha1.ConditionReady,
+		zelyov1alpha1.ReasonReconcileSuccess, "Repository is synced and ready", repo.Generation)
 
 	if err := r.Status().Update(ctx, repo); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 	}
 
-	r.Recorder.Event(repo, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonReconciled,
+	r.Recorder.Event(repo, corev1.EventTypeNormal, zelyov1alpha1.EventReasonReconciled,
 		fmt.Sprintf("GitOpsRepository synced (url=%s, branch=%s, paths=%d, source=%s, controller=%s)",
 			repo.Spec.URL, repo.Spec.Branch, len(repo.Spec.Paths),
 			r.effectiveSourceType(repo), r.effectiveControllerType(repo)))
@@ -142,19 +142,19 @@ func (r *GitOpsRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 // validateAuthSecret checks that the authentication secret exists.
-func (r *GitOpsRepositoryReconciler) validateAuthSecret(ctx context.Context, repo *aotanamiv1alpha1.GitOpsRepository) (*ctrl.Result, error) {
+func (r *GitOpsRepositoryReconciler) validateAuthSecret(ctx context.Context, repo *zelyov1alpha1.GitOpsRepository) (*ctrl.Result, error) {
 	secret := &corev1.Secret{}
 	secretKey := types.NamespacedName{Name: repo.Spec.AuthSecret, Namespace: repo.Namespace}
 	if err := r.Get(ctx, secretKey, secret); err != nil {
 		if errors.IsNotFound(err) {
-			r.Recorder.Event(repo, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonSecretMissing,
+			r.Recorder.Event(repo, corev1.EventTypeWarning, zelyov1alpha1.EventReasonSecretMissing,
 				fmt.Sprintf("Auth Secret %q not found", repo.Spec.AuthSecret))
-			conditions.MarkFalse(&repo.Status.Conditions, aotanamiv1alpha1.ConditionSecretResolved,
-				aotanamiv1alpha1.ReasonSecretNotFound,
+			conditions.MarkFalse(&repo.Status.Conditions, zelyov1alpha1.ConditionSecretResolved,
+				zelyov1alpha1.ReasonSecretNotFound,
 				fmt.Sprintf("Secret %q not found", repo.Spec.AuthSecret), repo.Generation)
-			conditions.MarkFalse(&repo.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-				aotanamiv1alpha1.ReasonSecretNotFound, "Authentication secret not available", repo.Generation)
-			repo.Status.Phase = aotanamiv1alpha1.PhaseError
+			conditions.MarkFalse(&repo.Status.Conditions, zelyov1alpha1.ConditionReady,
+				zelyov1alpha1.ReasonSecretNotFound, "Authentication secret not available", repo.Generation)
+			repo.Status.Phase = zelyov1alpha1.PhaseError
 			repo.Status.LastError = fmt.Sprintf("Auth secret %q not found", repo.Spec.AuthSecret)
 			repo.Status.ObservedGeneration = repo.Generation
 			if statusErr := r.Status().Update(ctx, repo); statusErr != nil {
@@ -167,24 +167,24 @@ func (r *GitOpsRepositoryReconciler) validateAuthSecret(ctx context.Context, rep
 		return &ctrl.Result{}, fmt.Errorf("fetching auth secret: %w", err)
 	}
 
-	conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionSecretResolved,
-		aotanamiv1alpha1.ReasonSecretResolved, "Authentication secret is available", repo.Generation)
+	conditions.MarkTrue(&repo.Status.Conditions, zelyov1alpha1.ConditionSecretResolved,
+		zelyov1alpha1.ReasonSecretResolved, "Authentication secret is available", repo.Generation)
 	return nil, nil
 }
 
 // detectSourceType determines the manifest source type via auto-discovery or explicit config.
-func (r *GitOpsRepositoryReconciler) detectSourceType(ctx context.Context, repo *aotanamiv1alpha1.GitOpsRepository) {
+func (r *GitOpsRepositoryReconciler) detectSourceType(ctx context.Context, repo *zelyov1alpha1.GitOpsRepository) {
 	log := logf.FromContext(ctx)
 	sourceType := repo.Spec.SourceType
 	if sourceType == "" {
-		sourceType = aotanamiv1alpha1.ManifestSourceAuto
+		sourceType = zelyov1alpha1.ManifestSourceAuto
 	}
 
-	if sourceType != aotanamiv1alpha1.ManifestSourceAuto {
+	if sourceType != zelyov1alpha1.ManifestSourceAuto {
 		// Explicitly configured source type.
 		repo.Status.DetectedSourceType = sourceType
-		conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionSourceDetected,
-			aotanamiv1alpha1.ReasonSourceConfigured,
+		conditions.MarkTrue(&repo.Status.Conditions, zelyov1alpha1.ConditionSourceDetected,
+			zelyov1alpha1.ReasonSourceConfigured,
 			fmt.Sprintf("Source type explicitly configured as %q", sourceType), repo.Generation)
 		return
 	}
@@ -195,33 +195,33 @@ func (r *GitOpsRepositoryReconciler) detectSourceType(ctx context.Context, repo 
 	simulatedFiles := simulateFileDiscovery(repo.Spec.Paths, repo.Spec.Helm, repo.Spec.Kustomize)
 	result := discovery.Discover(simulatedFiles)
 
-	detectedType := aotanamiv1alpha1.ManifestSourceType(result.PrimaryType)
+	detectedType := zelyov1alpha1.ManifestSourceType(result.PrimaryType)
 	repo.Status.DetectedSourceType = detectedType
 
 	var reason, message string
 	switch detectedType {
-	case aotanamiv1alpha1.ManifestSourceHelm:
-		reason = aotanamiv1alpha1.ReasonHelmDetected
+	case zelyov1alpha1.ManifestSourceHelm:
+		reason = zelyov1alpha1.ReasonHelmDetected
 		message = fmt.Sprintf("Helm chart detected in %d path(s)", len(result.Sources))
-	case aotanamiv1alpha1.ManifestSourceKustomize:
-		reason = aotanamiv1alpha1.ReasonKustomizeDetected
+	case zelyov1alpha1.ManifestSourceKustomize:
+		reason = zelyov1alpha1.ReasonKustomizeDetected
 		message = fmt.Sprintf("Kustomize overlays detected in %d path(s)", len(result.Sources))
 	default:
-		reason = aotanamiv1alpha1.ReasonSourceAutoDetected
+		reason = zelyov1alpha1.ReasonSourceAutoDetected
 		message = fmt.Sprintf("Raw manifests detected in %d path(s)", len(result.Sources))
 	}
 
-	conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionSourceDetected,
+	conditions.MarkTrue(&repo.Status.Conditions, zelyov1alpha1.ConditionSourceDetected,
 		reason, message, repo.Generation)
 
 	log.Info("Source type detected", "type", detectedType, "sources", len(result.Sources))
 
-	r.Recorder.Event(repo, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonSourceDetected,
+	r.Recorder.Event(repo, corev1.EventTypeNormal, zelyov1alpha1.EventReasonSourceDetected,
 		fmt.Sprintf("Source type detected: %s", detectedType))
 }
 
 // detectController discovers which GitOps controller manages this repository.
-func (r *GitOpsRepositoryReconciler) detectController(ctx context.Context, repo *aotanamiv1alpha1.GitOpsRepository) {
+func (r *GitOpsRepositoryReconciler) detectController(ctx context.Context, repo *zelyov1alpha1.GitOpsRepository) {
 	log := logf.FromContext(ctx)
 
 	// If controller registry is not available, skip detection.
@@ -231,14 +231,14 @@ func (r *GitOpsRepositoryReconciler) detectController(ctx context.Context, repo 
 
 	controllerType := repo.Spec.ControllerType
 	if controllerType == "" {
-		controllerType = aotanamiv1alpha1.ControllerAuto
+		controllerType = zelyov1alpha1.ControllerAuto
 	}
 
 	// If explicit controller ref is provided, link directly.
 	if repo.Spec.ControllerRef != nil {
 		repo.Status.DetectedController = repo.Spec.ControllerRef.Type
-		conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionControllerLinked,
-			aotanamiv1alpha1.ReasonControllerLinked,
+		conditions.MarkTrue(&repo.Status.Conditions, zelyov1alpha1.ConditionControllerLinked,
+			zelyov1alpha1.ReasonControllerLinked,
 			fmt.Sprintf("Linked to %s %s/%s", repo.Spec.ControllerRef.Type,
 				repo.Spec.ControllerRef.Namespace, repo.Spec.ControllerRef.Name), repo.Generation)
 		repo.Status.DiscoveredApplications = 1
@@ -246,16 +246,16 @@ func (r *GitOpsRepositoryReconciler) detectController(ctx context.Context, repo 
 	}
 
 	// If controller type is "none", skip detection.
-	if controllerType == aotanamiv1alpha1.ControllerNone {
-		repo.Status.DetectedController = aotanamiv1alpha1.ControllerNone
-		conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionControllerLinked,
-			aotanamiv1alpha1.ReasonControllerNotFound, "No GitOps controller configured (standalone mode)", repo.Generation)
+	if controllerType == zelyov1alpha1.ControllerNone {
+		repo.Status.DetectedController = zelyov1alpha1.ControllerNone
+		conditions.MarkTrue(&repo.Status.Conditions, zelyov1alpha1.ConditionControllerLinked,
+			zelyov1alpha1.ReasonControllerNotFound, "No GitOps controller configured (standalone mode)", repo.Generation)
 		return
 	}
 
 	// Auto-detect or use explicit type.
 	var detectedType string
-	if controllerType == aotanamiv1alpha1.ControllerAuto {
+	if controllerType == zelyov1alpha1.ControllerAuto {
 		var err error
 		detectedType, err = r.ControllerRegistry.DetectInstalled(ctx)
 		if err != nil {
@@ -265,11 +265,11 @@ func (r *GitOpsRepositoryReconciler) detectController(ctx context.Context, repo 
 		detectedType = string(controllerType)
 	}
 
-	repo.Status.DetectedController = aotanamiv1alpha1.GitOpsControllerType(detectedType)
+	repo.Status.DetectedController = zelyov1alpha1.GitOpsControllerType(detectedType)
 
 	if detectedType == "none" {
-		conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionControllerLinked,
-			aotanamiv1alpha1.ReasonControllerNotFound, "No GitOps controller detected on cluster", repo.Generation)
+		conditions.MarkTrue(&repo.Status.Conditions, zelyov1alpha1.ConditionControllerLinked,
+			zelyov1alpha1.ReasonControllerNotFound, "No GitOps controller detected on cluster", repo.Generation)
 		return
 	}
 
@@ -282,8 +282,8 @@ func (r *GitOpsRepositoryReconciler) detectController(ctx context.Context, repo 
 	apps, err := adapter.ListApplications(ctx, repo.Spec.URL)
 	if err != nil {
 		log.Error(err, "Error listing applications from controller", "controller", detectedType)
-		conditions.MarkFalse(&repo.Status.Conditions, aotanamiv1alpha1.ConditionControllerLinked,
-			aotanamiv1alpha1.ReasonReconcileFailed,
+		conditions.MarkFalse(&repo.Status.Conditions, zelyov1alpha1.ConditionControllerLinked,
+			zelyov1alpha1.ReasonReconcileFailed,
 			fmt.Sprintf("Error listing applications from %s: %v", detectedType, err), repo.Generation)
 		return
 	}
@@ -291,46 +291,46 @@ func (r *GitOpsRepositoryReconciler) detectController(ctx context.Context, repo 
 	repo.Status.DiscoveredApplications = int32(len(apps)) //nolint:gosec // Application count is bounded by API limits
 
 	if len(apps) > 0 {
-		conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionControllerLinked,
-			aotanamiv1alpha1.ReasonControllerLinked,
+		conditions.MarkTrue(&repo.Status.Conditions, zelyov1alpha1.ConditionControllerLinked,
+			zelyov1alpha1.ReasonControllerLinked,
 			fmt.Sprintf("%s detected: %d application(s) linked", detectedType, len(apps)), repo.Generation)
 
-		r.Recorder.Event(repo, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonControllerLinked,
+		r.Recorder.Event(repo, corev1.EventTypeNormal, zelyov1alpha1.EventReasonControllerLinked,
 			fmt.Sprintf("Linked to %s with %d application(s)", detectedType, len(apps)))
 
 		log.Info("GitOps controller linked", "controller", detectedType, "applications", len(apps))
 	} else {
-		conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionControllerLinked,
-			aotanamiv1alpha1.ReasonControllerAutoDetected,
+		conditions.MarkTrue(&repo.Status.Conditions, zelyov1alpha1.ConditionControllerLinked,
+			zelyov1alpha1.ReasonControllerAutoDetected,
 			fmt.Sprintf("%s detected but no matching applications found for %s", detectedType, repo.Spec.URL), repo.Generation)
 	}
 }
 
 // effectiveSourceType returns the active source type (detected or configured).
-func (r *GitOpsRepositoryReconciler) effectiveSourceType(repo *aotanamiv1alpha1.GitOpsRepository) aotanamiv1alpha1.ManifestSourceType {
+func (r *GitOpsRepositoryReconciler) effectiveSourceType(repo *zelyov1alpha1.GitOpsRepository) zelyov1alpha1.ManifestSourceType {
 	if repo.Status.DetectedSourceType != "" {
 		return repo.Status.DetectedSourceType
 	}
-	if repo.Spec.SourceType != "" && repo.Spec.SourceType != aotanamiv1alpha1.ManifestSourceAuto {
+	if repo.Spec.SourceType != "" && repo.Spec.SourceType != zelyov1alpha1.ManifestSourceAuto {
 		return repo.Spec.SourceType
 	}
-	return aotanamiv1alpha1.ManifestSourceRaw
+	return zelyov1alpha1.ManifestSourceRaw
 }
 
 // effectiveControllerType returns the active controller type (detected or configured).
-func (r *GitOpsRepositoryReconciler) effectiveControllerType(repo *aotanamiv1alpha1.GitOpsRepository) aotanamiv1alpha1.GitOpsControllerType {
+func (r *GitOpsRepositoryReconciler) effectiveControllerType(repo *zelyov1alpha1.GitOpsRepository) zelyov1alpha1.GitOpsControllerType {
 	if repo.Status.DetectedController != "" {
 		return repo.Status.DetectedController
 	}
-	if repo.Spec.ControllerType != "" && repo.Spec.ControllerType != aotanamiv1alpha1.ControllerAuto {
+	if repo.Spec.ControllerType != "" && repo.Spec.ControllerType != zelyov1alpha1.ControllerAuto {
 		return repo.Spec.ControllerType
 	}
-	return aotanamiv1alpha1.ControllerNone
+	return zelyov1alpha1.ControllerNone
 }
 
 // simulateFileDiscovery builds a simulated file list from repo paths and config hints.
 // In production, this would be replaced by actual git clone + file listing.
-func simulateFileDiscovery(paths []string, helm *aotanamiv1alpha1.HelmSource, kustomize *aotanamiv1alpha1.KustomizeSource) []string {
+func simulateFileDiscovery(paths []string, helm *zelyov1alpha1.HelmSource, kustomize *zelyov1alpha1.KustomizeSource) []string {
 	var files []string
 
 	for _, p := range paths {
@@ -365,7 +365,7 @@ func simulateFileDiscovery(paths []string, helm *aotanamiv1alpha1.HelmSource, ku
 // SetupWithManager sets up the controller with the Manager.
 func (r *GitOpsRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aotanamiv1alpha1.GitOpsRepository{}).
+		For(&zelyov1alpha1.GitOpsRepository{}).
 		Named("gitopsrepository").
 		Complete(r)
 }

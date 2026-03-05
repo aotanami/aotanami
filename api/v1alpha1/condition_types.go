@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -160,7 +160,7 @@ const (
 	// ReasonControllerNotFound indicates no GitOps controller was found on the cluster.
 	ReasonControllerNotFound = "ControllerNotFound"
 
-	// ReasonControllerLinked indicates Aotanami linked to a GitOps controller resource.
+	// ReasonControllerLinked indicates Zelyo Operator linked to a GitOps controller resource.
 	ReasonControllerLinked = "ControllerLinked"
 
 	// ReasonManifestParseError indicates an error parsing manifests.

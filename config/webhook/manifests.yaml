@@ -10,12 +10,12 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /mutate-aotanami-zelyo-ai-v1alpha1-securitypolicy
+      path: /mutate-zelyo-operator-zelyo-ai-v1alpha1-securitypolicy
   failurePolicy: Fail
   name: msecuritypolicy-v1alpha1.kb.io
   rules:
   - apiGroups:
-    - aotanami.com
+    - zelyo.ai
     apiVersions:
     - v1alpha1
     operations:
@@ -36,12 +36,12 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-aotanami-zelyo-ai-v1alpha1-securitypolicy
+      path: /validate-zelyo-operator-zelyo-ai-v1alpha1-securitypolicy
   failurePolicy: Fail
   name: vsecuritypolicy-v1alpha1.kb.io
   rules:
   - apiGroups:
-    - aotanami.com
+    - zelyo.ai
     apiVersions:
     - v1alpha1
     operations:

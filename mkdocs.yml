@@ -1,11 +1,11 @@
-site_name: Aotanami
-site_url: https://aotanami.github.io/aotanami
+site_name: Zelyo Operator
+site_url: https://zelyo-ai.github.io/zelyo-operator
 site_description: Autonomous Kubernetes Protection — Powered by Agentic AI
 site_author: Zelyo AI
 copyright: Copyright &copy; 2026 Zelyo AI — Apache 2.0 License
 
-repo_name: aotanami/aotanami
-repo_url: https://github.com/aotanami/aotanami
+repo_name: zelyo-ai/zelyo-operator
+repo_url: https://github.com/zelyo-ai/zelyo-operator
 
 theme:
   name: material
@@ -56,9 +56,9 @@ extra_css:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/aotanami/aotanami
+      link: https://github.com/zelyo-ai/zelyo-operator
     - icon: fontawesome/solid/globe
-      link: https://aotanami.com
+      link: https://zelyo.ai
     - icon: fontawesome/solid/shield-halved
       link: https://zelyo.ai
   generator: false

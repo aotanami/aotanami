@@ -1,6 +1,6 @@
 # Security Scanners
 
-Aotanami ships with **8 built-in security scanners** that check your Kubernetes workloads for common misconfigurations and vulnerabilities. Each scanner runs automatically when triggered by a `SecurityPolicy` or `ClusterScan`.
+Zelyo Operator ships with **8 built-in security scanners** that check your Kubernetes workloads for common misconfigurations and vulnerabilities. Each scanner runs automatically when triggered by a `SecurityPolicy` or `ClusterScan`.
 
 ## How Scanners Work
 
@@ -149,7 +149,7 @@ Checks for network segmentation issues.
 | Container uses `hostPort` | High | Bypasses Kubernetes NetworkPolicies, exposes port on every node |
 
 !!! note "System namespaces are skipped"
-    Pods in `kube-system`, `kube-public`, `kube-node-lease`, and `aotanami-system` are excluded from network policy checks, since they typically have their own security model.
+    Pods in `kube-system`, `kube-public`, `kube-node-lease`, and `zelyo-system` are excluded from network policy checks, since they typically have their own security model.
 
 ---
 
@@ -172,11 +172,11 @@ Checks for RBAC-related security concerns at the pod level.
 You can combine multiple scanners in a single SecurityPolicy:
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: SecurityPolicy
 metadata:
   name: comprehensive-scan
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   severity: medium  # Only report medium and above
   match:
@@ -214,11 +214,11 @@ spec:
 For periodic scans that create historical reports:
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: ClusterScan
 metadata:
   name: nightly-security-audit
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   scanners:
     - container-security-context
@@ -240,8 +240,8 @@ After each scan completes, a `ScanReport` resource is created with the full find
 
 ```bash
 # List recent scan reports
-kubectl get scanreports -n aotanami-system
+kubectl get scanreports -n zelyo-system
 
 # View a specific report
-kubectl describe scanreport nightly-security-audit-1709481234 -n aotanami-system
+kubectl describe scanreport nightly-security-audit-1709481234 -n zelyo-system
 ```

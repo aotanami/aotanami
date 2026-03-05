@@ -1,0 +1,103 @@
+{{- if .Values.webhook.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "zelyo-operator.fullname" . }}
+  labels:
+    {{- include "zelyo-operator.labels" . | nindent 4 }}
+  {{- if .Values.webhook.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ include "zelyo-operator.namespace" . }}/{{ include "zelyo-operator.webhookCertSecret" . }}
+  {{- end }}
+webhooks:
+  - name: vsecuritypolicy.zelyo.ai
+    admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: {{ include "zelyo-operator.webhookServiceName" . }}
+        namespace: {{ include "zelyo-operator.namespace" . }}
+        path: /validate-zelyo-operator-com-v1alpha1-securitypolicy
+        port: 443
+    failurePolicy: {{ .Values.webhook.failurePolicy }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds }}
+    rules:
+      - apiGroups:
+          - zelyo.ai
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - securitypolicies
+    sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "zelyo-operator.fullname" . }}
+  labels:
+    {{- include "zelyo-operator.labels" . | nindent 4 }}
+  {{- if .Values.webhook.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ include "zelyo-operator.namespace" . }}/{{ include "zelyo-operator.webhookCertSecret" . }}
+  {{- end }}
+webhooks:
+  - name: msecuritypolicy.zelyo.ai
+    admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: {{ include "zelyo-operator.webhookServiceName" . }}
+        namespace: {{ include "zelyo-operator.namespace" . }}
+        path: /mutate-zelyo-operator-com-v1alpha1-securitypolicy
+        port: 443
+    failurePolicy: {{ .Values.webhook.failurePolicy }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds }}
+    rules:
+      - apiGroups:
+          - zelyo.ai
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - securitypolicies
+    sideEffects: None
+---
+{{- if .Values.webhook.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "zelyo-operator.webhookCertSecret" . }}
+  namespace: {{ include "zelyo-operator.namespace" . }}
+  labels:
+    {{- include "zelyo-operator.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "zelyo-operator.webhookCertSecret" . }}
+  dnsNames:
+    - {{ include "zelyo-operator.webhookServiceName" . }}.{{ include "zelyo-operator.namespace" . }}.svc
+    - {{ include "zelyo-operator.webhookServiceName" . }}.{{ include "zelyo-operator.namespace" . }}.svc.cluster.local
+  issuerRef:
+    kind: {{ .Values.webhook.certManager.issuerKind }}
+    {{- if .Values.webhook.certManager.issuerName }}
+    name: {{ .Values.webhook.certManager.issuerName }}
+    {{- else }}
+    name: {{ include "zelyo-operator.fullname" . }}-selfsigned
+    {{- end }}
+{{- if not .Values.webhook.certManager.issuerName }}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "zelyo-operator.fullname" . }}-selfsigned
+  namespace: {{ include "zelyo-operator.namespace" . }}
+  labels:
+    {{- include "zelyo-operator.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+{{- end }}
+{{- end }}
+{{- end }}

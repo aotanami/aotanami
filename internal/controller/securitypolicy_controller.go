@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -33,11 +33,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
-	"github.com/aotanami/aotanami/internal/conditions"
-	"github.com/aotanami/aotanami/internal/correlator"
-	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
-	"github.com/aotanami/aotanami/internal/scanner"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
+	"github.com/zelyo-ai/zelyo-operator/internal/correlator"
+	aotmetrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
+	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
 )
 
 const (
@@ -47,11 +47,11 @@ const (
 
 // severityOrder defines the ordering of severity levels (lower index = higher severity).
 var severityOrder = map[string]int{
-	aotanamiv1alpha1.SeverityCritical: 0,
-	aotanamiv1alpha1.SeverityHigh:     1,
-	aotanamiv1alpha1.SeverityMedium:   2,
-	aotanamiv1alpha1.SeverityLow:      3,
-	aotanamiv1alpha1.SeverityInfo:     4,
+	zelyov1alpha1.SeverityCritical: 0,
+	zelyov1alpha1.SeverityHigh:     1,
+	zelyov1alpha1.SeverityMedium:   2,
+	zelyov1alpha1.SeverityLow:      3,
+	zelyov1alpha1.SeverityInfo:     4,
 }
 
 // SecurityPolicyReconciler reconciles a SecurityPolicy object.
@@ -65,9 +65,9 @@ type SecurityPolicyReconciler struct {
 	CorrelatorEngine *correlator.Engine // Shared correlator for cross-signal event correlation.
 }
 
-// +kubebuilder:rbac:groups=aotanami.com,resources=securitypolicies,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=aotanami.com,resources=securitypolicies/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=aotanami.com,resources=securitypolicies/finalizers,verbs=update
+// +kubebuilder:rbac:groups=zelyo.ai,resources=securitypolicies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=zelyo.ai,resources=securitypolicies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=zelyo.ai,resources=securitypolicies/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
@@ -83,7 +83,7 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}()
 
 	// Fetch the SecurityPolicy resource.
-	policy := &aotanamiv1alpha1.SecurityPolicy{}
+	policy := &zelyov1alpha1.SecurityPolicy{}
 	if err := r.Get(ctx, req.NamespacedName, policy); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("SecurityPolicy resource not found — likely deleted")
@@ -98,11 +98,11 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// ── Step 1: Resolve target pods ──
 	pods, err := r.resolveTargetPods(ctx, policy)
 	if err != nil {
-		r.Recorder.Event(policy, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonReconcileError,
+		r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 			fmt.Sprintf("Failed to resolve target pods: %v", err))
-		conditions.MarkFalse(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-			aotanamiv1alpha1.ReasonReconcileFailed, fmt.Sprintf("Failed to resolve targets: %v", err), policy.Generation)
-		policy.Status.Phase = aotanamiv1alpha1.PhaseError
+		conditions.MarkFalse(&policy.Status.Conditions, zelyov1alpha1.ConditionReady,
+			zelyov1alpha1.ReasonReconcileFailed, fmt.Sprintf("Failed to resolve targets: %v", err), policy.Generation)
+		policy.Status.Phase = zelyov1alpha1.PhaseError
 		policy.Status.ObservedGeneration = policy.Generation
 		if statusErr := r.Status().Update(ctx, policy); statusErr != nil {
 			return ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
@@ -113,7 +113,7 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	log.Info("Resolved target pods", "count", len(pods))
 
-	r.Recorder.Event(policy, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonScanStarted,
+	r.Recorder.Event(policy, corev1.EventTypeNormal, zelyov1alpha1.EventReasonScanStarted,
 		fmt.Sprintf("Starting scan: %d rules against %d pods", len(policy.Spec.Rules), len(pods)))
 
 	// ── Step 2: Run scanners for each rule ──
@@ -131,7 +131,7 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		findings, scanErr := s.Scan(ctx, pods, rule.Params)
 		if scanErr != nil {
 			log.Error(scanErr, "Scanner failed", "scanner", s.Name(), "ruleType", rule.Type)
-			r.Recorder.Event(policy, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonReconcileError,
+			r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 				fmt.Sprintf("Scanner %q failed: %v", s.Name(), scanErr))
 			scanErrors = append(scanErrors, fmt.Sprintf("%s: %v", s.Name(), scanErr))
 			continue
@@ -175,11 +175,11 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	policy.Status.ObservedGeneration = policy.Generation
 
 	if len(allFindings) > 0 {
-		conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionScanCompleted,
-			aotanamiv1alpha1.ReasonViolationsFound,
+		conditions.MarkTrue(&policy.Status.Conditions, zelyov1alpha1.ConditionScanCompleted,
+			zelyov1alpha1.ReasonViolationsFound,
 			fmt.Sprintf("Scan completed: %d violations found", len(allFindings)), policy.Generation)
 
-		r.Recorder.Event(policy, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonViolationsDetected,
+		r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonViolationsDetected,
 			fmt.Sprintf("Found %d violations across %d pods (severity >= %s)",
 				len(allFindings), len(pods), policy.Spec.Severity))
 
@@ -196,23 +196,23 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				"resource", fmt.Sprintf("%s/%s", f.ResourceNamespace, f.ResourceName))
 		}
 	} else {
-		conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionScanCompleted,
-			aotanamiv1alpha1.ReasonNoViolations, "Scan completed with no violations", policy.Generation)
+		conditions.MarkTrue(&policy.Status.Conditions, zelyov1alpha1.ConditionScanCompleted,
+			zelyov1alpha1.ReasonNoViolations, "Scan completed with no violations", policy.Generation)
 
-		r.Recorder.Event(policy, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonScanCompleted,
+		r.Recorder.Event(policy, corev1.EventTypeNormal, zelyov1alpha1.EventReasonScanCompleted,
 			fmt.Sprintf("Scan completed with 0 violations across %d pods", len(pods)))
 	}
 
 	if len(scanErrors) > 0 {
-		conditions.MarkFalse(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-			aotanamiv1alpha1.ReasonReconcileFailed,
+		conditions.MarkFalse(&policy.Status.Conditions, zelyov1alpha1.ConditionReady,
+			zelyov1alpha1.ReasonReconcileFailed,
 			fmt.Sprintf("Scans completed with %d error(s): %s", len(scanErrors), strings.Join(scanErrors, "; ")),
 			policy.Generation)
-		policy.Status.Phase = aotanamiv1alpha1.PhaseDegraded
+		policy.Status.Phase = zelyov1alpha1.PhaseDegraded
 	} else {
-		conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-			aotanamiv1alpha1.ReasonReconcileSuccess, "Policy is active and scanning", policy.Generation)
-		policy.Status.Phase = aotanamiv1alpha1.PhaseActive
+		conditions.MarkTrue(&policy.Status.Conditions, zelyov1alpha1.ConditionReady,
+			zelyov1alpha1.ReasonReconcileSuccess, "Policy is active and scanning", policy.Generation)
+		policy.Status.Phase = zelyov1alpha1.PhaseActive
 	}
 
 	// Record metrics.
@@ -237,7 +237,7 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 }
 
 // resolveTargetPods lists pods matching the policy's scope (namespaces, labels, resource kinds).
-func (r *SecurityPolicyReconciler) resolveTargetPods(ctx context.Context, policy *aotanamiv1alpha1.SecurityPolicy) ([]corev1.Pod, error) {
+func (r *SecurityPolicyReconciler) resolveTargetPods(ctx context.Context, policy *zelyov1alpha1.SecurityPolicy) ([]corev1.Pod, error) {
 	var targetNamespaces []string
 
 	if len(policy.Spec.Match.Namespaces) > 0 {
@@ -301,7 +301,7 @@ func (r *SecurityPolicyReconciler) resolveTargetPods(ctx context.Context, policy
 // SetupWithManager sets up the controller with the Manager.
 func (r *SecurityPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aotanamiv1alpha1.SecurityPolicy{}).
+		For(&zelyov1alpha1.SecurityPolicy{}).
 		Named("securitypolicy").
 		Complete(r)
 }

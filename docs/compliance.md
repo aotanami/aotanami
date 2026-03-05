@@ -1,6 +1,6 @@
 # Compliance Frameworks
 
-As your Digital SRE and Security Engineer, Aotanami automatically evaluates your cluster against industry-standard compliance frameworks. Every `ClusterScan` maps security findings to specific compliance controls, generates audit-ready reports with evidence, and emits `ComplianceViolation` Kubernetes events.
+As your Digital SRE and Security Engineer, Zelyo Operator automatically evaluates your cluster against industry-standard compliance frameworks. Every `ClusterScan` maps security findings to specific compliance controls, generates audit-ready reports with evidence, and emits `ComplianceViolation` Kubernetes events.
 
 ## Supported Frameworks
 
@@ -15,7 +15,7 @@ As your Digital SRE and Security Engineer, Aotanami automatically evaluates your
 ## Running a Compliance Scan
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: ClusterScan
 metadata:
   name: compliance-audit
@@ -32,7 +32,7 @@ spec:
 
 ```bash
 # List scan reports
-kubectl get scanreports -n aotanami-system
+kubectl get scanreports -n zelyo-system
 
 # View compliance results
 kubectl get scanreport <name> -o jsonpath='{.spec.compliance}'
@@ -42,7 +42,7 @@ Results are also available in the dashboard under **Scan Results & Compliance**.
 
 ## CIS Kubernetes Benchmark
 
-Aotanami's `internal/compliance` package implements **15 CIS Kubernetes Benchmark v1.8 controls** mapped directly to scanner rule types:
+Zelyo Operator's `internal/compliance` package implements **15 CIS Kubernetes Benchmark v1.8 controls** mapped directly to scanner rule types:
 
 | CIS Control | Title | Mapped Scanner Rules |
 |---|---|---|
@@ -84,7 +84,7 @@ CIS Kubernetes Benchmark: 73.3% compliant (11/15 controls passed, 4 failed)
 You can extend compliance checks with custom CEL expressions in SecurityPolicy resources:
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: SecurityPolicy
 metadata:
   name: custom-compliance

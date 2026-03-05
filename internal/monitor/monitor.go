@@ -1,8 +1,8 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
-// Package monitor provides real-time workload monitoring for Aotanami. It watches
+// Package monitor provides real-time workload monitoring for Zelyo Operator. It watches
 // for pod events, deployment rollouts, and resource changes, feeding observations
 // into the anomaly detector and event correlator.
 package monitor

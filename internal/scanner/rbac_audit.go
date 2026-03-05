@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 )
 
 // RBACAuditScanner checks for RBAC-related security concerns at the pod level:
@@ -41,7 +41,7 @@ func (s *RBACAuditScanner) Name() string {
 
 // RuleType implements Scanner.
 func (s *RBACAuditScanner) RuleType() string {
-	return aotanamiv1alpha1.RuleTypeRBACAudit
+	return zelyov1alpha1.RuleTypeRBACAudit
 }
 
 // dangerousSANames are service account name patterns that suggest overly broad permissions.
@@ -70,7 +70,7 @@ func (s *RBACAuditScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[stri
 		if saName == defaultSA {
 			findings = append(findings, Finding{
 				RuleType:          s.RuleType(),
-				Severity:          aotanamiv1alpha1.SeverityMedium,
+				Severity:          zelyov1alpha1.SeverityMedium,
 				Title:             "Pod uses the default service account",
 				Description:       "Using the default service account means the pod inherits whatever RBAC bindings exist on 'default'. This is often more permissive than needed.",
 				ResourceKind:      "Pod",
@@ -86,7 +86,7 @@ func (s *RBACAuditScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[stri
 			if strings.Contains(saLower, pattern) {
 				findings = append(findings, Finding{
 					RuleType:          s.RuleType(),
-					Severity:          aotanamiv1alpha1.SeverityHigh,
+					Severity:          zelyov1alpha1.SeverityHigh,
 					Title:             fmt.Sprintf("Pod uses potentially over-privileged service account %q", saName),
 					Description:       fmt.Sprintf("Service account %q contains %q in its name, suggesting admin-level permissions. Workloads should use least-privilege service accounts.", saName, pattern),
 					ResourceKind:      "Pod",
@@ -102,7 +102,7 @@ func (s *RBACAuditScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[stri
 		if pod.Spec.DeprecatedServiceAccount != "" && pod.Spec.DeprecatedServiceAccount != saName {
 			findings = append(findings, Finding{
 				RuleType:          s.RuleType(),
-				Severity:          aotanamiv1alpha1.SeverityLow,
+				Severity:          zelyov1alpha1.SeverityLow,
 				Title:             "Pod uses deprecated serviceAccount field",
 				Description:       "The deprecated 'serviceAccount' field is set. Use 'serviceAccountName' instead.",
 				ResourceKind:      "Pod",

@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 )
 
 // PrivilegeEscalationScanner checks containers for privilege escalation vectors:
@@ -41,7 +41,7 @@ func (s *PrivilegeEscalationScanner) Name() string {
 
 // RuleType implements Scanner.
 func (s *PrivilegeEscalationScanner) RuleType() string {
-	return aotanamiv1alpha1.RuleTypePrivilegeEscalation
+	return zelyov1alpha1.RuleTypePrivilegeEscalation
 }
 
 // Scan implements Scanner.
@@ -58,7 +58,7 @@ func (s *PrivilegeEscalationScanner) Scan(_ context.Context, pods []corev1.Pod, 
 		if pod.Spec.AutomountServiceAccountToken == nil || *pod.Spec.AutomountServiceAccountToken {
 			findings = append(findings, Finding{
 				RuleType:          s.RuleType(),
-				Severity:          aotanamiv1alpha1.SeverityMedium,
+				Severity:          zelyov1alpha1.SeverityMedium,
 				Title:             "Service account token is auto-mounted",
 				Description:       "The pod auto-mounts the service account token. If compromised, an attacker can use it to access the Kubernetes API.",
 				ResourceKind:      "Pod",
@@ -74,7 +74,7 @@ func (s *PrivilegeEscalationScanner) Scan(_ context.Context, pods []corev1.Pod, 
 			*pod.Spec.SecurityContext.RunAsUser == 0 {
 			findings = append(findings, Finding{
 				RuleType:          s.RuleType(),
-				Severity:          aotanamiv1alpha1.SeverityCritical,
+				Severity:          zelyov1alpha1.SeverityCritical,
 				Title:             "Pod runs as root user (UID 0)",
 				Description:       "The pod is configured to run as UID 0. A container escape from a root process is especially dangerous.",
 				ResourceKind:      "Pod",
@@ -90,7 +90,7 @@ func (s *PrivilegeEscalationScanner) Scan(_ context.Context, pods []corev1.Pod, 
 			*pod.Spec.SecurityContext.RunAsGroup == 0 {
 			findings = append(findings, Finding{
 				RuleType:          s.RuleType(),
-				Severity:          aotanamiv1alpha1.SeverityMedium,
+				Severity:          zelyov1alpha1.SeverityMedium,
 				Title:             "Pod runs as root group (GID 0)",
 				Description:       "The pod is configured to run as GID 0 (root group). Files created by the container will be owned by the root group.",
 				ResourceKind:      "Pod",
@@ -111,7 +111,7 @@ func (s *PrivilegeEscalationScanner) Scan(_ context.Context, pods []corev1.Pod, 
 			if container.SecurityContext.RunAsUser != nil && *container.SecurityContext.RunAsUser == 0 {
 				findings = append(findings, Finding{
 					RuleType:          s.RuleType(),
-					Severity:          aotanamiv1alpha1.SeverityCritical,
+					Severity:          zelyov1alpha1.SeverityCritical,
 					Title:             fmt.Sprintf("Container %q runs as root user (UID 0)", container.Name),
 					Description:       "The container is configured to run as UID 0 (root). This maximizes the impact of a container escape.",
 					ResourceKind:      "Pod",
@@ -127,7 +127,7 @@ func (s *PrivilegeEscalationScanner) Scan(_ context.Context, pods []corev1.Pod, 
 				if pm == corev1.UnmaskedProcMount {
 					findings = append(findings, Finding{
 						RuleType:          s.RuleType(),
-						Severity:          aotanamiv1alpha1.SeverityCritical,
+						Severity:          zelyov1alpha1.SeverityCritical,
 						Title:             fmt.Sprintf("Container %q has unmasked /proc mount", container.Name),
 						Description:       "procMount is set to Unmasked, exposing the full /proc filesystem. This can leak sensitive host information.",
 						ResourceKind:      "Pod",

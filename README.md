@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Aotanami" width="200" />
+  <img src="assets/logo.png" alt="Zelyo Operator" width="200" />
 </p>
 
-<h1 align="center">Aotanami</h1>
+<h1 align="center">Zelyo Operator</h1>
 
 <p align="center">
   <strong>Your Digital SRE &amp; Security Engineer for Kubernetes</strong>
@@ -11,18 +11,18 @@
   <em>An agentic AI operator that observes, reasons, and acts on your cluster — 24/7, just like a human engineer would.</em>
 </p>
 <p align="center">
-  <a href="https://github.com/aotanami/aotanami/actions/workflows/ci.yml"><img src="https://github.com/aotanami/aotanami/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/aotanami/aotanami/releases"><img src="https://img.shields.io/github/v/release/aotanami/aotanami?style=flat-square" alt="Release" /></a>
-  <a href="https://goreportcard.com/report/github.com/aotanami/aotanami"><img src="https://goreportcard.com/badge/github.com/aotanami/aotanami" alt="Go Report Card" /></a>
+  <a href="https://github.com/zelyo-ai/zelyo-operator/actions/workflows/ci.yml"><img src="https://github.com/zelyo-ai/zelyo-operator/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/zelyo-ai/zelyo-operator/releases"><img src="https://img.shields.io/github/v/release/zelyo-ai/zelyo-operator?style=flat-square" alt="Release" /></a>
+  <a href="https://goreportcard.com/report/github.com/zelyo-ai/zelyo-operator"><img src="https://goreportcard.com/badge/github.com/zelyo-ai/zelyo-operator" alt="Go Report Card" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License" /></a>
-  <a href="https://artifacthub.io/packages/helm/aotanami/aotanami"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/aotanami&style=flat-square" alt="Artifact Hub" /></a>
+  <a href="https://artifacthub.io/packages/helm/zelyo-ai/zelyo-operator"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/zelyo-operator&style=flat-square" alt="Artifact Hub" /></a>
 </p>
 
 ---
 
-## What is Aotanami?
+## What is Zelyo Operator?
 
-Aotanami is your **Digital SRE and Security Engineer** — a self-hosted Kubernetes Operator powered by **Agentic AI** that does the job of a full-time site reliability and security engineer. It doesn't just alert — it **observes**, **reasons**, and **acts**, continuously protecting your production clusters while you sleep.
+Zelyo Operator is your **Digital SRE and Security Engineer** — a self-hosted Kubernetes Operator powered by **Agentic AI** that does the job of a full-time site reliability and security engineer. It doesn't just alert — it **observes**, **reasons**, and **acts**, continuously protecting your production clusters while you sleep.
 
 Think of a seasoned SRE who:
 - 👁️ **Watches** every pod restart, OOMKill, security misconfiguration, and RBAC drift
@@ -31,13 +31,13 @@ Think of a seasoned SRE who:
 - 🔧 **Fixes** problems by generating production-ready YAML patches and opening GitOps PRs
 - 📋 **Reports** compliance posture against CIS Benchmarks, NIST 800-53, SOC 2, and PCI-DSS
 
-That's Aotanami. All automated, all autonomous, all with **read-only cluster access**.
+That's Zelyo Operator. All automated, all autonomous, all with **read-only cluster access**.
 
-**Bring your own LLM API keys** (OpenRouter, OpenAI, Anthropic, Azure OpenAI, Ollama) — Aotanami is heavily optimized to minimize token usage.
+**Bring your own LLM API keys** (OpenRouter, OpenAI, Anthropic, Azure OpenAI, Ollama) — Zelyo Operator is heavily optimized to minimize token usage.
 
 ### What a Digital SRE & Security Engineer Does
 
-| Responsibility | How Aotanami Handles It |
+| Responsibility | How Zelyo Operator Handles It |
 |---|---|
 | 🔒 **Security Scanning** | Continuously scans for RBAC issues, image CVEs, PodSecurity violations, secrets exposure, and network policy gaps |
 | 🛡️ **Compliance Auditing** | Maps scan findings to CIS Kubernetes Benchmark controls, generates audit-ready reports with evidence |
@@ -51,7 +51,7 @@ That's Aotanami. All automated, all autonomous, all with **read-only cluster acc
 
 ### The Agentic Pipeline: Observe → Reason → Act
 
-Unlike traditional scanning tools that dump findings and walk away, Aotanami operates as a **closed-loop autonomous agent**:
+Unlike traditional scanning tools that dump findings and walk away, Zelyo Operator operates as a **closed-loop autonomous agent**:
 
 ```mermaid
 graph LR
@@ -95,7 +95,7 @@ graph TB
         Metrics[Resource Metrics]
     end
 
-    subgraph "Aotanami — The Digital SRE"
+    subgraph "Zelyo Operator — The Digital SRE"
         subgraph "Observe"
             Watcher[Real-Time Watcher]
             Scanner[Security Scanner]
@@ -144,26 +144,26 @@ graph TB
 
 ```bash
 # Add your LLM API key as a Kubernetes secret
-kubectl create secret generic aotanami-llm \
-  --namespace aotanami-system \
+kubectl create secret generic zelyo-llm \
+  --namespace zelyo-system \
   --from-literal=api-key=<YOUR_OPENROUTER_API_KEY>
 
-# Install Aotanami from OCI registry
-helm install aotanami oci://ghcr.io/aotanami/charts/aotanami \
-  --namespace aotanami-system \
+# Install Zelyo Operator from OCI registry
+helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
+  --namespace zelyo-system \
   --create-namespace \
   --set config.llm.provider=openrouter \
   --set config.llm.model=anthropic/claude-sonnet-4-20250514 \
-  --set config.llm.apiKeySecret=aotanami-llm
+  --set config.llm.apiKeySecret=zelyo-llm
 
 # Verify the installation
-kubectl get pods -n aotanami-system
+kubectl get pods -n zelyo-system
 ```
 
 ### Verify Image Signature
 
 ```bash
-cosign verify ghcr.io/aotanami/aotanami:<tag> \
+cosign verify ghcr.io/zelyo-ai/zelyo-operator:<tag> \
   --certificate-identity-regexp='.*' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com'
 ```
@@ -171,11 +171,11 @@ cosign verify ghcr.io/aotanami/aotanami:<tag> \
 ### Apply a Security Policy
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: SecurityPolicy
 metadata:
   name: enforce-non-root
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   severity: critical
   match:
@@ -189,11 +189,11 @@ spec:
 ### Onboard a GitOps Repository (Activate Protect Mode)
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: GitOpsRepository
 metadata:
   name: my-infra-repo
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   url: https://github.com/my-org/k8s-manifests
   branch: main
@@ -208,11 +208,11 @@ spec:
 ### Enable Auto-Remediation
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: RemediationPolicy
 metadata:
   name: auto-fix-critical
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   gitOpsRepository: my-infra-repo
   severityFilter: high        # Only fix high and critical findings
@@ -220,20 +220,20 @@ spec:
   maxConcurrentPRs: 3         # Limit blast radius
   autoMerge: false            # Require human approval
   prTemplate:
-    titlePrefix: "[Aotanami]"
-    labels: ["aotanami", "auto-remediation"]
-    branchPrefix: "aotanami/fix-"
+    titlePrefix: "[Zelyo Operator]"
+    labels: ["zelyo-operator", "auto-remediation"]
+    branchPrefix: "zelyo-operator/fix-"
 ```
 
 ---
 
 ## CRD Reference
 
-Aotanami uses **9 Custom Resource Definitions** to declaratively configure every aspect of the Digital SRE:
+Zelyo Operator uses **9 Custom Resource Definitions** to declaratively configure every aspect of the Digital SRE:
 
 | CRD | Purpose |
 |---|---|
-| `AotanamiConfig` | Global configuration — LLM provider, API keys, feature flags |
+| `ZelyoConfig` | Global configuration — LLM provider, API keys, feature flags |
 | `SecurityPolicy` | Defines which security rules to scan for and which namespaces to target |
 | `MonitoringPolicy` | Configures real-time monitoring — event filters, anomaly detection, alerts |
 | `RemediationPolicy` | Controls auto-remediation — severity filter, dry-run, max PRs, GitOps target |
@@ -281,8 +281,8 @@ See [CRD Reference](docs/crd-reference.md) for complete field documentation.
 
 ```bash
 # Clone the repository
-git clone https://github.com/aotanami/aotanami.git
-cd aotanami
+git clone https://github.com/zelyo-ai/zelyo-operator.git
+cd zelyo-operator
 
 # Install dependencies
 make install
@@ -307,10 +307,10 @@ make lint
 make build
 
 # Build the Docker image
-make docker-build IMG=ghcr.io/aotanami/aotanami:dev
+make docker-build IMG=ghcr.io/zelyo-ai/zelyo-operator:dev
 
 # Build and push
-make docker-push IMG=ghcr.io/aotanami/aotanami:dev
+make docker-push IMG=ghcr.io/zelyo-ai/zelyo-operator:dev
 ```
 
 ---
@@ -347,10 +347,10 @@ To report a security vulnerability, please see [SECURITY.md](SECURITY.md).
 
 ## License
 
-Aotanami is licensed under the [Apache License 2.0](LICENSE).
+Zelyo Operator is licensed under the [Apache License 2.0](LICENSE).
 
 ---
 
 <p align="center">
-  An Aotanami Foundation project. Originally created with ❤️ by <a href="https://zelyo.ai">Zelyo AI</a>
+  An Zelyo AI project. Originally created with ❤️ by <a href="https://zelyo.ai">Zelyo AI</a>
 </p>

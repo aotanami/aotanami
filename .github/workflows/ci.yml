@@ -39,8 +39,8 @@ jobs:
         uses: ibiqlik/action-yamllint@v3
         with:
           file_or_dir: |
-            deploy/helm/aotanami/Chart.yaml
-            deploy/helm/aotanami/values.yaml
+            deploy/helm/zelyo-operator/Chart.yaml
+            deploy/helm/zelyo-operator/values.yaml
             .github/workflows/
           config_data: |
             extends: default
@@ -87,7 +87,7 @@ jobs:
         run: make build
 
       - name: Build Docker image
-        run: make docker-build IMG=ghcr.io/aotanami/aotanami:ci-${{ github.sha }}
+        run: make docker-build IMG=ghcr.io/zelyo-ai/zelyo-operator:ci-${{ github.sha }}
 
   helm-lint:
     name: Helm Lint
@@ -101,7 +101,7 @@ jobs:
           version: v3.16.0
 
       - name: Helm lint
-        run: helm lint deploy/helm/aotanami/
+        run: helm lint deploy/helm/zelyo-operator/
 
       - name: Helm template
-        run: helm template aotanami deploy/helm/aotanami/ --debug
+        run: helm template zelyo-operator deploy/helm/zelyo-operator/ --debug

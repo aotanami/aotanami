@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 )
 
 // ─── ContainerSecurityContextScanner Tests ───
@@ -44,7 +44,7 @@ func TestContainerSecurityContextScanner_NoSecurityContext(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "has no security context", aotanamiv1alpha1.SeverityHigh)
+	assertHasFinding(t, findings, "has no security context", zelyov1alpha1.SeverityHigh)
 }
 
 func TestContainerSecurityContextScanner_Privileged(t *testing.T) {
@@ -64,7 +64,7 @@ func TestContainerSecurityContextScanner_Privileged(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "runs as privileged", aotanamiv1alpha1.SeverityCritical)
+	assertHasFinding(t, findings, "runs as privileged", zelyov1alpha1.SeverityCritical)
 }
 
 func TestContainerSecurityContextScanner_FullySecure(t *testing.T) {
@@ -187,8 +187,8 @@ func TestImagePinningScanner_LatestTag(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "uses :latest tag", aotanamiv1alpha1.SeverityHigh)
-	assertHasFinding(t, findings, "not pinned by digest", aotanamiv1alpha1.SeverityMedium)
+	assertHasFinding(t, findings, "uses :latest tag", zelyov1alpha1.SeverityHigh)
+	assertHasFinding(t, findings, "not pinned by digest", zelyov1alpha1.SeverityMedium)
 }
 
 func TestImagePinningScanner_NoTag(t *testing.T) {
@@ -205,7 +205,7 @@ func TestImagePinningScanner_NoTag(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "uses :latest tag", aotanamiv1alpha1.SeverityHigh)
+	assertHasFinding(t, findings, "uses :latest tag", zelyov1alpha1.SeverityHigh)
 }
 
 func TestImagePinningScanner_DigestPinned(t *testing.T) {
@@ -242,11 +242,11 @@ func TestImagePinningScanner_VersionTag(t *testing.T) {
 	}
 
 	for _, f := range findings {
-		if f.Severity == aotanamiv1alpha1.SeverityHigh {
+		if f.Severity == zelyov1alpha1.SeverityHigh {
 			t.Errorf("should not flag :latest for version tag, got: %s", f.Title)
 		}
 	}
-	assertHasFinding(t, findings, "not pinned by digest", aotanamiv1alpha1.SeverityMedium)
+	assertHasFinding(t, findings, "not pinned by digest", zelyov1alpha1.SeverityMedium)
 }
 
 func TestImagePinningScanner_RegistryWithPort(t *testing.T) {
@@ -263,7 +263,7 @@ func TestImagePinningScanner_RegistryWithPort(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "uses :latest tag", aotanamiv1alpha1.SeverityHigh)
+	assertHasFinding(t, findings, "uses :latest tag", zelyov1alpha1.SeverityHigh)
 }
 
 // ─── PodSecurityScanner Tests ───
@@ -278,7 +278,7 @@ func TestPodSecurityScanner_HostNetwork(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "host network", aotanamiv1alpha1.SeverityCritical)
+	assertHasFinding(t, findings, "host network", zelyov1alpha1.SeverityCritical)
 }
 
 func TestPodSecurityScanner_HostPID(t *testing.T) {
@@ -291,7 +291,7 @@ func TestPodSecurityScanner_HostPID(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "host PID", aotanamiv1alpha1.SeverityCritical)
+	assertHasFinding(t, findings, "host PID", zelyov1alpha1.SeverityCritical)
 }
 
 func TestPodSecurityScanner_HostPath(t *testing.T) {
@@ -313,7 +313,7 @@ func TestPodSecurityScanner_HostPath(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "mounts host path", aotanamiv1alpha1.SeverityCritical)
+	assertHasFinding(t, findings, "mounts host path", zelyov1alpha1.SeverityCritical)
 }
 
 func TestPodSecurityScanner_DangerousCapabilities(t *testing.T) {
@@ -335,8 +335,8 @@ func TestPodSecurityScanner_DangerousCapabilities(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "SYS_ADMIN", aotanamiv1alpha1.SeverityHigh)
-	assertHasFinding(t, findings, "NET_RAW", aotanamiv1alpha1.SeverityHigh)
+	assertHasFinding(t, findings, "SYS_ADMIN", zelyov1alpha1.SeverityHigh)
+	assertHasFinding(t, findings, "NET_RAW", zelyov1alpha1.SeverityHigh)
 }
 
 func TestPodSecurityScanner_Clean(t *testing.T) {
@@ -371,7 +371,7 @@ func TestPrivilegeEscalationScanner_AutomountSAToken(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "auto-mounted", aotanamiv1alpha1.SeverityMedium)
+	assertHasFinding(t, findings, "auto-mounted", zelyov1alpha1.SeverityMedium)
 }
 
 func TestPrivilegeEscalationScanner_RunAsRoot(t *testing.T) {
@@ -387,7 +387,7 @@ func TestPrivilegeEscalationScanner_RunAsRoot(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "root user (UID 0)", aotanamiv1alpha1.SeverityCritical)
+	assertHasFinding(t, findings, "root user (UID 0)", zelyov1alpha1.SeverityCritical)
 }
 
 func TestPrivilegeEscalationScanner_ContainerRunAsRoot(t *testing.T) {
@@ -406,7 +406,7 @@ func TestPrivilegeEscalationScanner_ContainerRunAsRoot(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "root user (UID 0)", aotanamiv1alpha1.SeverityCritical)
+	assertHasFinding(t, findings, "root user (UID 0)", zelyov1alpha1.SeverityCritical)
 }
 
 func TestPrivilegeEscalationScanner_Clean(t *testing.T) {
@@ -450,7 +450,7 @@ func TestSecretsExposureScanner_HardcodedSecret(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "hardcoded secret", aotanamiv1alpha1.SeverityCritical)
+	assertHasFinding(t, findings, "hardcoded secret", zelyov1alpha1.SeverityCritical)
 }
 
 func TestSecretsExposureScanner_SecretKeyRef(t *testing.T) {
@@ -478,7 +478,7 @@ func TestSecretsExposureScanner_SecretKeyRef(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "secretKeyRef", aotanamiv1alpha1.SeverityLow)
+	assertHasFinding(t, findings, "secretKeyRef", zelyov1alpha1.SeverityLow)
 }
 
 func TestSecretsExposureScanner_EnvFromSecret(t *testing.T) {
@@ -502,7 +502,7 @@ func TestSecretsExposureScanner_EnvFromSecret(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "injects entire Secret", aotanamiv1alpha1.SeverityMedium)
+	assertHasFinding(t, findings, "injects entire Secret", zelyov1alpha1.SeverityMedium)
 }
 
 func TestSecretsExposureScanner_NonSensitiveEnv(t *testing.T) {
@@ -541,7 +541,7 @@ func TestNetworkPolicyScanner_NoLabels(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "no labels", aotanamiv1alpha1.SeverityMedium)
+	assertHasFinding(t, findings, "no labels", zelyov1alpha1.SeverityMedium)
 }
 
 func TestNetworkPolicyScanner_HostPort(t *testing.T) {
@@ -572,7 +572,7 @@ func TestNetworkPolicyScanner_HostPort(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "hostPort", aotanamiv1alpha1.SeverityHigh)
+	assertHasFinding(t, findings, "hostPort", zelyov1alpha1.SeverityHigh)
 }
 
 func TestNetworkPolicyScanner_SystemNamespaceSkipped(t *testing.T) {
@@ -604,7 +604,7 @@ func TestRBACAuditScanner_DefaultSA(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "default service account", aotanamiv1alpha1.SeverityMedium)
+	assertHasFinding(t, findings, "default service account", zelyov1alpha1.SeverityMedium)
 }
 
 func TestRBACAuditScanner_AdminSA(t *testing.T) {
@@ -618,7 +618,7 @@ func TestRBACAuditScanner_AdminSA(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	assertHasFinding(t, findings, "over-privileged service account", aotanamiv1alpha1.SeverityHigh)
+	assertHasFinding(t, findings, "over-privileged service account", zelyov1alpha1.SeverityHigh)
 }
 
 func TestRBACAuditScanner_DedicatedSA(t *testing.T) {
@@ -666,14 +666,14 @@ func TestRegistry_DefaultRegistry(t *testing.T) {
 	}
 
 	for _, ruleType := range []string{
-		aotanamiv1alpha1.RuleTypeContainerSecurityContext,
-		aotanamiv1alpha1.RuleTypeResourceLimits,
-		aotanamiv1alpha1.RuleTypeImageVulnerability,
-		aotanamiv1alpha1.RuleTypePodSecurity,
-		aotanamiv1alpha1.RuleTypePrivilegeEscalation,
-		aotanamiv1alpha1.RuleTypeSecretsExposure,
-		aotanamiv1alpha1.RuleTypeNetworkPolicy,
-		aotanamiv1alpha1.RuleTypeRBACAudit,
+		zelyov1alpha1.RuleTypeContainerSecurityContext,
+		zelyov1alpha1.RuleTypeResourceLimits,
+		zelyov1alpha1.RuleTypeImageVulnerability,
+		zelyov1alpha1.RuleTypePodSecurity,
+		zelyov1alpha1.RuleTypePrivilegeEscalation,
+		zelyov1alpha1.RuleTypeSecretsExposure,
+		zelyov1alpha1.RuleTypeNetworkPolicy,
+		zelyov1alpha1.RuleTypeRBACAudit,
 	} {
 		if r.Get(ruleType) == nil {
 			t.Errorf("expected scanner for rule type %q", ruleType)

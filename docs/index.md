@@ -6,31 +6,31 @@ hide:
 
 <div class="hero" markdown>
 
-![Aotanami](assets/logo.png){ width="120" }
+![Zelyo Operator](assets/logo.png){ width="120" }
 
-# Aotanami
+# Zelyo Operator
 
 <p class="hero-subtitle">Your Digital SRE &amp; Security Engineer for Kubernetes</p>
 
 <div class="badges">
-  <a href="https://github.com/aotanami/aotanami/actions/workflows/ci.yml"><img src="https://github.com/aotanami/aotanami/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/aotanami/aotanami/releases"><img src="https://img.shields.io/github/v/release/aotanami/aotanami?style=flat-square" alt="Release"></a>
-  <a href="https://goreportcard.com/report/github.com/aotanami/aotanami"><img src="https://goreportcard.com/badge/github.com/aotanami/aotanami" alt="Go Report Card"></a>
-  <a href="https://github.com/aotanami/aotanami/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
+  <a href="https://github.com/zelyo-ai/zelyo-operator/actions/workflows/ci.yml"><img src="https://github.com/zelyo-ai/zelyo-operator/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/zelyo-ai/zelyo-operator/releases"><img src="https://img.shields.io/github/v/release/zelyo-ai/zelyo-operator?style=flat-square" alt="Release"></a>
+  <a href="https://goreportcard.com/report/github.com/zelyo-ai/zelyo-operator"><img src="https://goreportcard.com/badge/github.com/zelyo-ai/zelyo-operator" alt="Go Report Card"></a>
+  <a href="https://github.com/zelyo-ai/zelyo-operator/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
 </div>
 
 <div class="hero-actions">
   <a href="getting-started/" class="primary-btn">🚀 Get Started</a>
-  <a href="https://github.com/aotanami/aotanami" class="secondary-btn">⭐ View on GitHub</a>
+  <a href="https://github.com/zelyo-ai/zelyo-operator" class="secondary-btn">⭐ View on GitHub</a>
 </div>
 
 </div>
 
 ---
 
-## What is Aotanami?
+## What is Zelyo Operator?
 
-Aotanami is your **Digital SRE and Security Engineer** — a self-hosted Kubernetes Operator powered by **Agentic AI** that does the job of a full-time site reliability and security engineer. It autonomously **observes** your cluster, **reasons** about security findings and anomalies using LLMs, and **acts** by opening GitOps PRs with production-ready fixes — all with **read-only cluster access**.
+Zelyo Operator is your **Digital SRE and Security Engineer** — a self-hosted Kubernetes Operator powered by **Agentic AI** that does the job of a full-time site reliability and security engineer. It autonomously **observes** your cluster, **reasons** about security findings and anomalies using LLMs, and **acts** by opening GitOps PRs with production-ready fixes — all with **read-only cluster access**.
 
 **Bring your own LLM API keys** (OpenRouter, OpenAI, Anthropic, Azure, Ollama) — optimized for minimal token usage.
 
@@ -128,7 +128,7 @@ graph TB
         Metrics[Resource Metrics]
     end
 
-    subgraph "Aotanami — The Digital SRE"
+    subgraph "Zelyo Operator — The Digital SRE"
         subgraph "Observe"
             Watcher[Real-Time Watcher]
             Scanner[Security Scanner]
@@ -175,23 +175,23 @@ graph TB
 
     ```bash
     # Create namespace and LLM secret
-    kubectl create namespace aotanami-system
-    kubectl create secret generic aotanami-llm \
-      --namespace aotanami-system \
+    kubectl create namespace zelyo-system
+    kubectl create secret generic zelyo-llm \
+      --namespace zelyo-system \
       --from-literal=api-key=<YOUR_API_KEY>
 
     # Install from OCI registry
-    helm install aotanami oci://ghcr.io/aotanami/charts/aotanami \
-      --namespace aotanami-system \
+    helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
+      --namespace zelyo-system \
       --set config.llm.provider=openrouter \
       --set config.llm.model=anthropic/claude-sonnet-4-20250514 \
-      --set config.llm.apiKeySecret=aotanami-llm
+      --set config.llm.apiKeySecret=zelyo-llm
     ```
 
 === "Kustomize"
 
     ```bash
-    kubectl apply -k https://github.com/aotanami/aotanami/config/default
+    kubectl apply -k https://github.com/zelyo-ai/zelyo-operator/config/default
     ```
 
 [Full installation guide :material-arrow-right:](getting-started.md){ .md-button }
@@ -199,5 +199,5 @@ graph TB
 ---
 
 <p align="center" style="margin-top: 3rem; color: var(--md-default-fg-color--lighter);">
-  An Aotanami Foundation project. Originally created with ❤️ by <a href="https://zelyo.ai">Zelyo AI</a>
+  An Zelyo AI project. Originally created with ❤️ by <a href="https://zelyo.ai">Zelyo AI</a>
 </p>

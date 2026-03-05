@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,12 +28,12 @@ import (
 
 	"github.com/go-logr/logr"
 
-	"github.com/aotanami/aotanami/internal/gitops"
+	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
 )
 
 // GitHubEngine implements gitops.Engine using the GitHub REST API.
 // It supports GitHub App authentication and all CRUD operations needed
-// for the Aotanami auto-remediation workflow.
+// for the Zelyo Operator auto-remediation workflow.
 //
 //nolint:revive // External package wrapper
 type GitHubEngine struct {
@@ -166,19 +166,19 @@ func (e *GitHubEngine) ListOpenPRs(ctx context.Context, owner, repo string) ([]g
 		return nil, fmt.Errorf("decoding PRs response: %w", err)
 	}
 
-	// Filter to Aotanami-created PRs.
+	// Filter to Zelyo Operator-created PRs.
 	var results []gitops.PullRequestResult
 	for _, pr := range prs {
-		isAotanami := strings.HasPrefix(pr.Head.Ref, "aotanami/")
-		if !isAotanami {
+		isZelyoOperator := strings.HasPrefix(pr.Head.Ref, "zelyo-operator/")
+		if !isZelyoOperator {
 			for _, l := range pr.Labels {
-				if l.Name == "aotanami" {
-					isAotanami = true
+				if l.Name == "zelyo-operator" {
+					isZelyoOperator = true
 					break
 				}
 			}
 		}
-		if isAotanami {
+		if isZelyoOperator {
 			results = append(results, gitops.PullRequestResult{
 				Number:    pr.Number,
 				URL:       pr.HTMLURL,
@@ -240,7 +240,7 @@ func (e *GitHubEngine) createOrUpdateFile(ctx context.Context, owner, repo, path
 	}
 
 	payload := map[string]interface{}{
-		"message": fmt.Sprintf("[Aotanami] Update %s", path),
+		"message": fmt.Sprintf("[Zelyo Operator] Update %s", path),
 		"content": base64Encode([]byte(content)),
 		"branch":  branch,
 	}
@@ -269,7 +269,7 @@ func (e *GitHubEngine) deleteFile(ctx context.Context, owner, repo, path, branch
 	}
 
 	payload := map[string]interface{}{
-		"message": fmt.Sprintf("[Aotanami] Delete %s", path),
+		"message": fmt.Sprintf("[Zelyo Operator] Delete %s", path),
 		"sha":     existing.SHA,
 		"branch":  branch,
 	}

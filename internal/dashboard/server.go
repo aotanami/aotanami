@@ -1,9 +1,9 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
 // Package dashboard provides a REST API and Server-Sent Events (SSE) endpoint
-// for the Aotanami real-time dashboard.
+// for the Zelyo Operator real-time dashboard.
 package dashboard
 
 import (

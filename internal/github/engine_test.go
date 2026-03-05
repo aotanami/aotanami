@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
 package github
@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-logr/logr"
 
-	"github.com/aotanami/aotanami/internal/gitops"
+	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
 )
 
 func TestGitHubEngine_CreatePullRequest(t *testing.T) {
@@ -34,7 +34,7 @@ func TestGitHubEngine_CreatePullRequest(t *testing.T) {
 	mux.HandleFunc("POST /repos/testowner/testrepo/git/refs", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"ref": "refs/heads/aotanami/fix-test"}) //nolint:errcheck
+		json.NewEncoder(w).Encode(map[string]string{"ref": "refs/heads/zelyo-operator/fix-test"}) //nolint:errcheck
 	})
 
 	// GET file (check if exists — return 404 for new files).
@@ -64,7 +64,7 @@ func TestGitHubEngine_CreatePullRequest(t *testing.T) {
 	// POST labels.
 	mux.HandleFunc("POST /repos/testowner/testrepo/issues/42/labels", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]string{{"name": "aotanami"}}) //nolint:errcheck
+		json.NewEncoder(w).Encode([]map[string]string{{"name": "zelyo-operator"}}) //nolint:errcheck
 	})
 
 	server := httptest.NewServer(mux)
@@ -79,11 +79,11 @@ func TestGitHubEngine_CreatePullRequest(t *testing.T) {
 	pr := gitops.PullRequest{
 		RepoOwner:  "testowner",
 		RepoName:   "testrepo",
-		Title:      "[Aotanami] Fix security issue",
-		Body:       "Automated fix by Aotanami",
+		Title:      "[Zelyo Operator] Fix security issue",
+		Body:       "Automated fix by Zelyo Operator",
 		BaseBranch: "main",
-		HeadBranch: "aotanami/fix-test",
-		Labels:     []string{"aotanami", "security"},
+		HeadBranch: "zelyo-operator/fix-test",
+		Labels:     []string{"zelyo-operator", "security"},
 		Files: []gitops.FileChange{
 			{
 				Path:      "k8s/deployment.yaml",
@@ -104,7 +104,7 @@ func TestGitHubEngine_CreatePullRequest(t *testing.T) {
 	if result.URL != "https://github.com/testowner/testrepo/pull/42" {
 		t.Errorf("Unexpected PR URL: %s", result.URL)
 	}
-	if result.Branch != "aotanami/fix-test" {
+	if result.Branch != "zelyo-operator/fix-test" {
 		t.Errorf("Unexpected branch: %s", result.Branch)
 	}
 }
@@ -117,9 +117,9 @@ func TestGitHubEngine_ListOpenPRs(t *testing.T) {
 			{
 				"number":     1,
 				"html_url":   "https://github.com/testowner/testrepo/pull/1",
-				"head":       map[string]string{"ref": "aotanami/fix-something"},
+				"head":       map[string]string{"ref": "zelyo-operator/fix-something"},
 				"created_at": time.Now().Format(time.RFC3339),
-				"labels":     []map[string]string{{"name": "aotanami"}},
+				"labels":     []map[string]string{{"name": "zelyo-operator"}},
 			},
 			{
 				"number":     2,
@@ -145,9 +145,9 @@ func TestGitHubEngine_ListOpenPRs(t *testing.T) {
 		t.Fatalf("ListOpenPRs failed: %v", err)
 	}
 
-	// Only 1 should match — the aotanami/fix-something branch.
+	// Only 1 should match — the zelyo-operator/fix-something branch.
 	if len(prs) != 1 {
-		t.Fatalf("Expected 1 Aotanami PR, got %d", len(prs))
+		t.Fatalf("Expected 1 Zelyo Operator PR, got %d", len(prs))
 	}
 	if prs[0].Number != 1 {
 		t.Errorf("Expected PR #1, got #%d", prs[0].Number)

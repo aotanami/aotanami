@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,11 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package metrics exposes custom Prometheus metrics for the Aotanami operator.
+// Package metrics exposes custom Prometheus metrics for the Zelyo Operator.
 // These metrics follow the conventions established by kube-state-metrics and
 // the Kubernetes Instrumentation SIG.
 //
-// All metrics use the "aotanami_" prefix and are registered automatically
+// All metrics use the "zelyo_operator_" prefix and are registered automatically
 // when the package is imported.
 package metrics
 
@@ -33,7 +33,7 @@ var (
 	// ReconcileTotal counts the total number of reconcile operations per controller.
 	ReconcileTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "controller",
 			Name:      "reconcile_total",
 			Help:      "Total number of reconcile operations by controller and result.",
@@ -44,7 +44,7 @@ var (
 	// ReconcileDuration tracks the duration of reconcile operations.
 	ReconcileDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "controller",
 			Name:      "reconcile_duration_seconds",
 			Help:      "Duration of reconcile operations in seconds.",
@@ -58,7 +58,7 @@ var (
 	// ScanFindingsTotal counts findings produced by scanners, by severity.
 	ScanFindingsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "scanner",
 			Name:      "findings_total",
 			Help:      "Total number of security findings by scanner and severity.",
@@ -69,7 +69,7 @@ var (
 	// ScanDuration tracks the duration of scan operations.
 	ScanDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "scanner",
 			Name:      "scan_duration_seconds",
 			Help:      "Duration of scan operations in seconds.",
@@ -81,7 +81,7 @@ var (
 	// ResourcesScannedTotal counts total resources scanned.
 	ResourcesScannedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "scanner",
 			Name:      "resources_scanned_total",
 			Help:      "Total number of resources scanned by scanner type.",
@@ -94,7 +94,7 @@ var (
 	// PolicyViolationsGauge tracks the current number of violations per policy.
 	PolicyViolationsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "policy",
 			Name:      "violations",
 			Help:      "Current number of violations per security policy.",
@@ -105,7 +105,7 @@ var (
 	// PolicyPhaseGauge tracks the current phase of each policy.
 	PolicyPhaseGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "policy",
 			Name:      "phase_info",
 			Help:      "Current phase of each policy (1 = active).",
@@ -118,7 +118,7 @@ var (
 	// ClusterScanCompletedTotal counts completed scans.
 	ClusterScanCompletedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "clusterscan",
 			Name:      "completed_total",
 			Help:      "Total number of completed cluster scans.",
@@ -129,7 +129,7 @@ var (
 	// ClusterScanFindingsGauge tracks the latest findings count per scan.
 	ClusterScanFindingsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "clusterscan",
 			Name:      "findings",
 			Help:      "Number of findings from the last cluster scan run.",
@@ -142,7 +142,7 @@ var (
 	// CostRightsizingGauge tracks the number of rightsizing recommendations.
 	CostRightsizingGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "cost",
 			Name:      "rightsizing_recommendations",
 			Help:      "Number of pending rightsizing recommendations.",
@@ -155,7 +155,7 @@ var (
 	// GitOpsSyncStatusGauge tracks the sync status of GitOps repositories.
 	GitOpsSyncStatusGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "gitops",
 			Name:      "sync_status",
 			Help:      "Sync status of GitOps repositories (1 = synced, 0 = not synced).",
@@ -166,7 +166,7 @@ var (
 	// GitOpsDiscoveredAppsGauge tracks the number of discovered applications.
 	GitOpsDiscoveredAppsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "gitops",
 			Name:      "discovered_applications",
 			Help:      "Number of applications discovered by the GitOps controller adapter.",
@@ -179,7 +179,7 @@ var (
 	// AnomalyDetectedTotal counts anomalies detected by the anomaly engine.
 	AnomalyDetectedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "anomaly",
 			Name:      "detected_total",
 			Help:      "Total anomalies detected by metric key and severity.",
@@ -190,7 +190,7 @@ var (
 	// CorrelatorIncidentsTotal counts incidents created by the correlator.
 	CorrelatorIncidentsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "correlator",
 			Name:      "incidents_total",
 			Help:      "Total incidents created by the correlator engine.",
@@ -201,7 +201,7 @@ var (
 	// CorrelatorOpenIncidents tracks the current number of open incidents.
 	CorrelatorOpenIncidents = prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "correlator",
 			Name:      "open_incidents",
 			Help:      "Current number of open (unresolved) incidents.",
@@ -211,7 +211,7 @@ var (
 	// RemediationPRsTotal counts pull requests created by the remediation engine.
 	RemediationPRsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "remediation",
 			Name:      "prs_created_total",
 			Help:      "Total pull requests created by the remediation engine.",
@@ -222,7 +222,7 @@ var (
 	// RemediationRiskScore tracks the risk score of the latest remediation plan.
 	RemediationRiskScore = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "remediation",
 			Name:      "risk_score",
 			Help:      "Risk score (0-100) of the last remediation plan.",
@@ -233,7 +233,7 @@ var (
 	// DriftDetectedTotal counts drift results detected by the drift engine.
 	DriftDetectedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "drift",
 			Name:      "detected_total",
 			Help:      "Total drifts detected by resource kind and type.",
@@ -244,7 +244,7 @@ var (
 	// CompliancePctGauge tracks the compliance percentage per framework.
 	CompliancePctGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "compliance",
 			Name:      "posture_pct",
 			Help:      "Compliance posture percentage by framework.",
@@ -255,7 +255,7 @@ var (
 	// NotifierDeliveredTotal counts notifications delivered by the notifier.
 	NotifierDeliveredTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "aotanami",
+			Namespace: "zelyo_operator",
 			Subsystem: "notifier",
 			Name:      "delivered_total",
 			Help:      "Total notifications delivered by channel type and severity.",

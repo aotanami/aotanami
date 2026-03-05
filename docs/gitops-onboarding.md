@@ -1,10 +1,10 @@
 # GitOps Repository Onboarding
 
-This guide explains how to connect your existing GitOps repositories to Aotanami for drift detection and automated remediation.
+This guide explains how to connect your existing GitOps repositories to Zelyo Operator for drift detection and automated remediation.
 
 ## Overview
 
-When you onboard a GitOps repository, Aotanami:
+When you onboard a GitOps repository, Zelyo Operator:
 
 1. **Validates** connectivity and authentication
 2. **Auto-discovers** manifest source types (Helm, Kustomize, raw YAML)
@@ -26,7 +26,7 @@ When you onboard a GitOps repository, Aotanami:
 
 ```bash
 kubectl create secret generic github-app-creds \
-  --namespace aotanami-system \
+  --namespace zelyo-system \
   --from-file=private-key=github-app.pem \
   --from-literal=app-id=12345 \
   --from-literal=installation-id=67890
@@ -36,7 +36,7 @@ kubectl create secret generic github-app-creds \
 
 ```bash
 kubectl create secret generic github-pat \
-  --namespace aotanami-system \
+  --namespace zelyo-system \
   --from-literal=token=ghp_xxxxxxxxxxxx
 ```
 
@@ -44,14 +44,14 @@ kubectl create secret generic github-pat \
 
 ### Auto-Detect Everything (Recommended)
 
-The simplest configuration — Aotanami auto-detects your source type and GitOps controller:
+The simplest configuration — Zelyo Operator auto-detects your source type and GitOps controller:
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: GitOpsRepository
 metadata:
   name: production-manifests
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   url: https://github.com/my-org/k8s-manifests
   branch: main
@@ -75,11 +75,11 @@ spec:
 For a repo managed by ArgoCD with Helm charts:
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: GitOpsRepository
 metadata:
   name: frontend-helm
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   url: https://github.com/my-org/helm-charts
   branch: main
@@ -108,11 +108,11 @@ spec:
 For a repo managed by Flux with Kustomize overlays:
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: GitOpsRepository
 metadata:
   name: platform-config
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   url: https://github.com/my-org/platform-config
   branch: main
@@ -138,7 +138,7 @@ spec:
 ## Step 3: Verify Onboarding
 
 ```bash
-kubectl get gitopsrepositories -n aotanami-system
+kubectl get gitopsrepositories -n zelyo-system
 
 # Expected output:
 # NAME                  URL                                          BRANCH   SOURCE       CONTROLLER   PHASE    DRIFTS   AGE
@@ -150,7 +150,7 @@ kubectl get gitopsrepositories -n aotanami-system
 Check detailed status:
 
 ```bash
-kubectl describe gitopsrepository production-manifests -n aotanami-system
+kubectl describe gitopsrepository production-manifests -n zelyo-system
 ```
 
 Look for these conditions:
@@ -165,16 +165,16 @@ Look for these conditions:
 Create a RemediationPolicy to start receiving fix PRs:
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: RemediationPolicy
 metadata:
   name: auto-remediate
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   gitOpsRepository: production-manifests
   severityFilter: high
   prTemplate:
-    titlePrefix: "[Aotanami]"
+    titlePrefix: "[Zelyo Operator]"
     labels: ["auto-fix", "security"]
   maxConcurrentPRs: 3
 ```
@@ -188,7 +188,7 @@ spec:
 | `raw` | Fallback | Plain YAML/JSON Kubernetes manifests |
 | `helm` | `Chart.yaml` present | Helm chart with templates and values |
 | `kustomize` | `kustomization.yaml` present | Kustomize overlays and patches |
-| `auto` (default) | Scans all markers | Aotanami detects the type automatically |
+| `auto` (default) | Scans all markers | Zelyo Operator detects the type automatically |
 
 ### GitOps Controller Support
 
@@ -196,12 +196,12 @@ spec:
 |---|---|---|
 | ArgoCD | `argoproj.io/v1alpha1` API group | Application discovery, sync status, health |
 | Flux | `source.toolkit.fluxcd.io` API group | GitRepository, Kustomization, HelmRelease discovery |
-| None | — | Standalone Aotanami drift detection |
+| None | — | Standalone Zelyo Operator drift detection |
 | Auto (default) | Probes cluster APIs | Detects whichever controller is installed |
 
 ### Monorepo Support
 
-Aotanami supports monorepos with mixed source types:
+Zelyo Operator supports monorepos with mixed source types:
 
 ```
 my-monorepo/

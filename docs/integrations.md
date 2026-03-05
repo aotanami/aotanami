@@ -1,11 +1,11 @@
 # Notification Integrations
 
-Aotanami supports sending alerts to multiple notification channels simultaneously. Each channel is configured via a `NotificationChannel` CRD.
+Zelyo Operator supports sending alerts to multiple notification channels simultaneously. Each channel is configured via a `NotificationChannel` CRD.
 
 ## Slack
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: NotificationChannel
 metadata:
   name: slack-security
@@ -24,7 +24,7 @@ spec:
 ## Microsoft Teams
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: NotificationChannel
 metadata:
   name: teams-ops
@@ -40,7 +40,7 @@ spec:
 ## PagerDuty
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: NotificationChannel
 metadata:
   name: pagerduty-critical
@@ -56,7 +56,7 @@ spec:
 ## AlertManager
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: NotificationChannel
 metadata:
   name: alertmanager
@@ -70,7 +70,7 @@ spec:
 ## Telegram
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: NotificationChannel
 metadata:
   name: telegram-alerts
@@ -84,7 +84,7 @@ spec:
 ## WhatsApp
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: NotificationChannel
 metadata:
   name: whatsapp-oncall
@@ -98,7 +98,7 @@ spec:
 ## Webhook (Generic)
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: NotificationChannel
 metadata:
   name: custom-webhook
@@ -106,15 +106,15 @@ spec:
   type: webhook
   credentialSecret: webhook-auth    # Optional
   webhook:
-    url: https://api.example.com/aotanami-alerts
+    url: https://api.example.com/zelyo-operator-alerts
     headers:
-      X-Source: aotanami
+      X-Source: zelyo-operator
 ```
 
 ## Email
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: NotificationChannel
 metadata:
   name: email-team
@@ -125,7 +125,7 @@ spec:
     recipients: ["team@company.com", "oncall@company.com"]
     smtpHost: smtp.gmail.com
     smtpPort: 587
-    fromAddress: aotanami@company.com
+    fromAddress: zelyo-operator@company.com
 ```
 
 ## Rate Limiting

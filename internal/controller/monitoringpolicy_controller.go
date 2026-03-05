@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,11 +31,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
-	"github.com/aotanami/aotanami/internal/anomaly"
-	"github.com/aotanami/aotanami/internal/conditions"
-	"github.com/aotanami/aotanami/internal/correlator"
-	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo-operator/internal/anomaly"
+	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
+	"github.com/zelyo-ai/zelyo-operator/internal/correlator"
+	aotmetrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
 )
 
 // MonitoringPolicyReconciler reconciles a MonitoringPolicy object.
@@ -48,9 +48,9 @@ type MonitoringPolicyReconciler struct {
 	CorrelatorEngine *correlator.Engine // Shared correlator for cross-signal correlation.
 }
 
-// +kubebuilder:rbac:groups=aotanami.com,resources=monitoringpolicies,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=aotanami.com,resources=monitoringpolicies/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=aotanami.com,resources=monitoringpolicies/finalizers,verbs=update
+// +kubebuilder:rbac:groups=zelyo.ai,resources=monitoringpolicies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=zelyo.ai,resources=monitoringpolicies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=zelyo.ai,resources=monitoringpolicies/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 
@@ -62,7 +62,7 @@ func (r *MonitoringPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		aotmetrics.ReconcileDuration.WithLabelValues("monitoringpolicy").Observe(time.Since(start).Seconds())
 	}()
 
-	policy := &aotanamiv1alpha1.MonitoringPolicy{}
+	policy := &zelyov1alpha1.MonitoringPolicy{}
 	if err := r.Get(ctx, req.NamespacedName, policy); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -77,16 +77,16 @@ func (r *MonitoringPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Validate notification channels exist.
 	for _, chName := range policy.Spec.NotificationChannels {
-		ch := &aotanamiv1alpha1.NotificationChannel{}
+		ch := &zelyov1alpha1.NotificationChannel{}
 		key := types.NamespacedName{Name: chName, Namespace: policy.Namespace}
 		if err := r.Get(ctx, key, ch); err != nil {
 			if errors.IsNotFound(err) {
-				r.Recorder.Event(policy, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonReconcileError,
+				r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 					fmt.Sprintf("NotificationChannel %q not found", chName))
-				conditions.MarkFalse(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-					aotanamiv1alpha1.ReasonTargetNotFound,
+				conditions.MarkFalse(&policy.Status.Conditions, zelyov1alpha1.ConditionReady,
+					zelyov1alpha1.ReasonTargetNotFound,
 					fmt.Sprintf("NotificationChannel %q not found", chName), policy.Generation)
-				policy.Status.Phase = aotanamiv1alpha1.PhaseDegraded
+				policy.Status.Phase = zelyov1alpha1.PhaseDegraded
 				policy.Status.ObservedGeneration = policy.Generation
 				if statusErr := r.Status().Update(ctx, policy); statusErr != nil {
 					return ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
@@ -105,18 +105,18 @@ func (r *MonitoringPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Mark as active.
 	now := metav1.Now()
-	policy.Status.Phase = aotanamiv1alpha1.PhaseActive
+	policy.Status.Phase = zelyov1alpha1.PhaseActive
 	policy.Status.LastEventTime = &now
 	policy.Status.ObservedGeneration = policy.Generation
-	conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-		aotanamiv1alpha1.ReasonReconcileSuccess,
+	conditions.MarkTrue(&policy.Status.Conditions, zelyov1alpha1.ConditionReady,
+		zelyov1alpha1.ReasonReconcileSuccess,
 		fmt.Sprintf("Monitoring policy is active (anomalies detected: %d)", anomaliesDetected), policy.Generation)
 
 	if err := r.Status().Update(ctx, policy); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 	}
 
-	r.Recorder.Event(policy, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonReconciled,
+	r.Recorder.Event(policy, corev1.EventTypeNormal, zelyov1alpha1.EventReasonReconciled,
 		fmt.Sprintf("MonitoringPolicy reconciled (event types: %v)", policy.Spec.EventFilters.Types))
 
 	aotmetrics.ReconcileTotal.WithLabelValues("monitoringpolicy", "success").Inc()
@@ -126,7 +126,7 @@ func (r *MonitoringPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 // observePodMetrics lists pods in the policy's target namespaces and feeds
 // restart counts into the anomaly detector. Detected anomalies are ingested
 // into the correlator for cross-signal incident grouping.
-func (r *MonitoringPolicyReconciler) observePodMetrics(ctx context.Context, policy *aotanamiv1alpha1.MonitoringPolicy) int {
+func (r *MonitoringPolicyReconciler) observePodMetrics(ctx context.Context, policy *zelyov1alpha1.MonitoringPolicy) int {
 	log := logf.FromContext(ctx)
 
 	// Use policy's target namespaces, or fall back to the policy's own namespace.
@@ -193,7 +193,7 @@ func (r *MonitoringPolicyReconciler) observePodMetrics(ctx context.Context, poli
 // SetupWithManager sets up the controller with the Manager.
 func (r *MonitoringPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aotanamiv1alpha1.MonitoringPolicy{}).
+		For(&zelyov1alpha1.MonitoringPolicy{}).
 		Named("monitoringpolicy").
 		Complete(r)
 }

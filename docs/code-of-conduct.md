@@ -28,7 +28,7 @@ Examples of unacceptable behavior:
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting the project team at **[conduct@aotanami.com](mailto:conduct@aotanami.com)**.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting the project team at **[conduct@zelyo.ai](mailto:conduct@zelyo.ai)**.
 
 All complaints will be reviewed and investigated promptly and fairly. The project team is obligated to maintain confidentiality with regard to the reporter of an incident.
 

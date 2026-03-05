@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,17 +36,17 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
-	"github.com/aotanami/aotanami/internal/anomaly"
-	"github.com/aotanami/aotanami/internal/controller"
-	"github.com/aotanami/aotanami/internal/correlator"
-	gitopscontroller "github.com/aotanami/aotanami/internal/gitops/controller"
-	"github.com/aotanami/aotanami/internal/gitops/source"
-	_ "github.com/aotanami/aotanami/internal/metrics" // Auto-register custom Prometheus metrics.
-	"github.com/aotanami/aotanami/internal/remediation"
-	"github.com/aotanami/aotanami/internal/scanner"
-	"github.com/aotanami/aotanami/internal/version"
-	webhookv1alpha1 "github.com/aotanami/aotanami/internal/webhook/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo-operator/internal/anomaly"
+	"github.com/zelyo-ai/zelyo-operator/internal/controller"
+	"github.com/zelyo-ai/zelyo-operator/internal/correlator"
+	gitopscontroller "github.com/zelyo-ai/zelyo-operator/internal/gitops/controller"
+	"github.com/zelyo-ai/zelyo-operator/internal/gitops/source"
+	_ "github.com/zelyo-ai/zelyo-operator/internal/metrics" // Auto-register custom Prometheus metrics.
+	"github.com/zelyo-ai/zelyo-operator/internal/remediation"
+	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
+	"github.com/zelyo-ai/zelyo-operator/internal/version"
+	webhookv1alpha1 "github.com/zelyo-ai/zelyo-operator/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -58,7 +58,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(aotanamiv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(zelyov1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -98,7 +98,7 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	// Log version information on startup.
-	setupLog.Info("Starting Aotanami operator",
+	setupLog.Info("Starting Zelyo Operator",
 		"version", version.Version,
 		"commit", version.Commit,
 		"buildDate", version.Date)
@@ -171,7 +171,7 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "aotanami.com",
+		LeaderElectionID:       "zelyo.ai",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -201,9 +201,9 @@ func main() {
 		CorrelationWindow: 5 * time.Minute,
 	})
 	anomalyDetector := anomaly.NewDetector(anomaly.DefaultConfig())
-	// Remediation engine starts in dry-run mode for safety. Configurable via AotanamiConfig.
+	// Remediation engine starts in dry-run mode for safety. Configurable via ZelyoConfig.
 	remediationEngine := remediation.NewEngine(
-		nil, // LLM client — injected when AotanamiConfig is reconciled.
+		nil, // LLM client — injected when ZelyoConfig is reconciled.
 		nil, // GitOps engine — injected when GitHub App is configured.
 		remediation.EngineConfig{
 			Strategy:       remediation.StrategyDryRun,
@@ -279,12 +279,12 @@ func main() {
 		setupLog.Error(err, "Failed to create controller", "controller", "NotificationChannel")
 		os.Exit(1)
 	}
-	if err := (&controller.AotanamiConfigReconciler{
+	if err := (&controller.ZelyoConfigReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("aotanamiconfig-controller"), //nolint:staticcheck,nolintlint
+		Recorder: mgr.GetEventRecorderFor("zelyoconfig-controller"), //nolint:staticcheck,nolintlint
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "AotanamiConfig")
+		setupLog.Error(err, "Failed to create controller", "controller", "ZelyoConfig")
 		os.Exit(1)
 	}
 	if err := (&controller.GitOpsRepositoryReconciler{

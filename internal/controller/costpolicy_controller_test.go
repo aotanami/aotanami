@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 )
 
 var _ = Describe("CostPolicy Controller", func() {
@@ -41,18 +41,18 @@ var _ = Describe("CostPolicy Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		costpolicy := &aotanamiv1alpha1.CostPolicy{}
+		costpolicy := &zelyov1alpha1.CostPolicy{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind CostPolicy")
 			err := k8sClient.Get(ctx, typeNamespacedName, costpolicy)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &aotanamiv1alpha1.CostPolicy{
+				resource := &zelyov1alpha1.CostPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					Spec: aotanamiv1alpha1.CostPolicySpec{},
+					Spec: zelyov1alpha1.CostPolicySpec{},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -60,7 +60,7 @@ var _ = Describe("CostPolicy Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &aotanamiv1alpha1.CostPolicy{}
+			resource := &zelyov1alpha1.CostPolicy{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 

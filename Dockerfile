@@ -21,9 +21,9 @@ COPY . .
 # CGO_ENABLED=0 produces a fully static binary — no libc/OS dependencies
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w \
-    -X github.com/aotanami/aotanami/internal/version.Version=${VERSION} \
-    -X github.com/aotanami/aotanami/internal/version.Commit=${COMMIT} \
-    -X github.com/aotanami/aotanami/internal/version.Date=${BUILD_DATE}" \
+    -X github.com/zelyo-ai/zelyo-operator/internal/version.Version=${VERSION} \
+    -X github.com/zelyo-ai/zelyo-operator/internal/version.Commit=${COMMIT} \
+    -X github.com/zelyo-ai/zelyo-operator/internal/version.Date=${BUILD_DATE}" \
     -a -o manager cmd/main.go
 
 # ── Final stage: scratch (zero OS packages = zero OS CVEs) ──────────────────
@@ -34,15 +34,15 @@ FROM scratch
 
 # OCI Image Spec labels
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md
-LABEL org.opencontainers.image.title="Aotanami"
+LABEL org.opencontainers.image.title="Zelyo Operator"
 LABEL org.opencontainers.image.description="Autonomous Kubernetes Protection — Powered by Agentic AI"
-LABEL org.opencontainers.image.url="https://github.com/aotanami/aotanami"
-LABEL org.opencontainers.image.source="https://github.com/aotanami/aotanami"
-LABEL org.opencontainers.image.vendor="Aotanami Foundation"
+LABEL org.opencontainers.image.url="https://github.com/zelyo-ai/zelyo-operator"
+LABEL org.opencontainers.image.source="https://github.com/zelyo-ai/zelyo-operator"
+LABEL org.opencontainers.image.vendor="Zelyo AI"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.documentation="https://github.com/aotanami/aotanami/tree/main/docs"
+LABEL org.opencontainers.image.documentation="https://github.com/zelyo-ai/zelyo-operator/tree/main/docs"
 
-# Copy CA certificates for TLS (Aotanami makes HTTPS calls to LLM APIs)
+# Copy CA certificates for TLS (Zelyo Operator makes HTTPS calls to LLM APIs)
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Copy the statically-linked binary

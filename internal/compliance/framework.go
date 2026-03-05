@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
 // Package compliance provides compliance framework evaluation for Kubernetes
@@ -58,7 +58,7 @@ type Control struct {
 	// Evidence collects proof of compliance or non-compliance.
 	Evidence []Evidence `json:"evidence,omitempty"`
 
-	// RelatedRuleTypes maps to Aotanami scanner rule types.
+	// RelatedRuleTypes maps to Zelyo Operator scanner rule types.
 	RelatedRuleTypes []string `json:"related_rule_types,omitempty"`
 
 	// RemediationGuidance is prescriptive fix guidance.
@@ -112,7 +112,7 @@ type ReportSummary struct {
 }
 
 // CISKubernetesBenchmark returns the CIS Kubernetes Benchmark v1.8 controls
-// mapped to Aotanami scanner rule types.
+// mapped to Zelyo Operator scanner rule types.
 func CISKubernetesBenchmark() []Control {
 	return []Control{
 		{

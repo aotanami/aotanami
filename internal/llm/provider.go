@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
 package llm
@@ -174,8 +174,8 @@ func (c *openAICompatClient) doRequest(ctx context.Context, body openAIChatReque
 
 	// Set extra headers for OpenRouter.
 	if c.cfg.Provider == ProviderOpenRouter {
-		httpReq.Header.Set("HTTP-Referer", "https://github.com/aotanami/aotanami")
-		httpReq.Header.Set("X-Title", "Aotanami Operator")
+		httpReq.Header.Set("HTTP-Referer", "https://github.com/zelyo-ai/zelyo-operator")
+		httpReq.Header.Set("X-Title", "Zelyo Operator")
 	}
 
 	start := time.Now()

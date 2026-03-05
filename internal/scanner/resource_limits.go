@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 )
 
 // ResourceLimitsScanner checks containers for missing CPU/memory requests and limits.
@@ -38,7 +38,7 @@ func (s *ResourceLimitsScanner) Name() string {
 
 // RuleType implements Scanner.
 func (s *ResourceLimitsScanner) RuleType() string {
-	return aotanamiv1alpha1.RuleTypeResourceLimits
+	return zelyov1alpha1.RuleTypeResourceLimits
 }
 
 // Scan implements Scanner.
@@ -56,7 +56,7 @@ func (s *ResourceLimitsScanner) Scan(_ context.Context, pods []corev1.Pod, _ map
 			if resources.Requests.Cpu() == nil || resources.Requests.Cpu().IsZero() {
 				findings = append(findings, Finding{
 					RuleType:          s.RuleType(),
-					Severity:          aotanamiv1alpha1.SeverityMedium,
+					Severity:          zelyov1alpha1.SeverityMedium,
 					Title:             fmt.Sprintf("Container %q has no CPU request", container.Name),
 					Description:       "No CPU request is defined. The scheduler cannot make optimal placement decisions without resource requests.",
 					ResourceKind:      "Pod",
@@ -70,7 +70,7 @@ func (s *ResourceLimitsScanner) Scan(_ context.Context, pods []corev1.Pod, _ map
 			if resources.Requests.Memory() == nil || resources.Requests.Memory().IsZero() {
 				findings = append(findings, Finding{
 					RuleType:          s.RuleType(),
-					Severity:          aotanamiv1alpha1.SeverityMedium,
+					Severity:          zelyov1alpha1.SeverityMedium,
 					Title:             fmt.Sprintf("Container %q has no memory request", container.Name),
 					Description:       "No memory request is defined. The scheduler cannot make optimal placement decisions without resource requests.",
 					ResourceKind:      "Pod",
@@ -84,7 +84,7 @@ func (s *ResourceLimitsScanner) Scan(_ context.Context, pods []corev1.Pod, _ map
 			if resources.Limits.Cpu() == nil || resources.Limits.Cpu().IsZero() {
 				findings = append(findings, Finding{
 					RuleType:          s.RuleType(),
-					Severity:          aotanamiv1alpha1.SeverityHigh,
+					Severity:          zelyov1alpha1.SeverityHigh,
 					Title:             fmt.Sprintf("Container %q has no CPU limit", container.Name),
 					Description:       "No CPU limit is defined. The container can consume unbounded CPU, potentially starving other workloads.",
 					ResourceKind:      "Pod",
@@ -98,7 +98,7 @@ func (s *ResourceLimitsScanner) Scan(_ context.Context, pods []corev1.Pod, _ map
 			if resources.Limits.Memory() == nil || resources.Limits.Memory().IsZero() {
 				findings = append(findings, Finding{
 					RuleType:          s.RuleType(),
-					Severity:          aotanamiv1alpha1.SeverityHigh,
+					Severity:          zelyov1alpha1.SeverityHigh,
 					Title:             fmt.Sprintf("Container %q has no memory limit", container.Name),
 					Description:       "No memory limit is defined. The container can consume unbounded memory, leading to OOMKill of other pods.",
 					ResourceKind:      "Pod",

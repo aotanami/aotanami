@@ -1,0 +1,19 @@
+apiVersion: zelyo.ai/v1alpha1
+kind: CostPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: zelyo-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: costpolicy-sample
+  namespace: zelyo-system
+spec:
+  targetNamespaces: ["default"]
+  resizeStrategy: conservative
+  budgetLimits:
+    monthlyBudgetUSD: "5000"
+    costIncreaseThresholdPercent: 20
+  idleDetection:
+    enabled: true
+    cpuThresholdPercent: 5
+    memoryThresholdPercent: 5
+    idleDurationMinutes: 60

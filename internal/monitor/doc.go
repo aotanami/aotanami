@@ -1,4 +1,4 @@
-// Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+// Copyright 2026 Zelyo AI
 // SPDX-License-Identifier: Apache-2.0
 
 // Package monitor provides the 24/7 real-time cluster monitoring engine.

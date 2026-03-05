@@ -1,11 +1,11 @@
 # API Reference
 
-Aotanami exposes a REST API that powers the embedded dashboard and enables external integrations.
+Zelyo Operator exposes a REST API that powers the embedded dashboard and enables external integrations.
 
 ## Base URL
 
 ```
-http://<aotanami-service>:8080/api/v1
+http://<zelyo-operator-service>:8080/api/v1
 ```
 
 ## Authentication
@@ -13,7 +13,7 @@ http://<aotanami-service>:8080/api/v1
 The API uses Kubernetes ServiceAccount token authentication. Include the bearer token in requests:
 
 ```bash
-TOKEN=$(kubectl create token aotanami -n aotanami-system)
+TOKEN=$(kubectl create token zelyo-operator -n zelyo-system)
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/health
 ```
 

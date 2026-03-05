@@ -1,6 +1,6 @@
 # Getting Started
 
-Welcome to Aotanami! This guide will walk you through setting up a local development environment and running your first security scan — even if you've never worked with Kubernetes operators before.
+Welcome to Zelyo Operator! This guide will walk you through setting up a local development environment and running your first security scan — even if you've never worked with Kubernetes operators before.
 
 ## What You'll Need
 
@@ -8,12 +8,12 @@ Before starting, make sure you have these tools installed:
 
 | Tool | Version | Why You Need It |
 |---|---|---|
-| [Go](https://go.dev/dl/) | 1.24+ | Aotanami is written in Go |
+| [Go](https://go.dev/dl/) | 1.24+ | Zelyo Operator is written in Go |
 | [Docker](https://docs.docker.com/get-docker/) | Latest | Builds container images |
 | [kubectl](https://kubernetes.io/docs/tasks/tools/) | Latest | Talks to Kubernetes clusters |
 | [kind](https://kind.sigs.k8s.io/) | Latest | Creates a local Kubernetes cluster on your laptop |
 | [Kubebuilder](https://kubebuilder.io/) | 4.x | Generates operator scaffolding |
-| [Helm](https://helm.sh/docs/intro/install/) | 3.x | Installs Aotanami into a cluster |
+| [Helm](https://helm.sh/docs/intro/install/) | 3.x | Installs Zelyo Operator into a cluster |
 
 !!! tip "Don't have kind?"
     You can also use [minikube](https://minikube.sigs.k8s.io/) or any other local Kubernetes setup. kind is recommended because it's the fastest to start.
@@ -21,14 +21,14 @@ Before starting, make sure you have these tools installed:
 ## Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/aotanami/aotanami.git
-cd aotanami
+git clone https://github.com/zelyo-ai/zelyo-operator.git
+cd zelyo-operator
 ```
 
 ## Step 2: Create a Local Cluster
 
 ```bash
-kind create cluster --name aotanami-dev
+kind create cluster --name zelyo-operator-dev
 ```
 
 This creates a single-node Kubernetes cluster running inside Docker. It takes about 30 seconds.
@@ -36,12 +36,12 @@ This creates a single-node Kubernetes cluster running inside Docker. It takes ab
 Verify it's running:
 
 ```bash
-kubectl cluster-info --context kind-aotanami-dev
+kubectl cluster-info --context kind-zelyo-operator-dev
 ```
 
-## Step 3: Install Aotanami's CRDs
+## Step 3: Install Zelyo Operator's CRDs
 
-CRDs (Custom Resource Definitions) teach Kubernetes about Aotanami's resource types — things like `SecurityPolicy` and `ClusterScan`.
+CRDs (Custom Resource Definitions) teach Kubernetes about Zelyo Operator's resource types — things like `SecurityPolicy` and `ClusterScan`.
 
 ```bash
 make install
@@ -50,7 +50,7 @@ make install
 Verify the CRDs are installed:
 
 ```bash
-kubectl get crds | grep aotanami
+kubectl get crds | grep zelyo-operator
 ```
 
 You should see 9 CRDs listed (securitypolicies, clusterscans, scanreports, etc.).
@@ -61,7 +61,7 @@ You should see 9 CRDs listed (securitypolicies, clusterscans, scanreports, etc.)
 make run
 ```
 
-This starts Aotanami on your laptop, connected to your kind cluster. You'll see log output as it starts up, including:
+This starts Zelyo Operator on your laptop, connected to your kind cluster. You'll see log output as it starts up, including:
 
 ```
 INFO    Scanner registry initialized    {"registeredScanners": ["container-security-context", "resource-limits", ...]}
@@ -76,7 +76,7 @@ INFO    Starting Controller Manager
 Save this as `my-first-policy.yaml`:
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: SecurityPolicy
 metadata:
   name: baseline-security
@@ -105,7 +105,7 @@ kubectl apply -f my-first-policy.yaml
 
 ## Step 6: Deploy a Test Workload
 
-Let's deploy a deliberately insecure pod so Aotanami has something to find:
+Let's deploy a deliberately insecure pod so Zelyo Operator has something to find:
 
 ```bash
 kubectl run insecure-nginx --image=nginx:latest --restart=Never
@@ -117,7 +117,7 @@ This pod has several security issues:
 - No resource limits set
 - No security context configured (runs as root)
 
-## Step 7: Check What Aotanami Found
+## Step 7: Check What Zelyo Operator Found
 
 Wait a few seconds, then check the SecurityPolicy status:
 
@@ -155,7 +155,7 @@ kubectl delete pod insecure-nginx
 kubectl delete securitypolicy baseline-security
 
 # Delete the kind cluster (when you're done)
-kind delete cluster --name aotanami-dev
+kind delete cluster --name zelyo-operator-dev
 ```
 
 ## Deploying to a Real Cluster
@@ -164,22 +164,22 @@ kind delete cluster --name aotanami-dev
 
 ```bash
 # 1. Create the namespace
-kubectl create namespace aotanami-system
+kubectl create namespace zelyo-system
 
 # 2. Create your LLM API key secret
-kubectl create secret generic aotanami-llm \
-  --namespace aotanami-system \
+kubectl create secret generic zelyo-llm \
+  --namespace zelyo-system \
   --from-literal=api-key=<YOUR_OPENROUTER_API_KEY>
 
-# 3. Install Aotanami
-helm install aotanami oci://ghcr.io/aotanami/charts/aotanami \
-  --namespace aotanami-system \
+# 3. Install Zelyo Operator
+helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
+  --namespace zelyo-system \
   --set config.llm.provider=openrouter \
   --set config.llm.model=anthropic/claude-sonnet-4-20250514 \
-  --set config.llm.apiKeySecret=aotanami-llm
+  --set config.llm.apiKeySecret=zelyo-llm
 
 # 4. Verify
-kubectl get pods -n aotanami-system
+kubectl get pods -n zelyo-system
 ```
 
 ### Verify Image Signature
@@ -187,14 +187,14 @@ kubectl get pods -n aotanami-system
 Before deploying to production, verify that the image hasn't been tampered with:
 
 ```bash
-cosign verify ghcr.io/aotanami/aotanami:<tag> \
+cosign verify ghcr.io/zelyo-ai/zelyo-operator:<tag> \
   --certificate-identity-regexp='.*' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com'
 ```
 
 ## What's Next?
 
-Now that you've got Aotanami running, explore these guides:
+Now that you've got Zelyo Operator running, explore these guides:
 
 | Guide | What You'll Learn |
 |---|---|

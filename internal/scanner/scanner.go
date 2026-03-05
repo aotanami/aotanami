@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package scanner provides the security scanning engine for Aotanami.
+// Package scanner provides the security scanning engine for Zelyo Operator.
 // It defines a Scanner interface and a registry for extensible scan modules.
 package scanner
 
@@ -46,7 +46,7 @@ type Finding struct {
 	Recommendation string
 }
 
-// Scanner is the interface implemented by all Aotanami scan modules.
+// Scanner is the interface implemented by all Zelyo Operator scan modules.
 // Each scanner evaluates one specific type of security rule against a set of pods.
 type Scanner interface {
 	// Name returns the human-readable name of this scanner.

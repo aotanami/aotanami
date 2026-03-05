@@ -1,8 +1,8 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
-// Package notifier provides multi-channel notification delivery for Aotanami.
+// Package notifier provides multi-channel notification delivery for Zelyo Operator.
 // It supports Slack, Microsoft Teams, PagerDuty, generic webhooks, and
 // Kubernetes Events, with deduplication, rate limiting, and retry logic.
 package notifier
@@ -297,7 +297,7 @@ func (n *Notifier) sendPagerDuty(ctx context.Context, ch *ChannelConfig, notif *
 		"payload": map[string]interface{}{
 			"summary":   notif.Title,
 			"severity":  pdSeverity,
-			"source":    "aotanami",
+			"source":    "zelyo-operator",
 			"component": notif.Source,
 			"group":     notif.Namespace,
 			"custom_details": map[string]string{
