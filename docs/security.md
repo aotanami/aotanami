@@ -6,13 +6,13 @@ title: Security Policy
 
 ## Reporting a Vulnerability
 
-The Aotanami team takes security vulnerabilities seriously. We appreciate your efforts to responsibly disclose your findings.
+The Zelyo Operator team takes security vulnerabilities seriously. We appreciate your efforts to responsibly disclose your findings.
 
 **Please do NOT report security vulnerabilities through public GitHub issues.**
 
 ### How to Report
 
-Send an email to **[security@aotanami.com](mailto:security@aotanami.com)** with the following details:
+Send an email to **[security@zelyo.ai](mailto:security@zelyo.ai)** with the following details:
 
 - **Description** of the vulnerability
 - **Steps to reproduce** (proof of concept if possible)
@@ -32,7 +32,7 @@ Send an email to **[security@aotanami.com](mailto:security@aotanami.com)** with 
 
 The following are in scope:
 
-- Aotanami operator binary and container images
+- Zelyo Operator operator binary and container images
 - Helm chart and Kubernetes manifests
 - Dashboard and REST API
 - CRD validation and webhook logic
@@ -54,14 +54,14 @@ The following are in scope:
 
 ## Security Best Practices
 
-When deploying Aotanami:
+When deploying Zelyo Operator:
 
 1. **Store API keys in Kubernetes Secrets** — never in ConfigMaps or environment variables directly
-2. **Use network policies** to restrict Aotanami's egress to only required endpoints
-3. **Enable RBAC** — Aotanami uses read-only cluster access by design
+2. **Use network policies** to restrict Zelyo Operator's egress to only required endpoints
+3. **Enable RBAC** — Zelyo Operator uses read-only cluster access by design
 4. **Verify image signatures** using Cosign before deployment
 5. **Review SBOMs** attached to each release for supply chain transparency
 
 ## Acknowledgments
 
-We gratefully acknowledge security researchers who help keep Aotanami and its users safe. With your permission, we will acknowledge your contribution in our security advisories.
+We gratefully acknowledge security researchers who help keep Zelyo Operator and its users safe. With your permission, we will acknowledge your contribution in our security advisories.

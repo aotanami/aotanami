@@ -1,0 +1,20 @@
+apiVersion: zelyo.ai/v1alpha1
+kind: ClusterScan
+metadata:
+  labels:
+    app.kubernetes.io/name: zelyo-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: clusterscan-sample
+  namespace: zelyo-system
+spec:
+  schedule: "0 2 * * *"
+  scanners:
+    - container-security-context
+    - resource-limits
+    - image-vulnerability
+    - pod-security
+  scope:
+    namespaces: ["default"]
+    excludeNamespaces: ["kube-system"]
+  historyLimit: 10
+  suspend: false

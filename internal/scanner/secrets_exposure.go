@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 )
 
 // SecretsExposureScanner checks for common patterns that leak sensitive data:
@@ -41,7 +41,7 @@ func (s *SecretsExposureScanner) Name() string {
 
 // RuleType implements Scanner.
 func (s *SecretsExposureScanner) RuleType() string {
-	return aotanamiv1alpha1.RuleTypeSecretsExposure
+	return zelyov1alpha1.RuleTypeSecretsExposure
 }
 
 // sensitiveKeywords that often indicate secrets in environment variable names.
@@ -66,7 +66,7 @@ func (s *SecretsExposureScanner) Scan(_ context.Context, pods []corev1.Pod, _ ma
 				if envFrom.SecretRef != nil {
 					findings = append(findings, Finding{
 						RuleType:          s.RuleType(),
-						Severity:          aotanamiv1alpha1.SeverityMedium,
+						Severity:          zelyov1alpha1.SeverityMedium,
 						Title:             fmt.Sprintf("Container %q injects entire Secret %q as env vars", container.Name, envFrom.SecretRef.Name),
 						Description:       "Using envFrom with a secretRef exposes all keys as environment variables. Environment variables can be leaked via /proc, core dumps, or logs.",
 						ResourceKind:      "Pod",
@@ -96,7 +96,7 @@ func (s *SecretsExposureScanner) Scan(_ context.Context, pods []corev1.Pod, _ ma
 				if env.Value != "" && env.ValueFrom == nil {
 					findings = append(findings, Finding{
 						RuleType:          s.RuleType(),
-						Severity:          aotanamiv1alpha1.SeverityCritical,
+						Severity:          zelyov1alpha1.SeverityCritical,
 						Title:             fmt.Sprintf("Container %q has hardcoded secret in env var %q", container.Name, env.Name),
 						Description:       fmt.Sprintf("Environment variable %q appears to contain a secret but is set as a plain-text value. This is visible in the pod spec and etcd.", env.Name),
 						ResourceKind:      "Pod",
@@ -110,7 +110,7 @@ func (s *SecretsExposureScanner) Scan(_ context.Context, pods []corev1.Pod, _ ma
 				if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
 					findings = append(findings, Finding{
 						RuleType:          s.RuleType(),
-						Severity:          aotanamiv1alpha1.SeverityLow,
+						Severity:          zelyov1alpha1.SeverityLow,
 						Title:             fmt.Sprintf("Container %q passes secret via env var %q (secretKeyRef)", container.Name, env.Name),
 						Description:       "Using secretKeyRef is better than plain text, but environment variables can still be leaked. Volume-mounted secrets are the best practice.",
 						ResourceKind:      "Pod",

@@ -7,7 +7,7 @@ updates:
       interval: "daily"
     # Assign reviewers to Go PRs
     reviewers:
-      - aotanami-bot
+      - zelyo-operator-bot
     # Group minor and patch updates
     groups:
       go-minor-patch:

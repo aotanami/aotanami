@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 )
 
 // PodSecurityScanner checks pods for Pod Security Standards violations:
@@ -42,7 +42,7 @@ func (s *PodSecurityScanner) Name() string {
 
 // RuleType implements Scanner.
 func (s *PodSecurityScanner) RuleType() string {
-	return aotanamiv1alpha1.RuleTypePodSecurity
+	return zelyov1alpha1.RuleTypePodSecurity
 }
 
 // dangerousCapabilities that should be dropped or never added.
@@ -67,7 +67,7 @@ func (s *PodSecurityScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[st
 		if pod.Spec.HostNetwork {
 			findings = append(findings, Finding{
 				RuleType:          s.RuleType(),
-				Severity:          aotanamiv1alpha1.SeverityCritical,
+				Severity:          zelyov1alpha1.SeverityCritical,
 				Title:             "Pod uses host network",
 				Description:       "hostNetwork is enabled, giving the pod access to the host's network interfaces. This bypasses network policies.",
 				ResourceKind:      "Pod",
@@ -81,7 +81,7 @@ func (s *PodSecurityScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[st
 		if pod.Spec.HostPID {
 			findings = append(findings, Finding{
 				RuleType:          s.RuleType(),
-				Severity:          aotanamiv1alpha1.SeverityCritical,
+				Severity:          zelyov1alpha1.SeverityCritical,
 				Title:             "Pod uses host PID namespace",
 				Description:       "hostPID is enabled, allowing the pod to see and signal all host processes.",
 				ResourceKind:      "Pod",
@@ -95,7 +95,7 @@ func (s *PodSecurityScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[st
 		if pod.Spec.HostIPC {
 			findings = append(findings, Finding{
 				RuleType:          s.RuleType(),
-				Severity:          aotanamiv1alpha1.SeverityHigh,
+				Severity:          zelyov1alpha1.SeverityHigh,
 				Title:             "Pod uses host IPC namespace",
 				Description:       "hostIPC is enabled, enabling shared memory communication with host processes.",
 				ResourceKind:      "Pod",
@@ -109,11 +109,11 @@ func (s *PodSecurityScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[st
 		for i := range pod.Spec.Volumes {
 			vol := &pod.Spec.Volumes[i]
 			if vol.HostPath != nil {
-				sev := aotanamiv1alpha1.SeverityHigh
+				sev := zelyov1alpha1.SeverityHigh
 				if strings.HasPrefix(vol.HostPath.Path, "/var/run/docker.sock") ||
 					strings.HasPrefix(vol.HostPath.Path, "/etc") ||
 					strings.HasPrefix(vol.HostPath.Path, "/root") {
-					sev = aotanamiv1alpha1.SeverityCritical
+					sev = zelyov1alpha1.SeverityCritical
 				}
 				findings = append(findings, Finding{
 					RuleType:          s.RuleType(),
@@ -139,7 +139,7 @@ func (s *PodSecurityScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[st
 				if dangerousCapabilities[cap] {
 					findings = append(findings, Finding{
 						RuleType:          s.RuleType(),
-						Severity:          aotanamiv1alpha1.SeverityHigh,
+						Severity:          zelyov1alpha1.SeverityHigh,
 						Title:             fmt.Sprintf("Container %q adds dangerous capability %s", container.Name, cap),
 						Description:       fmt.Sprintf("Capability %s is added to the container. This grants elevated kernel privileges.", cap),
 						ResourceKind:      "Pod",
@@ -155,7 +155,7 @@ func (s *PodSecurityScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[st
 		if pod.Spec.ShareProcessNamespace != nil && *pod.Spec.ShareProcessNamespace {
 			findings = append(findings, Finding{
 				RuleType:          s.RuleType(),
-				Severity:          aotanamiv1alpha1.SeverityMedium,
+				Severity:          zelyov1alpha1.SeverityMedium,
 				Title:             "Pod shares process namespace between containers",
 				Description:       "shareProcessNamespace is enabled. Containers can see and signal each other's processes.",
 				ResourceKind:      "Pod",

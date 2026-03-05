@@ -2,15 +2,15 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
-- bases/aotanami.com_securitypolicies.yaml
-- bases/aotanami.com_remediationpolicies.yaml
-- bases/aotanami.com_clusterscans.yaml
-- bases/aotanami.com_scanreports.yaml
-- bases/aotanami.com_costpolicies.yaml
-- bases/aotanami.com_monitoringpolicies.yaml
-- bases/aotanami.com_notificationchannels.yaml
-- bases/aotanami.com_aotanamiconfigs.yaml
-- bases/aotanami.com_gitopsrepositories.yaml
+- bases/zelyo.ai_securitypolicies.yaml
+- bases/zelyo.ai_remediationpolicies.yaml
+- bases/zelyo.ai_clusterscans.yaml
+- bases/zelyo.ai_scanreports.yaml
+- bases/zelyo.ai_costpolicies.yaml
+- bases/zelyo.ai_monitoringpolicies.yaml
+- bases/zelyo.ai_notificationchannels.yaml
+- bases/zelyo.ai_zelyoconfigs.yaml
+- bases/zelyo.ai_gitopsrepositories.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

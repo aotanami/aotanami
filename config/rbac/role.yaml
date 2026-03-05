@@ -26,9 +26,9 @@ rules:
   - list
   - watch
 - apiGroups:
-  - aotanami.com
+  - zelyo.ai
   resources:
-  - aotanamiconfigs
+  - zelyoconfigs
   - clusterscans
   - costpolicies
   - gitopsrepositories
@@ -46,9 +46,9 @@ rules:
   - update
   - watch
 - apiGroups:
-  - aotanami.com
+  - zelyo.ai
   resources:
-  - aotanamiconfigs/finalizers
+  - zelyoconfigs/finalizers
   - clusterscans/finalizers
   - costpolicies/finalizers
   - gitopsrepositories/finalizers
@@ -60,9 +60,9 @@ rules:
   verbs:
   - update
 - apiGroups:
-  - aotanami.com
+  - zelyo.ai
   resources:
-  - aotanamiconfigs/status
+  - zelyoconfigs/status
   - clusterscans/status
   - costpolicies/status
   - gitopsrepositories/status

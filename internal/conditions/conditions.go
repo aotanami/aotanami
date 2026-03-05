@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Package conditions provides helpers for managing metav1.Condition slices
-// on Aotanami CRD status objects. It follows the patterns established by
+// on Zelyo Operator CRD status objects. It follows the patterns established by
 // cert-manager and Crossplane for condition management.
 package conditions
 

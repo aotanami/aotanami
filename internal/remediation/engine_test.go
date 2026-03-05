@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
 package remediation
@@ -7,8 +7,8 @@ package remediation
 import (
 	"testing"
 
-	"github.com/aotanami/aotanami/internal/gitops"
-	"github.com/aotanami/aotanami/internal/scanner"
+	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
+	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
 )
 
 func TestExtractFixes_StructuredJSON(t *testing.T) {

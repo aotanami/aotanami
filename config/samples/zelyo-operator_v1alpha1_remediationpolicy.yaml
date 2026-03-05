@@ -1,0 +1,20 @@
+apiVersion: zelyo.ai/v1alpha1
+kind: RemediationPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: zelyo-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: remediationpolicy-sample
+  namespace: zelyo-system
+spec:
+  targetPolicies: ["securitypolicy-sample"]
+  gitOpsRepository: gitopsrepository-sample
+  prTemplate:
+    titlePrefix: "[Zelyo Operator]"
+    labels: ["security", "auto-fix"]
+    assignees: ["team-lead"]
+    branchPrefix: "zelyo-operator/fix-"
+  dryRun: false
+  maxConcurrentPRs: 5
+  autoMerge: false
+  severityFilter: high

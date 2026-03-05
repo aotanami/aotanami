@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ const (
 	ManifestSourceHelm ManifestSourceType = "helm"
 	// ManifestSourceKustomize indicates Kustomize overlays.
 	ManifestSourceKustomize ManifestSourceType = "kustomize"
-	// ManifestSourceAuto indicates Aotanami should auto-detect the source type.
+	// ManifestSourceAuto indicates Zelyo Operator should auto-detect the source type.
 	ManifestSourceAuto ManifestSourceType = "auto"
 )
 
@@ -40,18 +40,18 @@ const (
 type GitOpsControllerType string
 
 const (
-	// ControllerNone means no external GitOps controller — Aotanami operates standalone.
+	// ControllerNone means no external GitOps controller — Zelyo Operator operates standalone.
 	ControllerNone GitOpsControllerType = "none"
 	// ControllerArgoCD indicates the repo is managed by ArgoCD.
 	ControllerArgoCD GitOpsControllerType = "argocd"
 	// ControllerFlux indicates the repo is managed by Flux.
 	ControllerFlux GitOpsControllerType = "flux"
-	// ControllerAuto means Aotanami should auto-detect the controller from the cluster.
+	// ControllerAuto means Zelyo Operator should auto-detect the controller from the cluster.
 	ControllerAuto GitOpsControllerType = "auto"
 )
 
 // GitOpsRepositorySpec defines the desired state of GitOpsRepository.
-// A GitOpsRepository represents an onboarded GitOps repository that Aotanami
+// A GitOpsRepository represents an onboarded GitOps repository that Zelyo Operator
 // uses for config drift detection and submitting remediation PRs.
 type GitOpsRepositorySpec struct {
 	// url is the Git repository URL (HTTPS or SSH).
@@ -79,7 +79,7 @@ type GitOpsRepositorySpec struct {
 	// +required
 	AuthSecret string `json:"authSecret"`
 
-	// syncStrategy defines how Aotanami syncs with the repository.
+	// syncStrategy defines how Zelyo Operator syncs with the repository.
 	// +kubebuilder:validation:Enum=poll;webhook
 	// +kubebuilder:default=poll
 	// +optional
@@ -101,20 +101,20 @@ type GitOpsRepositorySpec struct {
 	EnableDriftDetection bool `json:"enableDriftDetection,omitempty"`
 
 	// sourceType defines how manifests are structured in this repository.
-	// When set to "auto", Aotanami scans paths for Chart.yaml (Helm) or
+	// When set to "auto", Zelyo Operator scans paths for Chart.yaml (Helm) or
 	// kustomization.yaml (Kustomize) and falls back to raw YAML.
 	// +kubebuilder:default=auto
 	// +optional
 	SourceType ManifestSourceType `json:"sourceType,omitempty"`
 
 	// controllerType identifies which GitOps controller manages this repo.
-	// When set to "auto", Aotanami probes the cluster for ArgoCD or Flux CRDs.
+	// When set to "auto", Zelyo Operator probes the cluster for ArgoCD or Flux CRDs.
 	// +kubebuilder:default=auto
 	// +optional
 	ControllerType GitOpsControllerType `json:"controllerType,omitempty"`
 
 	// controllerRef is an explicit reference to an ArgoCD Application or Flux Kustomization.
-	// When set, Aotanami links directly to this resource instead of auto-discovering.
+	// When set, Zelyo Operator links directly to this resource instead of auto-discovering.
 	// +optional
 	ControllerRef *ControllerReference `json:"controllerRef,omitempty"`
 
@@ -167,7 +167,7 @@ type HelmSource struct {
 // KustomizeSource holds configuration for Kustomize-based GitOps repositories.
 type KustomizeSource struct {
 	// overlayPaths lists the Kustomize overlay directories to build.
-	// When empty, Aotanami uses spec.paths as the overlay directories.
+	// When empty, Zelyo Operator uses spec.paths as the overlay directories.
 	// +optional
 	OverlayPaths []string `json:"overlayPaths,omitempty"`
 
@@ -218,12 +218,12 @@ type GitOpsRepositoryStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// detectedSourceType is the manifest source type that Aotanami auto-detected.
+	// detectedSourceType is the manifest source type that Zelyo Operator auto-detected.
 	// Only populated when spec.sourceType is "auto".
 	// +optional
 	DetectedSourceType ManifestSourceType `json:"detectedSourceType,omitempty"`
 
-	// detectedController is the GitOps controller that Aotanami auto-detected.
+	// detectedController is the GitOps controller that Zelyo Operator auto-detected.
 	// Only populated when spec.controllerType is "auto".
 	// +optional
 	DetectedController GitOpsControllerType `json:"detectedController,omitempty"`

@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 )
 
 var _ = Describe("MonitoringPolicy Controller", func() {
@@ -41,18 +41,18 @@ var _ = Describe("MonitoringPolicy Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		monitoringpolicy := &aotanamiv1alpha1.MonitoringPolicy{}
+		monitoringpolicy := &zelyov1alpha1.MonitoringPolicy{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind MonitoringPolicy")
 			err := k8sClient.Get(ctx, typeNamespacedName, monitoringpolicy)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &aotanamiv1alpha1.MonitoringPolicy{
+				resource := &zelyov1alpha1.MonitoringPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					Spec: aotanamiv1alpha1.MonitoringPolicySpec{},
+					Spec: zelyov1alpha1.MonitoringPolicySpec{},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -60,7 +60,7 @@ var _ = Describe("MonitoringPolicy Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &aotanamiv1alpha1.MonitoringPolicy{}
+			resource := &zelyov1alpha1.MonitoringPolicy{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 

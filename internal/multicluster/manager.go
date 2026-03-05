@@ -1,8 +1,8 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
-// Package multicluster provides multi-cluster federation for Aotanami.
+// Package multicluster provides multi-cluster federation for Zelyo Operator.
 // It enables aggregating security posture, scan results, and incidents
 // across multiple Kubernetes clusters into a unified view.
 package multicluster

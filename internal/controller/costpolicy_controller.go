@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,9 +30,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
-	"github.com/aotanami/aotanami/internal/conditions"
-	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
+	aotmetrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
 )
 
 // CostPolicyReconciler reconciles a CostPolicy object.
@@ -44,9 +44,9 @@ type CostPolicyReconciler struct {
 	Recorder record.EventRecorder
 }
 
-// +kubebuilder:rbac:groups=aotanami.com,resources=costpolicies,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=aotanami.com,resources=costpolicies/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=aotanami.com,resources=costpolicies/finalizers,verbs=update
+// +kubebuilder:rbac:groups=zelyo.ai,resources=costpolicies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=zelyo.ai,resources=costpolicies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=zelyo.ai,resources=costpolicies/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 
 // Reconcile validates the CostPolicy and evaluates workload resource usage.
@@ -59,7 +59,7 @@ func (r *CostPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		aotmetrics.ReconcileDuration.WithLabelValues("costpolicy").Observe(time.Since(start).Seconds())
 	}()
 
-	policy := &aotanamiv1alpha1.CostPolicy{}
+	policy := &zelyov1alpha1.CostPolicy{}
 	if err := r.Get(ctx, req.NamespacedName, policy); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -114,13 +114,13 @@ func (r *CostPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Update status.
 	now := metav1.Now()
-	policy.Status.Phase = aotanamiv1alpha1.PhaseActive
+	policy.Status.Phase = zelyov1alpha1.PhaseActive
 	policy.Status.LastEvaluated = &now
 	policy.Status.RightsizingRecommendations = podsWithoutLimits
 	policy.Status.ObservedGeneration = policy.Generation
 
-	conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-		aotanamiv1alpha1.ReasonReconcileSuccess,
+	conditions.MarkTrue(&policy.Status.Conditions, zelyov1alpha1.ConditionReady,
+		zelyov1alpha1.ReasonReconcileSuccess,
 		fmt.Sprintf("Evaluated %d pods across %d namespaces", totalPods, len(targetNamespaces)),
 		policy.Generation)
 
@@ -128,7 +128,7 @@ func (r *CostPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 	}
 
-	r.Recorder.Event(policy, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonReconciled,
+	r.Recorder.Event(policy, corev1.EventTypeNormal, zelyov1alpha1.EventReasonReconciled,
 		fmt.Sprintf("CostPolicy evaluated: %d pods, %d need rightsizing", totalPods, podsWithoutLimits))
 
 	aotmetrics.ReconcileTotal.WithLabelValues("costpolicy", "success").Inc()
@@ -139,7 +139,7 @@ func (r *CostPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 // SetupWithManager sets up the controller with the Manager.
 func (r *CostPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aotanamiv1alpha1.CostPolicy{}).
+		For(&zelyov1alpha1.CostPolicy{}).
 		Named("costpolicy").
 		Complete(r)
 }

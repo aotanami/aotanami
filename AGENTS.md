@@ -1,6 +1,6 @@
-# Aotanami — Digital SRE & Security Engineer
+# Zelyo Operator — Digital SRE & Security Engineer
 
-Welcome to the **Aotanami Brain** documentation. While Aotanami is technically a Kubernetes Operator, its identity is that of a **Digital SRE and Security Engineer** — an agentic AI system that does the job of a full-time site reliability and security engineer, autonomously observing, reasoning, and acting on your clusters 24/7.
+Welcome to the **Zelyo Operator Brain** documentation. While Zelyo Operator is technically a Kubernetes Operator, its identity is that of a **Digital SRE and Security Engineer** — an agentic AI system that does the job of a full-time site reliability and security engineer, autonomously observing, reasoning, and acting on your clusters 24/7.
 
 This document details the internal intelligence architecture.
 
@@ -87,7 +87,7 @@ The remediation engine converts abstract findings into **concrete, validated Kub
 
 ### 4. GitHub App Engine (`internal/github`)
 
-When operating in **Protect Mode**, Aotanami uses the GitHub App engine to autonomously fix your repositories. **Zero external dependencies** — implemented entirely with Go's standard library.
+When operating in **Protect Mode**, Zelyo Operator uses the GitHub App engine to autonomously fix your repositories. **Zero external dependencies** — implemented entirely with Go's standard library.
 
 | Feature | Implementation |
 |---|---|
@@ -157,7 +157,7 @@ The Digital SRE's autonomy lives in the **7 Kubernetes controllers** that wire t
 | `ClusterScan` | Runs scheduled security scans | Evaluates CIS compliance | Creates ScanReport CRs |
 | `GitOpsRepository` | Discovers repo structure | — | Provides Git context for remediation |
 | `CostPolicy` | Analyzes resource utilization | Identifies optimization opportunities | — |
-| `AotanamiConfig` | — | — | Configures global settings |
+| `ZelyoConfig` | — | — | Configures global settings |
 
 ---
 

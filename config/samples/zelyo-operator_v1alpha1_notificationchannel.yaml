@@ -1,0 +1,17 @@
+apiVersion: zelyo.ai/v1alpha1
+kind: NotificationChannel
+metadata:
+  labels:
+    app.kubernetes.io/name: zelyo-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: notificationchannel-sample
+  namespace: zelyo-system
+spec:
+  type: slack
+  credentialSecret: slack-token
+  severityFilter: medium
+  rateLimit:
+    maxPerHour: 60
+    aggregateSeconds: 30
+  slack:
+    channel: "#zelyo-operator-alerts"

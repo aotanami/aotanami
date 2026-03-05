@@ -1,12 +1,12 @@
 ## Append samples of your project ##
 resources:
-- aotanami_v1alpha1_securitypolicy.yaml
-- aotanami_v1alpha1_remediationpolicy.yaml
-- aotanami_v1alpha1_clusterscan.yaml
-- aotanami_v1alpha1_scanreport.yaml
-- aotanami_v1alpha1_costpolicy.yaml
-- aotanami_v1alpha1_monitoringpolicy.yaml
-- aotanami_v1alpha1_notificationchannel.yaml
-- aotanami_v1alpha1_aotanamiconfig.yaml
-- aotanami_v1alpha1_gitopsrepository.yaml
+- zelyo-operator_v1alpha1_securitypolicy.yaml
+- zelyo-operator_v1alpha1_remediationpolicy.yaml
+- zelyo-operator_v1alpha1_clusterscan.yaml
+- zelyo-operator_v1alpha1_scanreport.yaml
+- zelyo-operator_v1alpha1_costpolicy.yaml
+- zelyo-operator_v1alpha1_monitoringpolicy.yaml
+- zelyo-operator_v1alpha1_notificationchannel.yaml
+- zelyo-operator_v1alpha1_zelyoconfig.yaml
+- zelyo-operator_v1alpha1_gitopsrepository.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

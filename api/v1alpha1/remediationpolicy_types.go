@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 )
 
 // RemediationPolicySpec defines the desired state of RemediationPolicy.
-// A RemediationPolicy configures how Aotanami generates and submits fixes
+// A RemediationPolicy configures how Zelyo Operator generates and submits fixes
 // via GitOps when policy violations are detected.
 type RemediationPolicySpec struct {
 	// targetPolicies lists the SecurityPolicy names this remediation applies to. Empty means all.
@@ -61,8 +61,8 @@ type RemediationPolicySpec struct {
 
 // PRTemplateConfig defines how PRs are structured.
 type PRTemplateConfig struct {
-	// titlePrefix is prepended to all PR titles (e.g., "[Aotanami]").
-	// +kubebuilder:default="[Aotanami]"
+	// titlePrefix is prepended to all PR titles (e.g., "[Zelyo Operator]").
+	// +kubebuilder:default="[Zelyo Operator]"
 	// +optional
 	TitlePrefix string `json:"titlePrefix,omitempty"`
 
@@ -74,8 +74,8 @@ type PRTemplateConfig struct {
 	// +optional
 	Assignees []string `json:"assignees,omitempty"`
 
-	// branchPrefix for fix branches (e.g., "aotanami/fix-").
-	// +kubebuilder:default="aotanami/fix-"
+	// branchPrefix for fix branches (e.g., "zelyo-operator/fix-").
+	// +kubebuilder:default="zelyo-operator/fix-"
 	// +optional
 	BranchPrefix string `json:"branchPrefix,omitempty"`
 }
@@ -118,7 +118,7 @@ type RemediationPolicyStatus struct {
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // RemediationPolicy is the Schema for the remediationpolicies API.
-// It configures how Aotanami generates and submits GitOps PRs for detected violations.
+// It configures how Zelyo Operator generates and submits GitOps PRs for detected violations.
 type RemediationPolicy struct {
 	metav1.TypeMeta `json:",inline"`
 

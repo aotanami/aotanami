@@ -1,0 +1,58 @@
+{{- if .Values.metrics.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "zelyo-operator.fullname" . }}
+  namespace: {{ .Values.metrics.prometheusRule.namespace | default (include "zelyo-operator.namespace" .) }}
+  labels:
+    {{- include "zelyo-operator.labels" . | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: zelyo-operator.rules
+      rules:
+        - alert: Zelyo OperatorCriticalViolations
+          expr: zelyo-operator_scanner_findings_total{severity="critical"} > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Critical security violations detected"
+            description: >-
+              Scanner {{ "{{" }} $labels.scanner {{ "}}" }} found
+              {{ "{{" }} $value {{ "}}" }} critical findings.
+            runbook_url: https://github.com/zelyo-ai/zelyo-operator/blob/main/docs/runbooks/critical-violations.md
+
+        - alert: Zelyo OperatorReconcileErrors
+          expr: rate(zelyo-operator_controller_reconcile_total{result="error"}[5m]) > 0.1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Zelyo Operator controller has high error rate"
+            description: >-
+              Controller {{ "{{" }} $labels.controller {{ "}}" }} has a reconcile
+              error rate of {{ "{{" }} $value {{ "}}" }}/s over the last 5 minutes.
+
+        - alert: Zelyo OperatorSlowReconcile
+          expr: histogram_quantile(0.99, rate(zelyo-operator_controller_reconcile_duration_seconds_bucket[5m])) > 30
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Zelyo Operator controller reconcile is slow"
+            description: >-
+              Controller {{ "{{" }} $labels.controller {{ "}}" }} p99 reconcile latency
+              is {{ "{{" }} $value {{ "}}" }}s.
+
+        - alert: Zelyo OperatorPodRestart
+          expr: increase(kube_pod_container_status_restarts_total{container="manager", namespace="{{ include "zelyo-operator.namespace" . }}"}[1h]) > 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Zelyo Operator operator is restarting frequently"
+            description: 'The operator has restarted {{ "{{" }} $value {{ "}}" }} times in the last hour.'
+{{- end }}

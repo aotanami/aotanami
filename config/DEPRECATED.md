@@ -10,13 +10,13 @@ The `config/` directory exists for two purposes:
 
 ```bash
 # Install via Helm (recommended)
-helm install aotanami oci://ghcr.io/aotanami/charts/aotanami \
-  --namespace aotanami-system \
+helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
+  --namespace zelyo-system \
   --create-namespace
 
 # Or from local checkout
-helm install aotanami deploy/helm/aotanami/ \
-  --namespace aotanami-system \
+helm install zelyo-operator deploy/helm/zelyo-operator/ \
+  --namespace zelyo-system \
   --create-namespace
 ```
 

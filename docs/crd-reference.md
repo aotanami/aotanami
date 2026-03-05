@@ -1,19 +1,19 @@
 # CRD Reference
 
-Complete field reference for all 9 Aotanami Custom Resource Definitions, including both `spec` and `status` fields.
+Complete field reference for all 9 Zelyo Operator Custom Resource Definitions, including both `spec` and `status` fields.
 
 ## SecurityPolicy
 
-**What it does**: Defines security rules to continuously evaluate against your Kubernetes workloads. Think of it as a checklist of security requirements that Aotanami checks automatically.
+**What it does**: Defines security rules to continuously evaluate against your Kubernetes workloads. Think of it as a checklist of security requirements that Zelyo Operator checks automatically.
 
 ### Spec
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: SecurityPolicy
 metadata:
   name: enforce-security
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   # Minimum severity to report. Findings below this level are filtered out.
   # Options: critical | high | medium | low | info
@@ -73,11 +73,11 @@ status:
 ### Spec
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: ClusterScan
 metadata:
   name: nightly-scan
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   schedule: "0 2 * * *"                         # Cron schedule
   scanners:                                     # Which scanners to run
@@ -121,13 +121,13 @@ status:
 ### Spec (set by ClusterScan controller)
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: ScanReport
 metadata:
   name: nightly-scan-1709481934
-  namespace: aotanami-system
+  namespace: zelyo-system
   ownerReferences:                              # Owned by the parent ClusterScan
-    - apiVersion: aotanami.com/v1alpha1
+    - apiVersion: zelyo.ai/v1alpha1
       kind: ClusterScan
       name: nightly-scan
 spec:
@@ -166,15 +166,15 @@ status:
 
 ---
 
-## AotanamiConfig
+## ZelyoConfig
 
 **What it does**: Global operator configuration. Cluster-scoped, and **only one instance is allowed** (singleton).
 
 ### Spec
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
-kind: AotanamiConfig
+apiVersion: zelyo.ai/v1alpha1
+kind: ZelyoConfig
 metadata:
   name: default                                 # Must be "default"
 spec:
@@ -183,7 +183,7 @@ spec:
   llm:
     provider: openrouter                        # openrouter | openai | anthropic | azure-openai | ollama | custom
     model: "anthropic/claude-sonnet-4-20250514"
-    apiKeySecret: aotanami-llm                  # Secret must have an "api-key" data key
+    apiKeySecret: zelyo-llm                  # Secret must have an "api-key" data key
     temperature: "0.1"
     maxTokensPerRequest: 4096
 
@@ -220,7 +220,7 @@ status:
       message: "LLM API key secret validated"
 ```
 
-**Key behavior**: If you try to create a second AotanamiConfig, the controller marks it as `Degraded` and records a warning event.
+**Key behavior**: If you try to create a second ZelyoConfig, the controller marks it as `Degraded` and records a warning event.
 
 ---
 
@@ -231,11 +231,11 @@ status:
 ### Spec
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: GitOpsRepository
 metadata:
   name: infra-repo
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   url: https://github.com/my-org/k8s-manifests
   branch: main
@@ -277,24 +277,24 @@ status:
 
 ## RemediationPolicy
 
-**What it does**: Configures how Aotanami generates and submits GitOps PRs for detected violations.
+**What it does**: Configures how Zelyo Operator generates and submits GitOps PRs for detected violations.
 
 ### Spec
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: RemediationPolicy
 metadata:
   name: auto-fix
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   targetPolicies: ["enforce-security"]          # Empty = all policies
   gitOpsRepository: infra-repo                  # Must reference existing GitOpsRepository
   prTemplate:
-    titlePrefix: "[Aotanami]"
+    titlePrefix: "[Zelyo Operator]"
     labels: ["security", "auto-fix"]
     assignees: ["team-lead"]
-    branchPrefix: "aotanami/fix-"
+    branchPrefix: "zelyo-operator/fix-"
   dryRun: false
   maxConcurrentPRs: 5
   autoMerge: false
@@ -321,11 +321,11 @@ status:
 ### Spec
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: CostPolicy
 metadata:
   name: optimize-costs
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   targetNamespaces: ["production"]
   resizeStrategy: conservative                  # conservative | moderate | aggressive
@@ -360,11 +360,11 @@ status:
 ### Spec
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: MonitoringPolicy
 metadata:
   name: realtime-watch
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   targetNamespaces: ["production"]
   notificationChannels: ["slack-alerts"]        # Must reference existing NotificationChannels
@@ -401,17 +401,17 @@ status:
 
 ## NotificationChannel
 
-**What it does**: Configures a destination for Aotanami alerts and reports.
+**What it does**: Configures a destination for Zelyo Operator alerts and reports.
 
 ### Spec
 
 ```yaml
 # Slack example
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: NotificationChannel
 metadata:
   name: slack-alerts
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   type: slack                                   # slack | msteams | pagerduty | alertmanager |
                                                 # telegram | whatsapp | webhook | email
@@ -421,7 +421,7 @@ spec:
     maxPerHour: 60
     aggregateSeconds: 30
   slack:
-    channel: "#aotanami-alerts"
+    channel: "#zelyo-operator-alerts"
 ```
 
 ### Status
@@ -441,7 +441,7 @@ status:
 
 ## Understanding Status Phases
 
-Every Aotanami resource goes through lifecycle phases. Here's what they mean:
+Every Zelyo Operator resource goes through lifecycle phases. Here's what they mean:
 
 | Phase | Meaning | What to Do |
 |---|---|---|
@@ -449,7 +449,7 @@ Every Aotanami resource goes through lifecycle phases. Here's what they mean:
 | `Active` | Resource is working correctly | Nothing — everything is healthy |
 | `Synced` | (GitOps only) Repository is synced | Nothing — everything is healthy |
 | `Completed` | (Scan only) Scan finished successfully | Check the findings |
-| `Degraded` | Partially working (e.g., second AotanamiConfig) | Check Events for details |
+| `Degraded` | Partially working (e.g., second ZelyoConfig) | Check Events for details |
 | `Error` | Something went wrong | Check `conditions` and Events for the error |
 | `Running` | (Scan only) Scan is currently in progress | Wait for completion |
 

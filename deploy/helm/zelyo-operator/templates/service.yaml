@@ -1,0 +1,64 @@
+{{- if .Values.config.dashboard.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zelyo-operator.fullname" . }}
+  namespace: {{ include "zelyo-operator.namespace" . }}
+  labels:
+    {{- include "zelyo-operator.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: dashboard
+      protocol: TCP
+      name: dashboard
+  selector:
+    {{- include "zelyo-operator.selectorLabels" . | nindent 4 }}
+{{- end }}
+---
+{{- if .Values.metrics.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zelyo-operator.metricsServiceName" . }}
+  namespace: {{ include "zelyo-operator.namespace" . }}
+  labels:
+    {{- include "zelyo-operator.labels" . | nindent 4 }}
+  {{- with .Values.metrics.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.metrics.service.port }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "zelyo-operator.selectorLabels" . | nindent 4 }}
+{{- end }}
+---
+{{- if .Values.webhook.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zelyo-operator.webhookServiceName" . }}
+  namespace: {{ include "zelyo-operator.namespace" . }}
+  labels:
+    {{- include "zelyo-operator.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 443
+      targetPort: webhook
+      protocol: TCP
+      name: webhook
+  selector:
+    {{- include "zelyo-operator.selectorLabels" . | nindent 4 }}
+{{- end }}

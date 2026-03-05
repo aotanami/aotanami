@@ -1,0 +1,28 @@
+apiVersion: zelyo.ai/v1alpha1
+kind: ZelyoConfig
+metadata:
+  labels:
+    app.kubernetes.io/name: zelyo-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: default
+spec:
+  mode: audit
+  llm:
+    provider: openrouter
+    model: "anthropic/claude-sonnet-4-20250514"
+    apiKeySecret: zelyo-llm
+    temperature: "0.1"
+    maxTokensPerRequest: 4096
+  tokenBudget:
+    hourlyTokenLimit: 50000
+    dailyTokenLimit: 500000
+    monthlyTokenLimit: 10000000
+    alertThresholdPercent: 80
+    enableCaching: true
+    batchingEnabled: true
+  dashboard:
+    enabled: true
+    port: 8080
+  telemetry:
+    prometheusEnabled: true
+    otelEnabled: false

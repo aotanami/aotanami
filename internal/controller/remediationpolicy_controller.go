@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,12 +31,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
-	"github.com/aotanami/aotanami/internal/conditions"
-	"github.com/aotanami/aotanami/internal/correlator"
-	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
-	"github.com/aotanami/aotanami/internal/remediation"
-	"github.com/aotanami/aotanami/internal/scanner"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
+	"github.com/zelyo-ai/zelyo-operator/internal/correlator"
+	aotmetrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
+	"github.com/zelyo-ai/zelyo-operator/internal/remediation"
+	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
 )
 
 // RemediationPolicyReconciler reconciles a RemediationPolicy object.
@@ -50,11 +50,11 @@ type RemediationPolicyReconciler struct {
 	RemediationEngine *remediation.Engine // Generates plans & PRs from findings.
 }
 
-// +kubebuilder:rbac:groups=aotanami.com,resources=remediationpolicies,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=aotanami.com,resources=remediationpolicies/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=aotanami.com,resources=remediationpolicies/finalizers,verbs=update
-// +kubebuilder:rbac:groups=aotanami.com,resources=gitopsrepositories,verbs=get;list;watch
-// +kubebuilder:rbac:groups=aotanami.com,resources=securitypolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=zelyo.ai,resources=remediationpolicies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=zelyo.ai,resources=remediationpolicies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=zelyo.ai,resources=remediationpolicies/finalizers,verbs=update
+// +kubebuilder:rbac:groups=zelyo.ai,resources=gitopsrepositories,verbs=get;list;watch
+// +kubebuilder:rbac:groups=zelyo.ai,resources=securitypolicies,verbs=get;list;watch
 
 // Reconcile implements the active remediation loop:
 // 1. Validate GitOpsRepository & SecurityPolicies
@@ -69,7 +69,7 @@ func (r *RemediationPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		aotmetrics.ReconcileDuration.WithLabelValues("remediationpolicy").Observe(time.Since(start).Seconds())
 	}()
 
-	policy := &aotanamiv1alpha1.RemediationPolicy{}
+	policy := &zelyov1alpha1.RemediationPolicy{}
 	if err := r.Get(ctx, req.NamespacedName, policy); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -85,18 +85,18 @@ func (r *RemediationPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	conditions.MarkReconciling(&policy.Status.Conditions, "Reconciliation in progress", policy.Generation)
 
 	// ── Step 1: Validate GitOpsRepository ──
-	repo := &aotanamiv1alpha1.GitOpsRepository{}
+	repo := &zelyov1alpha1.GitOpsRepository{}
 	repoKey := types.NamespacedName{Name: policy.Spec.GitOpsRepository, Namespace: policy.Namespace}
 	if err := r.Get(ctx, repoKey, repo); err != nil {
 		if errors.IsNotFound(err) {
-			r.Recorder.Event(policy, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonReconcileError,
+			r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 				fmt.Sprintf("GitOpsRepository %q not found", policy.Spec.GitOpsRepository))
-			conditions.MarkFalse(&policy.Status.Conditions, aotanamiv1alpha1.ConditionGitOpsConnected,
-				aotanamiv1alpha1.ReasonTargetNotFound,
+			conditions.MarkFalse(&policy.Status.Conditions, zelyov1alpha1.ConditionGitOpsConnected,
+				zelyov1alpha1.ReasonTargetNotFound,
 				fmt.Sprintf("GitOpsRepository %q not found", policy.Spec.GitOpsRepository), policy.Generation)
-			conditions.MarkFalse(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-				aotanamiv1alpha1.ReasonTargetNotFound, "Referenced GitOpsRepository not found", policy.Generation)
-			policy.Status.Phase = aotanamiv1alpha1.PhaseError
+			conditions.MarkFalse(&policy.Status.Conditions, zelyov1alpha1.ConditionReady,
+				zelyov1alpha1.ReasonTargetNotFound, "Referenced GitOpsRepository not found", policy.Generation)
+			policy.Status.Phase = zelyov1alpha1.PhaseError
 			policy.Status.ObservedGeneration = policy.Generation
 			if statusErr := r.Status().Update(ctx, policy); statusErr != nil {
 				return ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
@@ -106,18 +106,18 @@ func (r *RemediationPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("fetching GitOpsRepository: %w", err)
 	}
 
-	conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionGitOpsConnected,
-		aotanamiv1alpha1.ReasonReconcileSuccess,
+	conditions.MarkTrue(&policy.Status.Conditions, zelyov1alpha1.ConditionGitOpsConnected,
+		zelyov1alpha1.ReasonReconcileSuccess,
 		fmt.Sprintf("GitOpsRepository %q is available (phase: %s)", repo.Name, repo.Status.Phase), policy.Generation)
 
 	// ── Step 2: Validate targeted SecurityPolicies ──
 	if len(policy.Spec.TargetPolicies) > 0 {
 		for _, policyName := range policy.Spec.TargetPolicies {
-			sp := &aotanamiv1alpha1.SecurityPolicy{}
+			sp := &zelyov1alpha1.SecurityPolicy{}
 			spKey := types.NamespacedName{Name: policyName, Namespace: policy.Namespace}
 			if err := r.Get(ctx, spKey, sp); err != nil {
 				if errors.IsNotFound(err) {
-					r.Recorder.Event(policy, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonReconcileError,
+					r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 						fmt.Sprintf("Target SecurityPolicy %q not found", policyName))
 				}
 			}
@@ -134,12 +134,12 @@ func (r *RemediationPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// ── Step 4: Update status ──
 	now := metav1.Now()
-	policy.Status.Phase = aotanamiv1alpha1.PhaseActive
+	policy.Status.Phase = zelyov1alpha1.PhaseActive
 	policy.Status.LastRun = &now
 	policy.Status.RemediationsApplied += prsCreated
 	policy.Status.ObservedGeneration = policy.Generation
-	conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-		aotanamiv1alpha1.ReasonReconcileSuccess,
+	conditions.MarkTrue(&policy.Status.Conditions, zelyov1alpha1.ConditionReady,
+		zelyov1alpha1.ReasonReconcileSuccess,
 		fmt.Sprintf("RemediationPolicy is active (PRs created this cycle: %d, total: %d)",
 			prsCreated, policy.Status.RemediationsApplied), policy.Generation)
 
@@ -147,7 +147,7 @@ func (r *RemediationPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 	}
 
-	r.Recorder.Event(policy, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonReconciled,
+	r.Recorder.Event(policy, corev1.EventTypeNormal, zelyov1alpha1.EventReasonReconciled,
 		fmt.Sprintf("RemediationPolicy reconciled (repo=%s, dryRun=%v, prsCreated=%d, severity>=%s)",
 			policy.Spec.GitOpsRepository, policy.Spec.DryRun, prsCreated, policy.Spec.SeverityFilter))
 
@@ -159,8 +159,8 @@ func (r *RemediationPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // generates remediation plans, and optionally submits PRs.
 func (r *RemediationPolicyReconciler) processIncidents(
 	ctx context.Context,
-	policy *aotanamiv1alpha1.RemediationPolicy,
-	repo *aotanamiv1alpha1.GitOpsRepository,
+	policy *zelyov1alpha1.RemediationPolicy,
+	repo *zelyov1alpha1.GitOpsRepository,
 ) int32 {
 	log := logf.FromContext(ctx)
 
@@ -213,7 +213,7 @@ func (r *RemediationPolicyReconciler) processIncidents(
 			log.Error(err, "Failed to generate remediation plan",
 				"incident", incident.ID,
 				"resource", fmt.Sprintf("%s/%s", incident.Namespace, incident.Resource))
-			r.Recorder.Event(policy, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonReconcileError,
+			r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 				fmt.Sprintf("LLM plan generation failed for incident %s: %v", incident.ID, err))
 			continue
 		}
@@ -229,7 +229,7 @@ func (r *RemediationPolicyReconciler) processIncidents(
 		if err != nil {
 			log.Error(err, "Failed to apply remediation plan",
 				"incident", incident.ID)
-			r.Recorder.Event(policy, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonReconcileError,
+			r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 				fmt.Sprintf("Failed to apply fix for incident %s: %v", incident.ID, err))
 			continue
 		}
@@ -307,7 +307,7 @@ func parseRepoURL(url string) (owner, repo string) {
 // SetupWithManager sets up the controller with the Manager.
 func (r *RemediationPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aotanamiv1alpha1.RemediationPolicy{}).
+		For(&zelyov1alpha1.RemediationPolicy{}).
 		Named("remediationpolicy").
 		Complete(r)
 }

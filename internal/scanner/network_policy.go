@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 )
 
 // NetworkPolicyScanner checks for missing network segmentation:
@@ -43,7 +43,7 @@ func (s *NetworkPolicyScanner) Name() string {
 
 // RuleType implements Scanner.
 func (s *NetworkPolicyScanner) RuleType() string {
-	return aotanamiv1alpha1.RuleTypeNetworkPolicy
+	return zelyov1alpha1.RuleTypeNetworkPolicy
 }
 
 // Scan implements Scanner.
@@ -67,7 +67,7 @@ func (s *NetworkPolicyScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[
 		if len(pod.Labels) == 0 {
 			findings = append(findings, Finding{
 				RuleType:          s.RuleType(),
-				Severity:          aotanamiv1alpha1.SeverityMedium,
+				Severity:          zelyov1alpha1.SeverityMedium,
 				Title:             "Pod has no labels for network policy targeting",
 				Description:       "This pod has no labels, making it impossible to target with NetworkPolicy podSelector rules. It may have unrestricted network access.",
 				ResourceKind:      "Pod",
@@ -83,7 +83,7 @@ func (s *NetworkPolicyScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[
 				if port.HostPort > 0 {
 					findings = append(findings, Finding{
 						RuleType:          s.RuleType(),
-						Severity:          aotanamiv1alpha1.SeverityHigh,
+						Severity:          zelyov1alpha1.SeverityHigh,
 						Title:             fmt.Sprintf("Container %q uses hostPort %d", container.Name, port.HostPort),
 						Description:       fmt.Sprintf("hostPort %d is set on container %q. Host ports bypass Kubernetes NetworkPolicies and expose the port on every node.", port.HostPort, container.Name),
 						ResourceKind:      "Pod",
@@ -102,7 +102,7 @@ func (s *NetworkPolicyScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[
 // isSystemNamespace returns true for well-known Kubernetes system namespaces.
 func isSystemNamespace(ns string) bool {
 	switch ns {
-	case "kube-system", "kube-public", "kube-node-lease", "aotanami-system":
+	case "kube-system", "kube-public", "kube-node-lease", "zelyo-system":
 		return true
 	}
 	return false

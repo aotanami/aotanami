@@ -20,14 +20,14 @@ resources:
 - metrics_reader_role.yaml
 # For each CRD, "Admin", "Editor" and "Viewer" roles are scaffolded by
 # default, aiding admins in cluster management. Those roles are
-# not used by the aotanami itself. You can comment the following lines
+# not used by the zelyo-operator itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
 - gitopsrepository_admin_role.yaml
 - gitopsrepository_editor_role.yaml
 - gitopsrepository_viewer_role.yaml
-- aotanamiconfig_admin_role.yaml
-- aotanamiconfig_editor_role.yaml
-- aotanamiconfig_viewer_role.yaml
+- zelyoconfig_admin_role.yaml
+- zelyoconfig_editor_role.yaml
+- zelyoconfig_viewer_role.yaml
 - notificationchannel_admin_role.yaml
 - notificationchannel_editor_role.yaml
 - notificationchannel_viewer_role.yaml

@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 )
 
 var _ = Describe("NotificationChannel Controller", func() {
@@ -41,18 +41,18 @@ var _ = Describe("NotificationChannel Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		notificationchannel := &aotanamiv1alpha1.NotificationChannel{}
+		notificationchannel := &zelyov1alpha1.NotificationChannel{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind NotificationChannel")
 			err := k8sClient.Get(ctx, typeNamespacedName, notificationchannel)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &aotanamiv1alpha1.NotificationChannel{
+				resource := &zelyov1alpha1.NotificationChannel{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					Spec: aotanamiv1alpha1.NotificationChannelSpec{
+					Spec: zelyov1alpha1.NotificationChannelSpec{
 						Type:             "webhook",
 						CredentialSecret: "test-secret",
 					},
@@ -63,7 +63,7 @@ var _ = Describe("NotificationChannel Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &aotanamiv1alpha1.NotificationChannel{}
+			resource := &zelyov1alpha1.NotificationChannel{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 

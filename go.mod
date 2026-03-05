@@ -1,4 +1,4 @@
-module github.com/aotanami/aotanami
+module github.com/zelyo-ai/zelyo-operator
 
 go 1.25.7
 

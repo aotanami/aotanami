@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
 // Package anomaly provides real-time anomaly detection for Kubernetes workloads.

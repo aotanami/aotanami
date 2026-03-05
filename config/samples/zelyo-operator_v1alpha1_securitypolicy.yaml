@@ -1,0 +1,23 @@
+apiVersion: zelyo.ai/v1alpha1
+kind: SecurityPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: zelyo-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: securitypolicy-sample
+  namespace: zelyo-system
+spec:
+  severity: medium
+  match:
+    namespaces: ["default"]
+  rules:
+    - name: non-root-containers
+      type: container-security-context
+      enforce: true
+    - name: resource-limits
+      type: resource-limits
+      enforce: true
+    - name: image-tags
+      type: image-vulnerability
+      enforce: false
+  autoRemediate: false

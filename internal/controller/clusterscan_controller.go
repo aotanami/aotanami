@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,16 +34,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
-	"github.com/aotanami/aotanami/internal/compliance"
-	"github.com/aotanami/aotanami/internal/conditions"
-	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
-	"github.com/aotanami/aotanami/internal/scanner"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo-operator/internal/compliance"
+	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
+	aotmetrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
+	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
 )
 
 const (
 	// clusterScanFinalizer is the finalizer for cleaning up child ScanReports.
-	clusterScanFinalizer = "aotanami.com/clusterscan-cleanup"
+	clusterScanFinalizer = "zelyo.ai/clusterscan-cleanup"
 
 	// defaultScanInterval is the default requeue interval for scans without a schedule.
 	defaultScanInterval = 30 * time.Minute
@@ -59,10 +59,10 @@ type ClusterScanReconciler struct {
 	ScannerRegistry *scanner.Registry
 }
 
-// +kubebuilder:rbac:groups=aotanami.com,resources=clusterscans,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=aotanami.com,resources=clusterscans/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=aotanami.com,resources=clusterscans/finalizers,verbs=update
-// +kubebuilder:rbac:groups=aotanami.com,resources=scanreports,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=zelyo.ai,resources=clusterscans,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=zelyo.ai,resources=clusterscans/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=zelyo.ai,resources=clusterscans/finalizers,verbs=update
+// +kubebuilder:rbac:groups=zelyo.ai,resources=scanreports,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
@@ -74,7 +74,7 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	log := logf.FromContext(ctx)
 
 	// Fetch the ClusterScan.
-	scan := &aotanamiv1alpha1.ClusterScan{}
+	scan := &zelyov1alpha1.ClusterScan{}
 	if err := r.Get(ctx, req.NamespacedName, scan); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -111,9 +111,9 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// ── Check if suspended ──
 	if scan.Spec.Suspend {
 		log.Info("ClusterScan is suspended — skipping")
-		conditions.MarkFalse(&scan.Status.Conditions, aotanamiv1alpha1.ConditionReady,
+		conditions.MarkFalse(&scan.Status.Conditions, zelyov1alpha1.ConditionReady,
 			"Suspended", "Scan is suspended", scan.Generation)
-		scan.Status.Phase = aotanamiv1alpha1.PhasePending
+		scan.Status.Phase = zelyov1alpha1.PhasePending
 		if err := r.Status().Update(ctx, scan); err != nil {
 			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 		}
@@ -121,12 +121,12 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// ── Run the scan ──
-	r.Recorder.Event(scan, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonScanStarted,
+	r.Recorder.Event(scan, corev1.EventTypeNormal, zelyov1alpha1.EventReasonScanStarted,
 		fmt.Sprintf("Starting cluster scan with %d scanners", len(scan.Spec.Scanners)))
 
-	scan.Status.Phase = aotanamiv1alpha1.PhaseRunning
-	conditions.MarkUnknown(&scan.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-		aotanamiv1alpha1.ReasonProgressingMessage, "Scan in progress", scan.Generation)
+	scan.Status.Phase = zelyov1alpha1.PhaseRunning
+	conditions.MarkUnknown(&scan.Status.Conditions, zelyov1alpha1.ConditionReady,
+		zelyov1alpha1.ReasonProgressingMessage, "Scan in progress", scan.Generation)
 	if err := r.Status().Update(ctx, scan); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating status to Running: %w", err)
 	}
@@ -134,11 +134,11 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Resolve target pods.
 	pods, err := r.resolveTargetPods(ctx, scan)
 	if err != nil {
-		r.Recorder.Event(scan, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonReconcileError,
+		r.Recorder.Event(scan, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 			fmt.Sprintf("Failed to resolve target pods: %v", err))
-		scan.Status.Phase = aotanamiv1alpha1.PhaseFailed
-		conditions.MarkFalse(&scan.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-			aotanamiv1alpha1.ReasonReconcileFailed, fmt.Sprintf("Target resolution failed: %v", err), scan.Generation)
+		scan.Status.Phase = zelyov1alpha1.PhaseFailed
+		conditions.MarkFalse(&scan.Status.Conditions, zelyov1alpha1.ConditionReady,
+			zelyov1alpha1.ReasonReconcileFailed, fmt.Sprintf("Target resolution failed: %v", err), scan.Generation)
 		if statusErr := r.Status().Update(ctx, scan); statusErr != nil {
 			return ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
 		}
@@ -146,9 +146,9 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Run each requested scanner.
-	var allFindings []aotanamiv1alpha1.Finding
+	var allFindings []zelyov1alpha1.Finding
 	var scanErrors []string
-	var summary aotanamiv1alpha1.ScanSummary
+	var summary zelyov1alpha1.ScanSummary
 	summary.ResourcesScanned = int32(len(pods)) //nolint:gosec // Pod count is bounded
 
 	for _, scannerName := range scan.Spec.Scanners {
@@ -161,7 +161,7 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		results, scanErr := s.Scan(ctx, pods, nil)
 		if scanErr != nil {
 			log.Error(scanErr, "Scanner failed", "scanner", s.Name())
-			r.Recorder.Event(scan, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonReconcileError,
+			r.Recorder.Event(scan, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 				fmt.Sprintf("Scanner %q failed: %v", s.Name(), scanErr))
 			scanErrors = append(scanErrors, fmt.Sprintf("%s: %v", s.Name(), scanErr))
 			continue
@@ -169,13 +169,13 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 		for i := range results {
 			f := &results[i]
-			finding := aotanamiv1alpha1.Finding{
+			finding := zelyov1alpha1.Finding{
 				ID:          fmt.Sprintf("%s-%s-%s-%s", f.RuleType, f.ResourceNamespace, f.ResourceName, f.Title[:min(len(f.Title), 20)]),
 				Severity:    f.Severity,
 				Category:    f.RuleType,
 				Title:       f.Title,
 				Description: f.Description,
-				Resource: aotanamiv1alpha1.AffectedResource{
+				Resource: zelyov1alpha1.AffectedResource{
 					Kind:      f.ResourceKind,
 					Namespace: f.ResourceNamespace,
 					Name:      f.ResourceName,
@@ -186,15 +186,15 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 			// Update summary counts.
 			switch f.Severity {
-			case aotanamiv1alpha1.SeverityCritical:
+			case zelyov1alpha1.SeverityCritical:
 				summary.Critical++
-			case aotanamiv1alpha1.SeverityHigh:
+			case zelyov1alpha1.SeverityHigh:
 				summary.High++
-			case aotanamiv1alpha1.SeverityMedium:
+			case zelyov1alpha1.SeverityMedium:
 				summary.Medium++
-			case aotanamiv1alpha1.SeverityLow:
+			case zelyov1alpha1.SeverityLow:
 				summary.Low++
-			case aotanamiv1alpha1.SeverityInfo:
+			case zelyov1alpha1.SeverityInfo:
 				summary.Info++
 			}
 		}
@@ -236,15 +236,15 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// ── Create ScanReport child resource ──
 	reportName := fmt.Sprintf("%s-%d", scan.Name, time.Now().Unix())
-	report := &aotanamiv1alpha1.ScanReport{
+	report := &zelyov1alpha1.ScanReport{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      reportName,
 			Namespace: scan.Namespace,
 			Labels: map[string]string{
-				"aotanami.com/scan": scan.Name,
+				"zelyo.ai/scan": scan.Name,
 			},
 		},
-		Spec: aotanamiv1alpha1.ScanReportSpec{
+		Spec: zelyov1alpha1.ScanReportSpec{
 			ScanRef:  scan.Name,
 			Findings: allFindings,
 			Summary:  summary,
@@ -261,9 +261,9 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Mark the report as complete.
-	report.Status.Phase = aotanamiv1alpha1.PhaseComplete
-	conditions.MarkTrue(&report.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-		aotanamiv1alpha1.ReasonReconcileSuccess, "Report is complete", report.Generation)
+	report.Status.Phase = zelyov1alpha1.PhaseComplete
+	conditions.MarkTrue(&report.Status.Conditions, zelyov1alpha1.ConditionReady,
+		zelyov1alpha1.ReasonReconcileSuccess, "Report is complete", report.Generation)
 	if err := r.Status().Update(ctx, report); err != nil {
 		log.Error(err, "Failed to update ScanReport status")
 	}
@@ -280,28 +280,28 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	scan.Status.FindingsCount = summary.TotalFindings
 	scan.Status.LastReportName = reportName
 
-	conditions.MarkTrue(&scan.Status.Conditions, aotanamiv1alpha1.ConditionScanCompleted,
-		aotanamiv1alpha1.ReasonScanSuccess,
+	conditions.MarkTrue(&scan.Status.Conditions, zelyov1alpha1.ConditionScanCompleted,
+		zelyov1alpha1.ReasonScanSuccess,
 		fmt.Sprintf("Scan completed: %d findings across %d resources", summary.TotalFindings, summary.ResourcesScanned),
 		scan.Generation)
 
 	if len(scanErrors) > 0 {
-		conditions.MarkFalse(&scan.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-			aotanamiv1alpha1.ReasonReconcileFailed,
+		conditions.MarkFalse(&scan.Status.Conditions, zelyov1alpha1.ConditionReady,
+			zelyov1alpha1.ReasonReconcileFailed,
 			fmt.Sprintf("Scans completed with %d error(s): %s", len(scanErrors), strings.Join(scanErrors, "; ")),
 			scan.Generation)
-		scan.Status.Phase = aotanamiv1alpha1.PhaseDegraded
+		scan.Status.Phase = zelyov1alpha1.PhaseDegraded
 	} else {
-		conditions.MarkTrue(&scan.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-			aotanamiv1alpha1.ReasonReconcileSuccess, "Scan completed successfully", scan.Generation)
-		scan.Status.Phase = aotanamiv1alpha1.PhaseCompleted
+		conditions.MarkTrue(&scan.Status.Conditions, zelyov1alpha1.ConditionReady,
+			zelyov1alpha1.ReasonReconcileSuccess, "Scan completed successfully", scan.Generation)
+		scan.Status.Phase = zelyov1alpha1.PhaseCompleted
 	}
 
 	if err := r.Status().Update(ctx, scan); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 	}
 
-	r.Recorder.Event(scan, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonScanCompleted,
+	r.Recorder.Event(scan, corev1.EventTypeNormal, zelyov1alpha1.EventReasonScanCompleted,
 		fmt.Sprintf("Scan completed: %d findings (C:%d H:%d M:%d L:%d I:%d) — report: %s",
 			summary.TotalFindings, summary.Critical, summary.High, summary.Medium, summary.Low, summary.Info, reportName))
 
@@ -320,7 +320,7 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 // resolveTargetPods lists running pods matching the scan's scope.
-func (r *ClusterScanReconciler) resolveTargetPods(ctx context.Context, scan *aotanamiv1alpha1.ClusterScan) ([]corev1.Pod, error) {
+func (r *ClusterScanReconciler) resolveTargetPods(ctx context.Context, scan *zelyov1alpha1.ClusterScan) ([]corev1.Pod, error) {
 	var targetNamespaces []string
 
 	if len(scan.Spec.Scope.Namespaces) > 0 {
@@ -360,13 +360,13 @@ func (r *ClusterScanReconciler) resolveTargetPods(ctx context.Context, scan *aot
 }
 
 // cleanupScanReports removes all ScanReport resources owned by this ClusterScan.
-func (r *ClusterScanReconciler) cleanupScanReports(ctx context.Context, scan *aotanamiv1alpha1.ClusterScan) error {
+func (r *ClusterScanReconciler) cleanupScanReports(ctx context.Context, scan *zelyov1alpha1.ClusterScan) error {
 	log := logf.FromContext(ctx)
 
-	reportList := &aotanamiv1alpha1.ScanReportList{}
+	reportList := &zelyov1alpha1.ScanReportList{}
 	if err := r.List(ctx, reportList,
 		client.InNamespace(scan.Namespace),
-		client.MatchingLabels{"aotanami.com/scan": scan.Name}); err != nil {
+		client.MatchingLabels{"zelyo.ai/scan": scan.Name}); err != nil {
 		return fmt.Errorf("listing ScanReports: %w", err)
 	}
 
@@ -381,7 +381,7 @@ func (r *ClusterScanReconciler) cleanupScanReports(ctx context.Context, scan *ao
 }
 
 // enforceHistoryLimit removes old ScanReports exceeding the history limit.
-func (r *ClusterScanReconciler) enforceHistoryLimit(ctx context.Context, scan *aotanamiv1alpha1.ClusterScan) error {
+func (r *ClusterScanReconciler) enforceHistoryLimit(ctx context.Context, scan *zelyov1alpha1.ClusterScan) error {
 	log := logf.FromContext(ctx)
 
 	historyLimit := scan.Spec.HistoryLimit
@@ -389,10 +389,10 @@ func (r *ClusterScanReconciler) enforceHistoryLimit(ctx context.Context, scan *a
 		historyLimit = 10
 	}
 
-	reportList := &aotanamiv1alpha1.ScanReportList{}
+	reportList := &zelyov1alpha1.ScanReportList{}
 	if err := r.List(ctx, reportList,
 		client.InNamespace(scan.Namespace),
-		client.MatchingLabels{"aotanami.com/scan": scan.Name}); err != nil {
+		client.MatchingLabels{"zelyo.ai/scan": scan.Name}); err != nil {
 		return fmt.Errorf("listing ScanReports: %w", err)
 	}
 
@@ -422,8 +422,8 @@ func (r *ClusterScanReconciler) enforceHistoryLimit(ctx context.Context, scan *a
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterScanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&aotanamiv1alpha1.ClusterScan{}).
-		Owns(&aotanamiv1alpha1.ScanReport{}).
+		For(&zelyov1alpha1.ClusterScan{}).
+		Owns(&zelyov1alpha1.ScanReport{}).
 		Named("clusterscan").
 		Complete(r)
 }

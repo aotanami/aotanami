@@ -1,17 +1,17 @@
 # Quick Start Recipes
 
-Practical recipes for common Aotanami use cases. Copy-paste these and modify to fit your environment.
+Practical recipes for common Zelyo Operator use cases. Copy-paste these and modify to fit your environment.
 
 ## Recipe 1: Scan All Production Pods for Security Issues
 
 **Goal**: Find every security misconfiguration in your production namespaces.
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: SecurityPolicy
 metadata:
   name: production-security-baseline
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   severity: medium
   match:
@@ -48,8 +48,8 @@ spec:
 kubectl apply -f production-security-baseline.yaml
 
 # Check results
-kubectl get securitypolicies -n aotanami-system
-kubectl describe securitypolicy production-security-baseline -n aotanami-system
+kubectl get securitypolicies -n zelyo-system
+kubectl describe securitypolicy production-security-baseline -n zelyo-system
 ```
 
 ---
@@ -59,11 +59,11 @@ kubectl describe securitypolicy production-security-baseline -n aotanami-system
 **Goal**: Only get alerted on critical and high-severity issues — no noise.
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: SecurityPolicy
 metadata:
   name: critical-only
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   severity: high  # Filter out medium, low, info
   match:
@@ -90,11 +90,11 @@ spec:
 **Goal**: Run all 8 scanners every night at 2 AM, keep 30 days of reports.
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: ClusterScan
 metadata:
   name: nightly-full-scan
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   schedule: "0 2 * * *"
   scanners:
@@ -115,12 +115,12 @@ spec:
 
 ```bash
 # View recent scan reports
-kubectl get scanreports -n aotanami-system --sort-by=.metadata.creationTimestamp
+kubectl get scanreports -n zelyo-system --sort-by=.metadata.creationTimestamp
 
 # View the latest report
-kubectl describe scanreport $(kubectl get scanreports -n aotanami-system \
+kubectl describe scanreport $(kubectl get scanreports -n zelyo-system \
   --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}') \
-  -n aotanami-system
+  -n zelyo-system
 ```
 
 ---
@@ -130,11 +130,11 @@ kubectl describe scanreport $(kubectl get scanreports -n aotanami-system \
 **Goal**: Find pods wasting resources and get rightsizing recommendations.
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: CostPolicy
 metadata:
   name: optimize-production
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   targetNamespaces: ["production"]
   resizeStrategy: conservative
@@ -150,7 +150,7 @@ spec:
 
 ```bash
 # Check recommendations
-kubectl get costpolicy optimize-production -n aotanami-system -o wide
+kubectl get costpolicy optimize-production -n zelyo-system -o wide
 ```
 
 ---
@@ -163,18 +163,18 @@ kubectl get costpolicy optimize-production -n aotanami-system -o wide
 
 ```bash
 kubectl create secret generic slack-token \
-  --namespace aotanami-system \
+  --namespace zelyo-system \
   --from-literal=webhook-url=https://hooks.slack.com/services/YOUR_WORKSPACE/YOUR_CHANNEL/YOUR_TOKEN
 ```
 
 **Step 2**: Create the NotificationChannel:
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: NotificationChannel
 metadata:
   name: slack-security
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   type: slack
   credentialSecret: slack-token
@@ -189,11 +189,11 @@ spec:
 **Step 3**: Reference it in a MonitoringPolicy:
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: MonitoringPolicy
 metadata:
   name: production-monitoring
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   targetNamespaces: ["production"]
   notificationChannels: ["slack-security"]
@@ -206,24 +206,24 @@ spec:
 
 ## Recipe 6: GitOps Automated Remediation
 
-**Goal**: Aotanami automatically creates PRs to fix security issues.
+**Goal**: Zelyo Operator automatically creates PRs to fix security issues.
 
 **Step 1**: Create GitHub authentication:
 
 ```bash
 kubectl create secret generic github-creds \
-  --namespace aotanami-system \
+  --namespace zelyo-system \
   --from-literal=token=ghp_xxxxxxxxxxxxxxxxxxxx
 ```
 
 **Step 2**: Onboard your GitOps repository:
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: GitOpsRepository
 metadata:
   name: infra-repo
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   url: https://github.com/my-org/k8s-manifests
   branch: main
@@ -236,18 +236,18 @@ spec:
 **Step 3**: Create a RemediationPolicy:
 
 ```yaml
-apiVersion: aotanami.com/v1alpha1
+apiVersion: zelyo.ai/v1alpha1
 kind: RemediationPolicy
 metadata:
   name: auto-fix-security
-  namespace: aotanami-system
+  namespace: zelyo-system
 spec:
   targetPolicies: ["production-security-baseline"]
   gitOpsRepository: infra-repo
   prTemplate:
-    titlePrefix: "[Aotanami Auto-Fix]"
+    titlePrefix: "[Zelyo Operator Auto-Fix]"
     labels: ["security", "automated"]
-    branchPrefix: "aotanami/fix-"
+    branchPrefix: "zelyo-operator/fix-"
   severityFilter: high
   maxConcurrentPRs: 3
   dryRun: false
@@ -259,15 +259,15 @@ spec:
 ## Useful kubectl Commands
 
 ```bash
-# List all Aotanami resources
-kubectl get securitypolicies,clusterscans,scanreports,costpolicies,monitoringpolicies,notificationchannels,remediationpolicies,gitopsrepositories,aotanamiconfigs -A
+# List all Zelyo Operator resources
+kubectl get securitypolicies,clusterscans,scanreports,costpolicies,monitoringpolicies,notificationchannels,remediationpolicies,gitopsrepositories,zelyoconfigs -A
 
 # Check operator health
-kubectl get pods -n aotanami-system
-kubectl logs -f deploy/aotanami-controller-manager -n aotanami-system
+kubectl get pods -n zelyo-system
+kubectl logs -f deploy/zelyo-operator-controller-manager -n zelyo-system
 
 # View events for a specific resource
-kubectl events --for securitypolicy/production-security-baseline -n aotanami-system
+kubectl events --for securitypolicy/production-security-baseline -n zelyo-system
 
 # Get conditions as JSON (pipe to jq for formatting)
 kubectl get securitypolicy my-policy -o jsonpath='{.status.conditions}' | jq .

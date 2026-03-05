@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -93,7 +93,7 @@ type RateLimitConfig struct {
 
 // SlackConfig contains Slack-specific settings.
 type SlackConfig struct {
-	// channel is the Slack channel to send notifications to (e.g., #aotanami-alerts).
+	// channel is the Slack channel to send notifications to (e.g., #zelyo-operator-alerts).
 	// +required
 	Channel string `json:"channel"`
 }
@@ -113,7 +113,7 @@ type PagerDutyConfig struct {
 	// +optional
 	RoutingKeyKey string `json:"routingKeyKey,omitempty"`
 
-	// severity mapping from Aotanami severity to PagerDuty severity.
+	// severity mapping from Zelyo Operator severity to PagerDuty severity.
 	// +kubebuilder:validation:Enum=critical;error;warning;info
 	// +kubebuilder:default=error
 	// +optional
@@ -221,7 +221,7 @@ type NotificationChannelStatus struct {
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // NotificationChannel is the Schema for the notificationchannels API.
-// It configures a destination for Aotanami alerts and reports.
+// It configures a destination for Zelyo Operator alerts and reports.
 type NotificationChannel struct {
 	metav1.TypeMeta `json:",inline"`
 

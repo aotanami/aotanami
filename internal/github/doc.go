@@ -1,7 +1,7 @@
-// Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+// Copyright 2026 Zelyo AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package github provides the GitHub App client for Aotanami.
+// Package github provides the GitHub App client for Zelyo Operator.
 //
 // # Architecture
 //
@@ -15,6 +15,6 @@
 //   - Repository Access: Read access to repository contents for drift detection
 //
 // The package uses only Go's standard library (net/http, crypto) with zero
-// external dependencies, and is configured via the AotanamiConfig's GitHub
+// external dependencies, and is configured via the ZelyoConfig's GitHub
 // App settings.
 package github

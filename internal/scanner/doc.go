@@ -1,7 +1,7 @@
-// Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+// Copyright 2026 Zelyo AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package scanner provides security and misconfiguration scanning for Aotanami.
+// Package scanner provides security and misconfiguration scanning for Zelyo Operator.
 //
 // # Architecture
 //
@@ -18,5 +18,5 @@
 //   - Service Account: Default service account usage, automounted tokens
 //
 // Scan results are stored as ScanReport CRDs and can be queried via kubectl
-// or the Aotanami dashboard.
+// or the Zelyo Operator dashboard.
 package scanner

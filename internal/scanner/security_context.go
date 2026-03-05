@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 )
 
 // ContainerSecurityContextScanner checks containers for insecure security contexts:
@@ -41,7 +41,7 @@ func (s *ContainerSecurityContextScanner) Name() string {
 
 // RuleType implements Scanner.
 func (s *ContainerSecurityContextScanner) RuleType() string {
-	return aotanamiv1alpha1.RuleTypeContainerSecurityContext
+	return zelyov1alpha1.RuleTypeContainerSecurityContext
 }
 
 // Scan implements Scanner.
@@ -60,7 +60,7 @@ func (s *ContainerSecurityContextScanner) Scan(_ context.Context, pods []corev1.
 			if sc == nil {
 				findings = append(findings, Finding{
 					RuleType:          s.RuleType(),
-					Severity:          aotanamiv1alpha1.SeverityHigh,
+					Severity:          zelyov1alpha1.SeverityHigh,
 					Title:             fmt.Sprintf("Container %q has no security context", container.Name),
 					Description:       "No SecurityContext is defined. This means the container runs with default privileges, which may be excessive.",
 					ResourceKind:      "Pod",
@@ -75,7 +75,7 @@ func (s *ContainerSecurityContextScanner) Scan(_ context.Context, pods []corev1.
 			if sc.Privileged != nil && *sc.Privileged {
 				findings = append(findings, Finding{
 					RuleType:          s.RuleType(),
-					Severity:          aotanamiv1alpha1.SeverityCritical,
+					Severity:          zelyov1alpha1.SeverityCritical,
 					Title:             fmt.Sprintf("Container %q runs as privileged", container.Name),
 					Description:       "Running as privileged gives the container full access to the host. This is a critical security risk.",
 					ResourceKind:      "Pod",
@@ -95,7 +95,7 @@ func (s *ContainerSecurityContextScanner) Scan(_ context.Context, pods []corev1.
 				if !podRunAsNonRoot {
 					findings = append(findings, Finding{
 						RuleType:          s.RuleType(),
-						Severity:          aotanamiv1alpha1.SeverityMedium,
+						Severity:          zelyov1alpha1.SeverityMedium,
 						Title:             fmt.Sprintf("Container %q may run as root", container.Name),
 						Description:       "runAsNonRoot is not set to true. The container may run as UID 0 (root).",
 						ResourceKind:      "Pod",
@@ -110,7 +110,7 @@ func (s *ContainerSecurityContextScanner) Scan(_ context.Context, pods []corev1.
 			if sc.ReadOnlyRootFilesystem == nil || !*sc.ReadOnlyRootFilesystem {
 				findings = append(findings, Finding{
 					RuleType:          s.RuleType(),
-					Severity:          aotanamiv1alpha1.SeverityLow,
+					Severity:          zelyov1alpha1.SeverityLow,
 					Title:             fmt.Sprintf("Container %q has writable root filesystem", container.Name),
 					Description:       "readOnlyRootFilesystem is not set to true. An attacker could write to the container filesystem.",
 					ResourceKind:      "Pod",
@@ -124,7 +124,7 @@ func (s *ContainerSecurityContextScanner) Scan(_ context.Context, pods []corev1.
 			if sc.AllowPrivilegeEscalation == nil || *sc.AllowPrivilegeEscalation {
 				findings = append(findings, Finding{
 					RuleType:          s.RuleType(),
-					Severity:          aotanamiv1alpha1.SeverityMedium,
+					Severity:          zelyov1alpha1.SeverityMedium,
 					Title:             fmt.Sprintf("Container %q allows privilege escalation", container.Name),
 					Description:       "allowPrivilegeEscalation is not set to false. A process inside the container could gain more privileges than its parent.",
 					ResourceKind:      "Pod",

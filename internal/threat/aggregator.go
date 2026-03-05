@@ -1,8 +1,8 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
-// Package threat provides threat intelligence integration for Aotanami.
+// Package threat provides threat intelligence integration for Zelyo Operator.
 // It aggregates data from CVE feeds, known-bad image registries, and EPSS
 // scoring to enrich security findings with real-world threat context.
 package threat

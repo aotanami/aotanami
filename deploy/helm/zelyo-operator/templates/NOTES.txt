@@ -1,0 +1,81 @@
+╔══════════════════════════════════════════════════════════════╗
+║  Zelyo Operator — Autonomous Kubernetes Protection                ║
+║  Powered by Agentic AI                                      ║
+╚══════════════════════════════════════════════════════════════╝
+
+🚀 Zelyo Operator has been installed in namespace: {{ include "zelyo-operator.namespace" . }}
+
+  Release: {{ .Release.Name }}
+  Version: {{ .Chart.AppVersion }}
+  Mode:    {{ .Values.config.mode }}
+
+── Quick Start ──────────────────────────────────────────────────
+
+1. Verify the operator is running:
+
+   kubectl get pods -n {{ include "zelyo-operator.namespace" . }} -l {{ include "zelyo-operator.selectorLabels" . | replace ": " "=" | replace "\n" "," }}
+
+2. Create your first SecurityPolicy:
+
+   cat <<EOF | kubectl apply -f -
+   apiVersion: zelyo.ai/v1alpha1
+   kind: SecurityPolicy
+   metadata:
+     name: baseline
+     namespace: {{ include "zelyo-operator.namespace" . }}
+   spec:
+     severity: medium
+     rules:
+       - name: security-context
+         type: container-security-context
+         enforce: true
+       - name: resource-limits
+         type: resource-limits
+         enforce: true
+   EOF
+
+3. Check for violations:
+
+   kubectl get securitypolicies -n {{ include "zelyo-operator.namespace" . }}
+
+{{- if .Values.config.dashboard.enabled }}
+
+── Dashboard ────────────────────────────────────────────────────
+
+  The Zelyo Operator dashboard is available at:
+
+  {{- if .Values.ingress.enabled }}
+  {{- range .Values.ingress.hosts }}
+    https://{{ .host }}{{ (index .paths 0).path }}
+  {{- end }}
+  {{- else }}
+    kubectl port-forward -n {{ include "zelyo-operator.namespace" . }} svc/{{ include "zelyo-operator.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+    open http://localhost:{{ .Values.service.port }}
+  {{- end }}
+{{- end }}
+
+{{- if .Values.metrics.serviceMonitor.enabled }}
+
+── Monitoring ───────────────────────────────────────────────────
+
+  ServiceMonitor created — Prometheus will auto-discover metrics.
+  Look for metrics prefixed with: zelyo-operator_
+
+{{- end }}
+
+{{- if and .Values.config.llm.apiKeySecret (ne .Values.config.llm.apiKeySecret "") }}
+
+── LLM Configuration ─────────────────────────────────────────────
+
+  ⚠️  Create the LLM API key secret before the operator can use AI features:
+
+  kubectl create secret generic {{ .Values.config.llm.apiKeySecret }} \
+    --from-literal=api-key=YOUR_API_KEY \
+    -n {{ include "zelyo-operator.namespace" . }}
+
+{{- end }}
+
+── Documentation ────────────────────────────────────────────────
+
+  📚 Full docs: https://github.com/zelyo-ai/zelyo-operator/tree/main/docs
+  🐛 Issues:    https://github.com/zelyo-ai/zelyo-operator/issues

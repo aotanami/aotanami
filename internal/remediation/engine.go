@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
 // Package remediation provides the auto-fix engine that generates Kubernetes
@@ -15,9 +15,9 @@ import (
 
 	"github.com/go-logr/logr"
 
-	"github.com/aotanami/aotanami/internal/gitops"
-	"github.com/aotanami/aotanami/internal/llm"
-	"github.com/aotanami/aotanami/internal/scanner"
+	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
+	"github.com/zelyo-ai/zelyo-operator/internal/llm"
+	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
 )
 
 // Strategy defines how a remediation should be applied.
@@ -187,7 +187,7 @@ func (e *Engine) createPR(ctx context.Context, plan *Plan, owner, repo string) (
 		Body:       gitops.PRBody(plan.Finding.RuleType, plan.Finding.ResourceName, plan.Finding.ResourceNamespace, plan.Finding.Description, plan.LLMAnalysis),
 		BaseBranch: "main",
 		HeadBranch: gitops.BranchName(plan.Finding.ResourceName, plan.Finding.ResourceNamespace, plan.Finding.Title),
-		Labels:     []string{"aotanami", "security", "automated"},
+		Labels:     []string{"zelyo-operator", "security", "automated"},
 		Files:      files,
 	}
 
@@ -204,7 +204,7 @@ func (e *Engine) createPR(ctx context.Context, plan *Plan, owner, repo string) (
 	return result, nil
 }
 
-const systemPrompt = `You are Aotanami, an autonomous Kubernetes security operator.
+const systemPrompt = `You are Zelyo Operator, an autonomous Kubernetes security operator.
 Your job is to analyze security findings and recommend precise, safe fixes.
 
 Rules:

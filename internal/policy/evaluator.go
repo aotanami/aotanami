@@ -1,8 +1,8 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
-// Package policy provides policy evaluation logic for Aotanami. It handles the
+// Package policy provides policy evaluation logic for Zelyo Operator. It handles the
 // mapping between security findings and policy rules, determining which findings
 // should be enforced vs. reported, and managing policy exceptions.
 package policy

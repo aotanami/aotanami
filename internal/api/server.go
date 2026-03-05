@@ -1,8 +1,8 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
-// Package api provides the public REST API for external integrations with Aotanami.
+// Package api provides the public REST API for external integrations with Zelyo Operator.
 package api
 
 import (
@@ -76,7 +76,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
 	s.writeJSON(w, http.StatusOK, Response{
 		Status: "ok",
-		Data:   map[string]string{"name": "Aotanami", "version": "0.1.0"},
+		Data:   map[string]string{"name": "Zelyo Operator", "version": "0.1.0"},
 	})
 }
 

@@ -10,8 +10,8 @@ permissions: {}
 
 env:
   REGISTRY: ghcr.io
-  HELM_REGISTRY: ghcr.io/aotanami/charts
-  CHART_PATH: deploy/helm/aotanami
+  HELM_REGISTRY: ghcr.io/zelyo-ai/charts
+  CHART_PATH: deploy/helm/zelyo-operator
 
 jobs:
   release-helm:
@@ -79,7 +79,7 @@ jobs:
 
       # ── Validate template rendering ──
       - name: Validate template rendering
-        run: helm template aotanami "${{ env.CHART_PATH }}" --debug > /dev/null
+        run: helm template zelyo-operator "${{ env.CHART_PATH }}" --debug > /dev/null
 
       # ── Package ──
       - name: Package Helm chart
@@ -90,7 +90,7 @@ jobs:
       - name: Push Helm chart to GHCR (OCI)
         id: helm-push
         run: |
-          CHART_PACKAGE=".helm-packages/aotanami-${{ steps.version.outputs.version }}.tgz"
+          CHART_PACKAGE=".helm-packages/zelyo-operator-${{ steps.version.outputs.version }}.tgz"
           # Push and capture the output to extract the digest
           PUSH_OUT=$(helm push "${CHART_PACKAGE}" "oci://${{ env.HELM_REGISTRY }}" 2>&1)
           echo "$PUSH_OUT"
@@ -102,12 +102,12 @@ jobs:
       - name: Sign Helm chart OCI artifact
         run: |
           cosign sign --yes \
-            "${{ env.HELM_REGISTRY }}/aotanami@${{ steps.helm-push.outputs.digest }}"
+            "${{ env.HELM_REGISTRY }}/zelyo-operator@${{ steps.helm-push.outputs.digest }}"
 
       # ── SBOM for the chart package ──
       - name: Generate Helm chart SBOM
         run: |
-          CHART_PACKAGE=".helm-packages/aotanami-${{ steps.version.outputs.version }}.tgz"
+          CHART_PACKAGE=".helm-packages/zelyo-operator-${{ steps.version.outputs.version }}.tgz"
           syft "${CHART_PACKAGE}" \
             -o spdx-json=helm-sbom-spdx.json \
             -o cyclonedx-json=helm-sbom-cyclonedx.json
@@ -118,7 +118,7 @@ jobs:
           cosign attest --yes \
             --predicate helm-sbom-spdx.json \
             --type spdxjson \
-            "${{ env.HELM_REGISTRY }}/aotanami@${{ steps.helm-push.outputs.digest }}"
+            "${{ env.HELM_REGISTRY }}/zelyo-operator@${{ steps.helm-push.outputs.digest }}"
 
       # ── Upload SBOMs as release assets ──
       - name: Upload Helm SBOMs to release

@@ -1,6 +1,6 @@
 # Supply Chain Security
 
-All Aotanami release artifacts are signed, attested, and scanned. This guide explains how to verify them.
+All Zelyo Operator release artifacts are signed, attested, and scanned. This guide explains how to verify them.
 
 ## Security Guarantees
 
@@ -20,8 +20,8 @@ Every release image is signed with [Cosign](https://github.com/sigstore/cosign) 
 
 ```bash
 # Verify the image signature
-cosign verify ghcr.io/aotanami/aotanami:v0.1.0 \
-  --certificate-identity-regexp='https://github.com/aotanami/aotanami' \
+cosign verify ghcr.io/zelyo-ai/zelyo-operator:v0.1.0 \
+  --certificate-identity-regexp='https://github.com/zelyo-ai/zelyo-operator' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com'
 ```
 
@@ -30,8 +30,8 @@ cosign verify ghcr.io/aotanami/aotanami:v0.1.0 \
 Helm OCI charts are also Cosign-signed:
 
 ```bash
-cosign verify ghcr.io/aotanami/charts/aotanami:0.1.0 \
-  --certificate-identity-regexp='https://github.com/aotanami/aotanami' \
+cosign verify ghcr.io/zelyo-ai/charts/zelyo-operator:0.1.0 \
+  --certificate-identity-regexp='https://github.com/zelyo-ai/zelyo-operator' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com'
 ```
 
@@ -41,14 +41,14 @@ Release images include [SLSA Level 3](https://slsa.dev/) provenance attestations
 
 ```bash
 # Verify SLSA provenance
-cosign verify-attestation ghcr.io/aotanami/aotanami:v0.1.0 \
+cosign verify-attestation ghcr.io/zelyo-ai/zelyo-operator:v0.1.0 \
   --type slsaprovenance \
   --certificate-identity-regexp='https://github.com/slsa-framework/slsa-github-generator' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com'
 
 # Or using the SLSA verifier CLI
-slsa-verifier verify-image ghcr.io/aotanami/aotanami:v0.1.0 \
-  --source-uri github.com/aotanami/aotanami
+slsa-verifier verify-image ghcr.io/zelyo-ai/zelyo-operator:v0.1.0 \
+  --source-uri github.com/zelyo-ai/zelyo-operator
 ```
 
 ## SBOMs
@@ -61,9 +61,9 @@ Each release includes Software Bills of Materials in both SPDX and CycloneDX for
 
 ```bash
 # Verify SBOM attestation
-cosign verify-attestation ghcr.io/aotanami/aotanami:v0.1.0 \
+cosign verify-attestation ghcr.io/zelyo-ai/zelyo-operator:v0.1.0 \
   --type spdxjson \
-  --certificate-identity-regexp='https://github.com/aotanami/aotanami' \
+  --certificate-identity-regexp='https://github.com/zelyo-ai/zelyo-operator' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com'
 
 # Download SBOMs from release page:
@@ -79,7 +79,7 @@ Every release is scanned with [Grype](https://github.com/anchore/grype). Release
 
 | Artifact | Registry | Signing | Attestations |
 |---|---|---|---|
-| Container image | `ghcr.io/aotanami/aotanami` | Cosign keyless | SBOM (SPDX + CycloneDX), SLSA L3 Provenance |
-| Helm chart (OCI) | `ghcr.io/aotanami/charts/aotanami` | Cosign keyless | SBOM (SPDX) |
+| Container image | `ghcr.io/zelyo-ai/zelyo-operator` | Cosign keyless | SBOM (SPDX + CycloneDX), SLSA L3 Provenance |
+| Helm chart (OCI) | `ghcr.io/zelyo-ai/charts/zelyo-operator` | Cosign keyless | SBOM (SPDX) |
 | SBOMs | GitHub Release + OCI | — | SPDX, CycloneDX |
 | Vulnerability scan | GitHub Security (SARIF) | — | Grype |

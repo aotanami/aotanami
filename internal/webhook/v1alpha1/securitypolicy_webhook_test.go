@@ -1,5 +1,5 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,21 +20,21 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 	// TODO (user): Add any additional imports if needed
 )
 
 var _ = Describe("SecurityPolicy Webhook", func() {
 	var (
-		obj       *aotanamiv1alpha1.SecurityPolicy
-		oldObj    *aotanamiv1alpha1.SecurityPolicy
+		obj       *zelyov1alpha1.SecurityPolicy
+		oldObj    *zelyov1alpha1.SecurityPolicy
 		validator SecurityPolicyCustomValidator
 		defaulter SecurityPolicyCustomDefaulter
 	)
 
 	BeforeEach(func() {
-		obj = &aotanamiv1alpha1.SecurityPolicy{}
-		oldObj = &aotanamiv1alpha1.SecurityPolicy{}
+		obj = &zelyov1alpha1.SecurityPolicy{}
+		oldObj = &zelyov1alpha1.SecurityPolicy{}
 		validator = SecurityPolicyCustomValidator{}
 		Expect(validator).NotTo(BeNil(), "Expected validator to be initialized")
 		defaulter = SecurityPolicyCustomDefaulter{}

@@ -2,9 +2,9 @@
 title: Contributing
 ---
 
-# Contributing to Aotanami
+# Contributing to Zelyo Operator
 
-Thank you for your interest in contributing to Aotanami! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Zelyo Operator! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct
 
@@ -14,10 +14,10 @@ By participating in this project, you agree to abide by our [Code of Conduct](co
 
 ### Reporting Issues
 
-- Use [GitHub Issues](https://github.com/aotanami/aotanami/issues) for bug reports and feature requests
+- Use [GitHub Issues](https://github.com/zelyo-ai/zelyo-operator/issues) for bug reports and feature requests
 - **Security vulnerabilities**: Please see our [Security Policy](security.md) — do not use public issues
 - Include reproduction steps, expected behavior, and actual behavior
-- Include your Kubernetes version, Aotanami version, and cloud provider
+- Include your Kubernetes version, Zelyo Operator version, and cloud provider
 
 ### Pull Requests
 
@@ -66,11 +66,11 @@ docs(api): add OpenAPI spec for incidents endpoint
 
 ```bash
 # Clone your fork
-git clone https://github.com/<your-username>/aotanami.git
-cd aotanami
+git clone https://github.com/<your-username>/zelyo-operator.git
+cd zelyo-operator
 
 # Add upstream remote
-git remote add upstream https://github.com/aotanami/aotanami.git
+git remote add upstream https://github.com/zelyo-ai/zelyo-operator.git
 
 # Install dependencies
 make install
@@ -82,7 +82,7 @@ make manifests generate
 make test
 
 # Run locally against a kind cluster
-kind create cluster --name aotanami-dev
+kind create cluster --name zelyo-operator-dev
 make install  # Install CRDs
 make run      # Run the operator
 ```
@@ -142,8 +142,8 @@ go test ./internal/scanner/... -v
 
 ## Questions?
 
-Open a [Discussion](https://github.com/aotanami/aotanami/discussions) for questions about the project.
+Open a [Discussion](https://github.com/zelyo-ai/zelyo-operator/discussions) for questions about the project.
 
 ---
 
-Thank you for contributing to Aotanami! 🎉
+Thank you for contributing to Zelyo Operator! 🎉

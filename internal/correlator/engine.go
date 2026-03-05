@@ -1,8 +1,8 @@
 /*
-Copyright 2026 The Aotanami Authors. Originally created by Zelyo AI.
+Copyright 2026 Zelyo AI
 */
 
-// Package correlator provides cross-signal event correlation for Aotanami.
+// Package correlator provides cross-signal event correlation for Zelyo Operator.
 // It links security events, pod crashes, anomalies, and deployments into
 // unified incidents for holistic threat assessment.
 package correlator

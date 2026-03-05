@@ -2,7 +2,7 @@
 
 ## Overview
 
-Aotanami is your **Digital SRE and Security Engineer** — a Kubernetes Operator built with [Kubebuilder](https://kubebuilder.io/) that autonomously **observes**, **reasons about**, and **acts on** security and reliability issues in your production clusters. It runs as a single deployment, continuously protecting your workloads while you focus on building features.
+Zelyo Operator is your **Digital SRE and Security Engineer** — a Kubernetes Operator built with [Kubebuilder](https://kubebuilder.io/) that autonomously **observes**, **reasons about**, and **acts on** security and reliability issues in your production clusters. It runs as a single deployment, continuously protecting your workloads while you focus on building features.
 
 ## How It Works: Observe → Reason → Act
 
@@ -13,7 +13,7 @@ ClusterScan evaluates CIS  →  Compliance framework maps  →                  
 ```
 
 1. **You declare intent** by creating CRDs like `SecurityPolicy`, `MonitoringPolicy`, or `ClusterScan`
-2. **Aotanami observes** — scanning pods, watching restart rates, evaluating compliance
+2. **Zelyo Operator observes** — scanning pods, watching restart rates, evaluating compliance
 3. **The brain reasons** — anomaly detector builds baselines, correlator groups events into incidents, LLM generates structured JSON fix plans
 4. **The engine acts** — remediation engine validates fixes, GitHub engine opens PRs, notifier routes alerts
 5. **It never stops** — continuous reconciliation catches new violations, drift, and anomalies
@@ -30,7 +30,7 @@ graph TB
         Logs[Pod Logs & Metrics]
     end
 
-    subgraph "Aotanami — The Digital SRE"
+    subgraph "Zelyo Operator — The Digital SRE"
         subgraph "Observe (Controllers)"
             SecPolCtrl["SecurityPolicy<br/>pod scanning"]
             MonCtrl["MonitoringPolicy<br/>pod restart watch"]
@@ -125,7 +125,7 @@ The intelligence lives entirely within the `internal/` packages. These form the 
 | **RemediationPolicy** | — | Queries correlator for open incidents | LLM plan → validates → opens GitOps PR |
 | **GitOpsRepository** | Discovers repo structure | — | Provides Git context for remediation |
 | **CostPolicy** | Analyzes resource utilization | Identifies waste | — |
-| **AotanamiConfig** | — | — | Configures global settings |
+| **ZelyoConfig** | — | — | Configures global settings |
 
 ### Controller Lifecycle
 
@@ -179,14 +179,14 @@ Every resource uses **Kubernetes-standard status conditions**:
 
 | Metric | Type | What It Tracks |
 |---|---|---|
-| `aotanami_controller_reconcile_total` | Counter | Reconcile operations per controller |
-| `aotanami_controller_reconcile_duration_seconds` | Histogram | Reconcile latency |
-| `aotanami_scanner_findings_total` | Counter | Findings by scanner and severity |
-| `aotanami_scanner_resources_scanned_total` | Counter | Total resources scanned |
-| `aotanami_policy_violations` | Gauge | Current violations per policy |
-| `aotanami_clusterscan_completed_total` | Counter | Completed cluster scans |
-| `aotanami_clusterscan_findings` | Gauge | Findings from last scan |
-| `aotanami_cost_rightsizing_recommendations` | Gauge | Pending rightsizing recommendations |
+| `zelyo_operator_controller_reconcile_total` | Counter | Reconcile operations per controller |
+| `zelyo_operator_controller_reconcile_duration_seconds` | Histogram | Reconcile latency |
+| `zelyo_operator_scanner_findings_total` | Counter | Findings by scanner and severity |
+| `zelyo_operator_scanner_resources_scanned_total` | Counter | Total resources scanned |
+| `zelyo_operator_policy_violations` | Gauge | Current violations per policy |
+| `zelyo_operator_clusterscan_completed_total` | Counter | Completed cluster scans |
+| `zelyo_operator_clusterscan_findings` | Gauge | Findings from last scan |
+| `zelyo_operator_cost_rightsizing_recommendations` | Gauge | Pending rightsizing recommendations |
 
 ## Security Model
 
@@ -200,7 +200,7 @@ Every resource uses **Kubernetes-standard status conditions**:
 ## Project Layout
 
 ```
-aotanami/
+zelyo-operator/
 ├── api/v1alpha1/           # CRD type definitions (9 types + conditions)
 ├── cmd/main.go             # Entrypoint — wires controllers, brain, scanners
 ├── config/                 # Kustomize manifests (CRDs, RBAC, webhook, samples)
