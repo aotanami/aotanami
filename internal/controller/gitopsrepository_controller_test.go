@@ -26,9 +26,11 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	"github.com/aotanami/aotanami/internal/gitops/source"
 )
 
 var _ = Describe("GitOpsRepository Controller", func() {
@@ -39,13 +41,28 @@ var _ = Describe("GitOpsRepository Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
 		gitopsrepository := &aotanamiv1alpha1.GitOpsRepository{}
 
 		BeforeEach(func() {
+			By("creating the auth secret for the GitOpsRepository")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-auth",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"token": []byte("test-token"),
+				},
+			}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: "test-auth", Namespace: "default"}, &corev1.Secret{})
+			if err != nil && errors.IsNotFound(err) {
+				Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+			}
+
 			By("creating the custom resource for the Kind GitOpsRepository")
-			err := k8sClient.Get(ctx, typeNamespacedName, gitopsrepository)
+			err = k8sClient.Get(ctx, typeNamespacedName, gitopsrepository)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &aotanamiv1alpha1.GitOpsRepository{
 					ObjectMeta: metav1.ObjectMeta{
@@ -63,7 +80,6 @@ var _ = Describe("GitOpsRepository Controller", func() {
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &aotanamiv1alpha1.GitOpsRepository{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
@@ -71,20 +87,123 @@ var _ = Describe("GitOpsRepository Controller", func() {
 			By("Cleanup the specific resource instance GitOpsRepository")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &GitOpsRepositoryReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(100),
+				Client:         k8sClient,
+				Scheme:         k8sClient.Scheme(),
+				Recorder:       record.NewFakeRecorder(100),
+				SourceRegistry: source.DefaultRegistry(),
+				// ControllerRegistry is nil — tests run without ArgoCD/Flux CRDs.
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+		})
+
+		It("should detect source type as raw for basic paths", func() {
+			By("Reconciling and checking status")
+			controllerReconciler := &GitOpsRepositoryReconciler{
+				Client:         k8sClient,
+				Scheme:         k8sClient.Scheme(),
+				Recorder:       record.NewFakeRecorder(100),
+				SourceRegistry: source.DefaultRegistry(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Fetch the updated resource.
+			updated := &aotanamiv1alpha1.GitOpsRepository{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, updated)).To(Succeed())
+
+			// Source type should be auto-detected.
+			Expect(updated.Status.DetectedSourceType).NotTo(BeEmpty())
+		})
+
+		It("should report error when auth secret is missing", func() {
+			By("Creating the auth secret")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-auth",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"token": []byte("test-token"),
+				},
+			}
+			// Create secret if not exists.
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: "test-auth", Namespace: "default"}, &corev1.Secret{})
+			if errors.IsNotFound(err) {
+				Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+			}
+
+			By("Reconciling with secret present")
+			controllerReconciler := &GitOpsRepositoryReconciler{
+				Client:         k8sClient,
+				Scheme:         k8sClient.Scheme(),
+				Recorder:       record.NewFakeRecorder(100),
+				SourceRegistry: source.DefaultRegistry(),
+			}
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Fetch the updated resource.
+			updated := &aotanamiv1alpha1.GitOpsRepository{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, updated)).To(Succeed())
+			Expect(updated.Status.Phase).To(Equal(aotanamiv1alpha1.PhaseSynced))
+
+			// Cleanup secret.
+			Expect(k8sClient.Delete(ctx, secret)).To(Succeed())
+		})
+
+		It("should handle explicit helm source type", func() {
+			By("Creating a GitOps repo with helm source type")
+			helmRepo := &aotanamiv1alpha1.GitOpsRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "helm-test",
+					Namespace: "default",
+				},
+				Spec: aotanamiv1alpha1.GitOpsRepositorySpec{
+					URL:        "https://github.com/test/helm-repo",
+					Paths:      []string{"charts/myapp/"},
+					AuthSecret: "test-auth",
+					SourceType: aotanamiv1alpha1.ManifestSourceHelm,
+					Helm: &aotanamiv1alpha1.HelmSource{
+						ChartPath:        "charts/myapp/",
+						ReleaseName:      "myapp",
+						ReleaseNamespace: "production",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, helmRepo)).To(Succeed())
+
+			controllerReconciler := &GitOpsRepositoryReconciler{
+				Client:         k8sClient,
+				Scheme:         k8sClient.Scheme(),
+				Recorder:       record.NewFakeRecorder(100),
+				SourceRegistry: source.DefaultRegistry(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "helm-test", Namespace: "default"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			updated := &aotanamiv1alpha1.GitOpsRepository{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "helm-test", Namespace: "default"}, updated)).To(Succeed())
+			Expect(updated.Status.DetectedSourceType).To(Equal(aotanamiv1alpha1.ManifestSourceHelm))
+
+			By("Cleanup")
+			Expect(k8sClient.Delete(ctx, helmRepo)).To(Succeed())
 		})
 	})
 })

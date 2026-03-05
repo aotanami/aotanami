@@ -20,6 +20,36 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ManifestSourceType defines how manifests are structured in the repository.
+// +kubebuilder:validation:Enum=raw;helm;kustomize;auto
+type ManifestSourceType string
+
+const (
+	// ManifestSourceRaw indicates plain YAML/JSON Kubernetes manifests.
+	ManifestSourceRaw ManifestSourceType = "raw"
+	// ManifestSourceHelm indicates a Helm chart.
+	ManifestSourceHelm ManifestSourceType = "helm"
+	// ManifestSourceKustomize indicates Kustomize overlays.
+	ManifestSourceKustomize ManifestSourceType = "kustomize"
+	// ManifestSourceAuto indicates Aotanami should auto-detect the source type.
+	ManifestSourceAuto ManifestSourceType = "auto"
+)
+
+// GitOpsControllerType identifies the GitOps controller variant managing the repo.
+// +kubebuilder:validation:Enum=none;argocd;flux;auto
+type GitOpsControllerType string
+
+const (
+	// ControllerNone means no external GitOps controller — Aotanami operates standalone.
+	ControllerNone GitOpsControllerType = "none"
+	// ControllerArgoCD indicates the repo is managed by ArgoCD.
+	ControllerArgoCD GitOpsControllerType = "argocd"
+	// ControllerFlux indicates the repo is managed by Flux.
+	ControllerFlux GitOpsControllerType = "flux"
+	// ControllerAuto means Aotanami should auto-detect the controller from the cluster.
+	ControllerAuto GitOpsControllerType = "auto"
+)
+
 // GitOpsRepositorySpec defines the desired state of GitOpsRepository.
 // A GitOpsRepository represents an onboarded GitOps repository that Aotanami
 // uses for config drift detection and submitting remediation PRs.
@@ -69,6 +99,81 @@ type GitOpsRepositorySpec struct {
 	// +kubebuilder:default=true
 	// +optional
 	EnableDriftDetection bool `json:"enableDriftDetection,omitempty"`
+
+	// sourceType defines how manifests are structured in this repository.
+	// When set to "auto", Aotanami scans paths for Chart.yaml (Helm) or
+	// kustomization.yaml (Kustomize) and falls back to raw YAML.
+	// +kubebuilder:default=auto
+	// +optional
+	SourceType ManifestSourceType `json:"sourceType,omitempty"`
+
+	// controllerType identifies which GitOps controller manages this repo.
+	// When set to "auto", Aotanami probes the cluster for ArgoCD or Flux CRDs.
+	// +kubebuilder:default=auto
+	// +optional
+	ControllerType GitOpsControllerType `json:"controllerType,omitempty"`
+
+	// controllerRef is an explicit reference to an ArgoCD Application or Flux Kustomization.
+	// When set, Aotanami links directly to this resource instead of auto-discovering.
+	// +optional
+	ControllerRef *ControllerReference `json:"controllerRef,omitempty"`
+
+	// helm contains Helm-specific configuration when sourceType is "helm".
+	// +optional
+	Helm *HelmSource `json:"helm,omitempty"`
+
+	// kustomize contains Kustomize-specific configuration when sourceType is "kustomize".
+	// +optional
+	Kustomize *KustomizeSource `json:"kustomize,omitempty"`
+}
+
+// ControllerReference identifies a specific GitOps controller resource.
+type ControllerReference struct {
+	// type is the controller type (argocd or flux).
+	// +kubebuilder:validation:Enum=argocd;flux
+	// +required
+	Type GitOpsControllerType `json:"type"`
+
+	// name is the name of the controller resource (e.g., ArgoCD Application name).
+	// +required
+	Name string `json:"name"`
+
+	// namespace is the namespace of the controller resource.
+	// +required
+	Namespace string `json:"namespace"`
+}
+
+// HelmSource holds configuration for Helm-chart-based GitOps repositories.
+type HelmSource struct {
+	// chartPath is the path to the Helm chart directory within the repo.
+	// Defaults to the first element in spec.paths if not specified.
+	// +optional
+	ChartPath string `json:"chartPath,omitempty"`
+
+	// valuesFiles lists paths to values files relative to the repo root.
+	// Files are merged in order (last wins), matching Helm conventions.
+	// +optional
+	ValuesFiles []string `json:"valuesFiles,omitempty"`
+
+	// releaseName is the Helm release name to match against live cluster resources.
+	// +optional
+	ReleaseName string `json:"releaseName,omitempty"`
+
+	// releaseNamespace is the namespace where the Helm release is deployed.
+	// +optional
+	ReleaseNamespace string `json:"releaseNamespace,omitempty"`
+}
+
+// KustomizeSource holds configuration for Kustomize-based GitOps repositories.
+type KustomizeSource struct {
+	// overlayPaths lists the Kustomize overlay directories to build.
+	// When empty, Aotanami uses spec.paths as the overlay directories.
+	// +optional
+	OverlayPaths []string `json:"overlayPaths,omitempty"`
+
+	// buildArgs specifies additional arguments for kustomize build.
+	// +optional
+	BuildArgs []string `json:"buildArgs,omitempty"`
 }
 
 // NamespaceMap maps a path in the GitOps repo to a Kubernetes namespace.
@@ -85,7 +190,7 @@ type NamespaceMap struct {
 // GitOpsRepositoryStatus defines the observed state of GitOpsRepository.
 type GitOpsRepositoryStatus struct {
 	// phase indicates the current lifecycle phase.
-	// +kubebuilder:validation:Enum=Pending;Syncing;Synced;Error
+	// +kubebuilder:validation:Enum=Pending;Syncing;Synced;Discovering;Error
 	// +optional
 	Phase string `json:"phase,omitempty"`
 
@@ -113,6 +218,21 @@ type GitOpsRepositoryStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
+	// detectedSourceType is the manifest source type that Aotanami auto-detected.
+	// Only populated when spec.sourceType is "auto".
+	// +optional
+	DetectedSourceType ManifestSourceType `json:"detectedSourceType,omitempty"`
+
+	// detectedController is the GitOps controller that Aotanami auto-detected.
+	// Only populated when spec.controllerType is "auto".
+	// +optional
+	DetectedController GitOpsControllerType `json:"detectedController,omitempty"`
+
+	// discoveredApplications is the number of ArgoCD/Flux applications
+	// found that reference this repository.
+	// +optional
+	DiscoveredApplications int32 `json:"discoveredApplications,omitempty"`
+
 	// conditions represent the current state of the resource.
 	// +listType=map
 	// +listMapKey=type
@@ -124,6 +244,8 @@ type GitOpsRepositoryStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`
 // +kubebuilder:printcolumn:name="Branch",type=string,JSONPath=`.spec.branch`
+// +kubebuilder:printcolumn:name="Source",type=string,JSONPath=`.status.detectedSourceType`
+// +kubebuilder:printcolumn:name="Controller",type=string,JSONPath=`.status.detectedController`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Drifts",type=integer,JSONPath=`.status.driftCount`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`

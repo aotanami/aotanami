@@ -10,7 +10,7 @@ hide:
 
 # Aotanami
 
-<p class="hero-subtitle">Autonomous Kubernetes Protection — Powered by Agentic AI</p>
+<p class="hero-subtitle">Your Digital SRE &amp; Security Engineer for Kubernetes</p>
 
 <div class="badges">
   <a href="https://github.com/aotanami/aotanami/actions/workflows/ci.yml"><img src="https://github.com/aotanami/aotanami/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -30,9 +30,9 @@ hide:
 
 ## What is Aotanami?
 
-Aotanami is a **self-hosted, lightweight Kubernetes Operator** that uses **Agentic AI** to provide complete **360° protection** for your production clusters. It autonomously detects security vulnerabilities, misconfigurations, cost anomalies, and runtime threats — then proposes **production-ready fixes via GitOps**, all with **read-only cluster access**.
+Aotanami is your **Digital SRE and Security Engineer** — a self-hosted Kubernetes Operator powered by **Agentic AI** that does the job of a full-time site reliability and security engineer. It autonomously **observes** your cluster, **reasons** about security findings and anomalies using LLMs, and **acts** by opening GitOps PRs with production-ready fixes — all with **read-only cluster access**.
 
-**Bring your own LLM API keys** (OpenRouter, OpenAI, Anthropic) — Aotanami is heavily optimized to minimize token usage and keep costs low.
+**Bring your own LLM API keys** (OpenRouter, OpenAI, Anthropic, Azure, Ollama) — optimized for minimal token usage.
 
 ---
 
@@ -72,7 +72,7 @@ SBOM analysis, image signature verification (Cosign/Notary), and base image CVE 
 <div class="feature-icon">🧠</div>
 
 ### Agentic AI Remediation
-LLM-powered diagnosis with production-ready fix PRs via GitHub App. BYO API keys, optimized for low token usage.
+LLM-powered diagnosis with structured JSON fix plans, risk scoring, and production-ready GitOps PRs via GitHub App.
 </div>
 
 <div class="feature-card" markdown>
@@ -128,33 +128,42 @@ graph TB
         Metrics[Resource Metrics]
     end
 
-    subgraph "Aotanami Operator"
-        Watcher[Real-Time Watcher]
-        Scanner[Security & Config Scanner]
-        Compliance[Compliance Engine]
-        CostEng[Cost Optimizer]
-        AnomalyDet[Anomaly Detector]
-        Threat[Runtime Threat Detector]
-        DriftDet[Config Drift Detector]
-        Correlator[Incident Correlator]
-        LLM["LLM Engine — BYO Keys"]
-        Dashboard[Embedded Dashboard]
+    subgraph "Aotanami — The Digital SRE"
+        subgraph "Observe"
+            Watcher[Real-Time Watcher]
+            Scanner[Security Scanner]
+            CostEng[Cost Optimizer]
+        end
+        subgraph "Reason"
+            AnomalyDet[Anomaly Detector]
+            Correlator[Incident Correlator]
+            Compliance[Compliance Engine]
+            DriftDet[Drift Detector]
+            LLM["LLM Reasoner — BYO Keys"]
+        end
+        subgraph "Act"
+            Remediation[Remediation Engine]
+            GitOps[GitHub App Engine]
+            Notify[Notifier]
+        end
     end
 
     subgraph "Integrations"
-        GitOps[GitHub App — GitOps PRs]
-        Alerts["Slack · Teams · PagerDuty<br/>Telegram · WhatsApp · AlertManager"]
-        Prom["Prometheus · OpenTelemetry"]
+        GitRepo[Your GitOps Repo]
+        Alerts["Slack · Teams · PagerDuty"]
+        Prom["Prometheus · Grafana"]
     end
 
     Events & Logs & Nodes & Net & Metrics --> Watcher
-    Watcher --> AnomalyDet & Scanner & CostEng & Threat & Compliance
-    Scanner --> DriftDet
-    AnomalyDet & Scanner & CostEng & Threat & Compliance & DriftDet --> Correlator
+    Watcher --> AnomalyDet & Scanner & CostEng
+    Scanner --> DriftDet & Compliance
+    AnomalyDet & Scanner & CostEng & DriftDet & Compliance --> Correlator
     Correlator --> LLM
-    LLM -->|Protect Mode| GitOps
-    LLM -->|Audit Mode| Alerts
-    LLM --> Dashboard
+    LLM --> Remediation
+    Remediation -->|Protect Mode| GitOps
+    Remediation -->|Audit Mode| Notify
+    GitOps --> GitRepo
+    Notify --> Alerts
     Watcher --> Prom
 ```
 

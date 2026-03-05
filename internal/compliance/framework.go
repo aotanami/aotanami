@@ -229,3 +229,70 @@ func CalculateSummary(controls []Control) ReportSummary {
 	}
 	return s
 }
+
+// Finding represents a scan finding for compliance evaluation.
+// This mirrors the scanner.Finding fields without importing the scanner package.
+type Finding struct {
+	RuleType          string
+	Severity          string
+	Title             string
+	ResourceKind      string
+	ResourceNamespace string
+	ResourceName      string
+}
+
+// EvaluateFindings maps scan findings to compliance controls and returns
+// a compliance report. Controls whose RelatedRuleTypes match any finding's
+// RuleType are marked as Failed; others are marked Passed.
+func EvaluateFindings(framework Framework, findings []Finding) *Report {
+	var controls []Control
+
+	switch framework {
+	case FrameworkCISK8s:
+		controls = CISKubernetesBenchmark()
+	default:
+		controls = CISKubernetesBenchmark() // Default to CIS.
+	}
+
+	// Build a set of violated rule types.
+	violatedRules := make(map[string][]Finding)
+	for _, f := range findings {
+		violatedRules[f.RuleType] = append(violatedRules[f.RuleType], f)
+	}
+
+	// Evaluate each control.
+	now := time.Now()
+	for i := range controls {
+		c := &controls[i]
+		var failed bool
+		for _, ruleType := range c.RelatedRuleTypes {
+			if matchedFindings, ok := violatedRules[ruleType]; ok {
+				failed = true
+				// Attach evidence from the findings.
+				for _, f := range matchedFindings {
+					c.Evidence = append(c.Evidence, Evidence{
+						Type:        "scan-finding",
+						Description: f.Title,
+						ResourceRef: f.ResourceKind + "/" + f.ResourceNamespace + "/" + f.ResourceName,
+						Timestamp:   now,
+					})
+				}
+			}
+		}
+
+		if failed {
+			c.Status = ControlFailed
+		} else {
+			c.Status = ControlPassed
+		}
+	}
+
+	report := &Report{
+		Framework:   framework,
+		GeneratedAt: now,
+		Controls:    controls,
+		Summary:     CalculateSummary(controls),
+	}
+
+	return report
+}

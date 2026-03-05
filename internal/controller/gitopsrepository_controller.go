@@ -19,6 +19,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -33,25 +35,40 @@ import (
 
 	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
 	"github.com/aotanami/aotanami/internal/conditions"
+	gitopscontroller "github.com/aotanami/aotanami/internal/gitops/controller"
+	"github.com/aotanami/aotanami/internal/gitops/discovery"
+	"github.com/aotanami/aotanami/internal/gitops/source"
+	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
 )
 
 // GitOpsRepositoryReconciler reconciles a GitOpsRepository object.
-// It validates the repository configuration, authentication secret,
-// and manages the sync lifecycle.
+// It validates repo configuration, auto-detects source types (Helm, Kustomize, raw),
+// discovers and links GitOps controllers (ArgoCD, Flux), and manages sync lifecycle.
 type GitOpsRepositoryReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme             *runtime.Scheme
+	Recorder           record.EventRecorder
+	SourceRegistry     *source.Registry
+	ControllerRegistry *gitopscontroller.Registry
 }
 
 // +kubebuilder:rbac:groups=aotanami.com,resources=gitopsrepositories,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=aotanami.com,resources=gitopsrepositories/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=aotanami.com,resources=gitopsrepositories/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=argoproj.io,resources=applications,verbs=get;list;watch
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories,verbs=get;list;watch
+// +kubebuilder:rbac:groups=kustomize.toolkit.fluxcd.io,resources=kustomizations,verbs=get;list;watch
+// +kubebuilder:rbac:groups=helm.toolkit.fluxcd.io,resources=helmreleases,verbs=get;list;watch
 
-// Reconcile validates the GitOpsRepository configuration and manages sync state.
+// Reconcile validates the GitOpsRepository configuration, detects source types
+// and GitOps controllers, and manages sync state.
 func (r *GitOpsRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
+	start := time.Now()
+	defer func() {
+		aotmetrics.ReconcileDuration.WithLabelValues("gitopsrepository").Observe(time.Since(start).Seconds())
+	}()
 
 	repo := &aotanamiv1alpha1.GitOpsRepository{}
 	if err := r.Get(ctx, req.NamespacedName, repo); err != nil {
@@ -62,9 +79,70 @@ func (r *GitOpsRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	log.Info("Reconciling GitOpsRepository", "name", repo.Name,
-		"url", repo.Spec.URL, "branch", repo.Spec.Branch, "provider", repo.Spec.Provider)
+		"url", repo.Spec.URL, "branch", repo.Spec.Branch, "provider", repo.Spec.Provider,
+		"sourceType", repo.Spec.SourceType, "controllerType", repo.Spec.ControllerType)
 
-	// Validate the auth secret exists.
+	// Mark as reconciling.
+	conditions.MarkReconciling(&repo.Status.Conditions, "Reconciliation in progress", repo.Generation)
+
+	// Phase 1: Validate the auth secret exists.
+	if result, err := r.validateAuthSecret(ctx, repo); err != nil || result != nil {
+		return *result, err
+	}
+
+	// Phase 2: Validate paths are specified.
+	if len(repo.Spec.Paths) == 0 {
+		conditions.MarkFalse(&repo.Status.Conditions, aotanamiv1alpha1.ConditionReady,
+			aotanamiv1alpha1.ReasonInvalidConfig, "At least one path must be specified", repo.Generation)
+		repo.Status.Phase = aotanamiv1alpha1.PhaseError
+		repo.Status.ObservedGeneration = repo.Generation
+		if err := r.Status().Update(ctx, repo); err != nil {
+			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		}
+		aotmetrics.ReconcileTotal.WithLabelValues("gitopsrepository", "error").Inc()
+		return ctrl.Result{}, nil
+	}
+
+	// Phase 3: Auto-discover source type.
+	r.detectSourceType(ctx, repo)
+
+	// Phase 4: Detect and link GitOps controller.
+	r.detectController(ctx, repo)
+
+	// Phase 5: Mark as synced.
+	now := metav1.Now()
+	repo.Status.Phase = aotanamiv1alpha1.PhaseSynced
+	repo.Status.LastSyncTime = &now
+	repo.Status.LastError = ""
+	repo.Status.ObservedGeneration = repo.Generation
+
+	conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionGitOpsConnected,
+		aotanamiv1alpha1.ReasonReconcileSuccess,
+		fmt.Sprintf("Repository %s (branch: %s) is connected", repo.Spec.URL, repo.Spec.Branch), repo.Generation)
+	conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionReady,
+		aotanamiv1alpha1.ReasonReconcileSuccess, "Repository is synced and ready", repo.Generation)
+
+	if err := r.Status().Update(ctx, repo); err != nil {
+		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+	}
+
+	r.Recorder.Event(repo, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonReconciled,
+		fmt.Sprintf("GitOpsRepository synced (url=%s, branch=%s, paths=%d, source=%s, controller=%s)",
+			repo.Spec.URL, repo.Spec.Branch, len(repo.Spec.Paths),
+			r.effectiveSourceType(repo), r.effectiveControllerType(repo)))
+
+	// Requeue at the poll interval.
+	requeueAfter := time.Duration(repo.Spec.PollIntervalSeconds) * time.Second
+	if requeueAfter == 0 {
+		requeueAfter = 5 * time.Minute
+	}
+
+	aotmetrics.ReconcileTotal.WithLabelValues("gitopsrepository", "success").Inc()
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
+// validateAuthSecret checks that the authentication secret exists.
+func (r *GitOpsRepositoryReconciler) validateAuthSecret(ctx context.Context, repo *aotanamiv1alpha1.GitOpsRepository) (*ctrl.Result, error) {
 	secret := &corev1.Secret{}
 	secretKey := types.NamespacedName{Name: repo.Spec.AuthSecret, Namespace: repo.Namespace}
 	if err := r.Get(ctx, secretKey, secret); err != nil {
@@ -78,55 +156,212 @@ func (r *GitOpsRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				aotanamiv1alpha1.ReasonSecretNotFound, "Authentication secret not available", repo.Generation)
 			repo.Status.Phase = aotanamiv1alpha1.PhaseError
 			repo.Status.LastError = fmt.Sprintf("Auth secret %q not found", repo.Spec.AuthSecret)
+			repo.Status.ObservedGeneration = repo.Generation
 			if statusErr := r.Status().Update(ctx, repo); statusErr != nil {
-				return ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
+				return &ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
 			}
-			return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
+			aotmetrics.ReconcileTotal.WithLabelValues("gitopsrepository", "error").Inc()
+			result := ctrl.Result{RequeueAfter: 2 * time.Minute}
+			return &result, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("fetching auth secret: %w", err)
+		return &ctrl.Result{}, fmt.Errorf("fetching auth secret: %w", err)
 	}
 
 	conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionSecretResolved,
 		aotanamiv1alpha1.ReasonSecretResolved, "Authentication secret is available", repo.Generation)
+	return nil, nil
+}
 
-	// Validate paths are specified.
-	if len(repo.Spec.Paths) == 0 {
-		conditions.MarkFalse(&repo.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-			aotanamiv1alpha1.ReasonInvalidConfig, "At least one path must be specified", repo.Generation)
-		repo.Status.Phase = aotanamiv1alpha1.PhaseError
-		if err := r.Status().Update(ctx, repo); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+// detectSourceType determines the manifest source type via auto-discovery or explicit config.
+func (r *GitOpsRepositoryReconciler) detectSourceType(ctx context.Context, repo *aotanamiv1alpha1.GitOpsRepository) {
+	log := logf.FromContext(ctx)
+	sourceType := repo.Spec.SourceType
+	if sourceType == "" {
+		sourceType = aotanamiv1alpha1.ManifestSourceAuto
+	}
+
+	if sourceType != aotanamiv1alpha1.ManifestSourceAuto {
+		// Explicitly configured source type.
+		repo.Status.DetectedSourceType = sourceType
+		conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionSourceDetected,
+			aotanamiv1alpha1.ReasonSourceConfigured,
+			fmt.Sprintf("Source type explicitly configured as %q", sourceType), repo.Generation)
+		return
+	}
+
+	// Auto-detect: simulate file discovery from paths.
+	// In a full implementation, this would clone the repo and list files.
+	// For now, use the discovery engine with path-based heuristics.
+	simulatedFiles := simulateFileDiscovery(repo.Spec.Paths, repo.Spec.Helm, repo.Spec.Kustomize)
+	result := discovery.Discover(simulatedFiles)
+
+	detectedType := aotanamiv1alpha1.ManifestSourceType(result.PrimaryType)
+	repo.Status.DetectedSourceType = detectedType
+
+	var reason, message string
+	switch detectedType {
+	case aotanamiv1alpha1.ManifestSourceHelm:
+		reason = aotanamiv1alpha1.ReasonHelmDetected
+		message = fmt.Sprintf("Helm chart detected in %d path(s)", len(result.Sources))
+	case aotanamiv1alpha1.ManifestSourceKustomize:
+		reason = aotanamiv1alpha1.ReasonKustomizeDetected
+		message = fmt.Sprintf("Kustomize overlays detected in %d path(s)", len(result.Sources))
+	default:
+		reason = aotanamiv1alpha1.ReasonSourceAutoDetected
+		message = fmt.Sprintf("Raw manifests detected in %d path(s)", len(result.Sources))
+	}
+
+	conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionSourceDetected,
+		reason, message, repo.Generation)
+
+	log.Info("Source type detected", "type", detectedType, "sources", len(result.Sources))
+
+	r.Recorder.Event(repo, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonSourceDetected,
+		fmt.Sprintf("Source type detected: %s", detectedType))
+}
+
+// detectController discovers which GitOps controller manages this repository.
+func (r *GitOpsRepositoryReconciler) detectController(ctx context.Context, repo *aotanamiv1alpha1.GitOpsRepository) {
+	log := logf.FromContext(ctx)
+
+	// If controller registry is not available, skip detection.
+	if r.ControllerRegistry == nil {
+		return
+	}
+
+	controllerType := repo.Spec.ControllerType
+	if controllerType == "" {
+		controllerType = aotanamiv1alpha1.ControllerAuto
+	}
+
+	// If explicit controller ref is provided, link directly.
+	if repo.Spec.ControllerRef != nil {
+		repo.Status.DetectedController = repo.Spec.ControllerRef.Type
+		conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionControllerLinked,
+			aotanamiv1alpha1.ReasonControllerLinked,
+			fmt.Sprintf("Linked to %s %s/%s", repo.Spec.ControllerRef.Type,
+				repo.Spec.ControllerRef.Namespace, repo.Spec.ControllerRef.Name), repo.Generation)
+		repo.Status.DiscoveredApplications = 1
+		return
+	}
+
+	// If controller type is "none", skip detection.
+	if controllerType == aotanamiv1alpha1.ControllerNone {
+		repo.Status.DetectedController = aotanamiv1alpha1.ControllerNone
+		conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionControllerLinked,
+			aotanamiv1alpha1.ReasonControllerNotFound, "No GitOps controller configured (standalone mode)", repo.Generation)
+		return
+	}
+
+	// Auto-detect or use explicit type.
+	var detectedType string
+	if controllerType == aotanamiv1alpha1.ControllerAuto {
+		var err error
+		detectedType, err = r.ControllerRegistry.DetectInstalled(ctx)
+		if err != nil {
+			log.Error(err, "Error detecting GitOps controller")
 		}
-		return ctrl.Result{}, nil
+	} else {
+		detectedType = string(controllerType)
 	}
 
-	// Mark as synced (actual git sync would happen in a full implementation).
-	now := metav1.Now()
-	repo.Status.Phase = aotanamiv1alpha1.PhaseSynced
-	repo.Status.LastSyncTime = &now
-	repo.Status.LastError = ""
+	repo.Status.DetectedController = aotanamiv1alpha1.GitOpsControllerType(detectedType)
 
-	conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionGitOpsConnected,
-		aotanamiv1alpha1.ReasonReconcileSuccess,
-		fmt.Sprintf("Repository %s (branch: %s) is connected", repo.Spec.URL, repo.Spec.Branch), repo.Generation)
-	conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-		aotanamiv1alpha1.ReasonReconcileSuccess, "Repository is synced and ready", repo.Generation)
-
-	if err := r.Status().Update(ctx, repo); err != nil {
-		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+	if detectedType == "none" {
+		conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionControllerLinked,
+			aotanamiv1alpha1.ReasonControllerNotFound, "No GitOps controller detected on cluster", repo.Generation)
+		return
 	}
 
-	r.Recorder.Event(repo, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonReconciled,
-		fmt.Sprintf("GitOpsRepository synced (url=%s, branch=%s, paths=%d)",
-			repo.Spec.URL, repo.Spec.Branch, len(repo.Spec.Paths)))
-
-	// Requeue at the poll interval.
-	requeueAfter := time.Duration(repo.Spec.PollIntervalSeconds) * time.Second
-	if requeueAfter == 0 {
-		requeueAfter = 5 * time.Minute
+	// List applications from the detected controller.
+	adapter := r.ControllerRegistry.Get(detectedType)
+	if adapter == nil {
+		return
 	}
 
-	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+	apps, err := adapter.ListApplications(ctx, repo.Spec.URL)
+	if err != nil {
+		log.Error(err, "Error listing applications from controller", "controller", detectedType)
+		conditions.MarkFalse(&repo.Status.Conditions, aotanamiv1alpha1.ConditionControllerLinked,
+			aotanamiv1alpha1.ReasonReconcileFailed,
+			fmt.Sprintf("Error listing applications from %s: %v", detectedType, err), repo.Generation)
+		return
+	}
+
+	repo.Status.DiscoveredApplications = int32(len(apps))
+
+	if len(apps) > 0 {
+		conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionControllerLinked,
+			aotanamiv1alpha1.ReasonControllerLinked,
+			fmt.Sprintf("%s detected: %d application(s) linked", detectedType, len(apps)), repo.Generation)
+
+		r.Recorder.Event(repo, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonControllerLinked,
+			fmt.Sprintf("Linked to %s with %d application(s)", detectedType, len(apps)))
+
+		log.Info("GitOps controller linked", "controller", detectedType, "applications", len(apps))
+	} else {
+		conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionControllerLinked,
+			aotanamiv1alpha1.ReasonControllerAutoDetected,
+			fmt.Sprintf("%s detected but no matching applications found for %s", detectedType, repo.Spec.URL), repo.Generation)
+	}
+}
+
+// effectiveSourceType returns the active source type (detected or configured).
+func (r *GitOpsRepositoryReconciler) effectiveSourceType(repo *aotanamiv1alpha1.GitOpsRepository) aotanamiv1alpha1.ManifestSourceType {
+	if repo.Status.DetectedSourceType != "" {
+		return repo.Status.DetectedSourceType
+	}
+	if repo.Spec.SourceType != "" && repo.Spec.SourceType != aotanamiv1alpha1.ManifestSourceAuto {
+		return repo.Spec.SourceType
+	}
+	return aotanamiv1alpha1.ManifestSourceRaw
+}
+
+// effectiveControllerType returns the active controller type (detected or configured).
+func (r *GitOpsRepositoryReconciler) effectiveControllerType(repo *aotanamiv1alpha1.GitOpsRepository) aotanamiv1alpha1.GitOpsControllerType {
+	if repo.Status.DetectedController != "" {
+		return repo.Status.DetectedController
+	}
+	if repo.Spec.ControllerType != "" && repo.Spec.ControllerType != aotanamiv1alpha1.ControllerAuto {
+		return repo.Spec.ControllerType
+	}
+	return aotanamiv1alpha1.ControllerNone
+}
+
+// simulateFileDiscovery builds a simulated file list from repo paths and config hints.
+// In production, this would be replaced by actual git clone + file listing.
+func simulateFileDiscovery(paths []string, helm *aotanamiv1alpha1.HelmSource, kustomize *aotanamiv1alpha1.KustomizeSource) []string {
+	var files []string
+
+	for _, p := range paths {
+		// Add the path itself as a potential YAML directory.
+		files = append(files, filepath.Join(strings.TrimSuffix(p, "/"), "deployment.yaml"))
+	}
+
+	// If Helm config is present, add Chart.yaml hint.
+	if helm != nil {
+		chartPath := helm.ChartPath
+		if chartPath == "" && len(paths) > 0 {
+			chartPath = paths[0]
+		}
+		files = append(files, filepath.Join(strings.TrimSuffix(chartPath, "/"), "Chart.yaml"))
+		for _, vf := range helm.ValuesFiles {
+			files = append(files, vf)
+		}
+	}
+
+	// If Kustomize config is present, add kustomization.yaml hint.
+	if kustomize != nil {
+		overlayPaths := kustomize.OverlayPaths
+		if len(overlayPaths) == 0 {
+			overlayPaths = paths
+		}
+		for _, op := range overlayPaths {
+			files = append(files, filepath.Join(strings.TrimSuffix(op, "/"), "kustomization.yaml"))
+		}
+	}
+
+	return files
 }
 
 // SetupWithManager sets up the controller with the Manager.

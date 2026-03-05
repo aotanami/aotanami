@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -36,8 +37,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	"github.com/aotanami/aotanami/internal/anomaly"
 	"github.com/aotanami/aotanami/internal/controller"
+	"github.com/aotanami/aotanami/internal/correlator"
+	gitopscontroller "github.com/aotanami/aotanami/internal/gitops/controller"
+	"github.com/aotanami/aotanami/internal/gitops/source"
 	_ "github.com/aotanami/aotanami/internal/metrics" // Auto-register custom Prometheus metrics.
+	"github.com/aotanami/aotanami/internal/remediation"
 	"github.com/aotanami/aotanami/internal/scanner"
 	"github.com/aotanami/aotanami/internal/version"
 	webhookv1alpha1 "github.com/aotanami/aotanami/internal/webhook/v1alpha1"
@@ -187,19 +193,45 @@ func main() {
 	scannerRegistry := scanner.DefaultRegistry()
 	setupLog.Info("Scanner registry initialized", "registeredScanners", scannerRegistry.List())
 
+	// ── Initialize the Agentic Pipeline (shared brain instances) ──
+	//
+	// These are the core intelligence components that connect
+	// Observe (SecurityPolicy/MonitoringPolicy) → Reason (Correlator/LLM) → Act (Remediation)
+	correlatorEngine := correlator.NewEngine(&correlator.Config{
+		CorrelationWindow: 5 * time.Minute,
+	})
+	anomalyDetector := anomaly.NewDetector(anomaly.DefaultConfig())
+	// Remediation engine starts in dry-run mode for safety. Configurable via AotanamiConfig.
+	remediationEngine := remediation.NewEngine(
+		nil, // LLM client — injected when AotanamiConfig is reconciled.
+		nil, // GitOps engine — injected when GitHub App is configured.
+		remediation.EngineConfig{
+			Strategy:       remediation.StrategyDryRun,
+			MaxBlastRadius: 10,
+		},
+		ctrl.Log.WithName("remediation"),
+	)
+	setupLog.Info("Agentic pipeline initialized",
+		"correlatorWindow", "5m",
+		"anomalySensitivity", anomaly.DefaultConfig().Sensitivity,
+		"remediationStrategy", "dry-run")
+
 	if err := (&controller.SecurityPolicyReconciler{
-		Client:          mgr.GetClient(),
-		Scheme:          mgr.GetScheme(),
-		Recorder:        mgr.GetEventRecorderFor("securitypolicy-controller"), //nolint:staticcheck,nolintlint
-		ScannerRegistry: scannerRegistry,
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Recorder:         mgr.GetEventRecorderFor("securitypolicy-controller"), //nolint:staticcheck,nolintlint
+		ScannerRegistry:  scannerRegistry,
+		CorrelatorEngine: correlatorEngine,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "SecurityPolicy")
 		os.Exit(1)
 	}
 	if err := (&controller.RemediationPolicyReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("remediationpolicy-controller"), //nolint:staticcheck,nolintlint
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		Recorder:          mgr.GetEventRecorderFor("remediationpolicy-controller"), //nolint:staticcheck,nolintlint
+		CorrelatorEngine:  correlatorEngine,
+		RemediationEngine: remediationEngine,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "RemediationPolicy")
 		os.Exit(1)
@@ -230,9 +262,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&controller.MonitoringPolicyReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("monitoringpolicy-controller"), //nolint:staticcheck,nolintlint
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Recorder:         mgr.GetEventRecorderFor("monitoringpolicy-controller"), //nolint:staticcheck,nolintlint
+		AnomalyDetector:  anomalyDetector,
+		CorrelatorEngine: correlatorEngine,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "MonitoringPolicy")
 		os.Exit(1)
@@ -254,9 +288,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&controller.GitOpsRepositoryReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("gitopsrepository-controller"), //nolint:staticcheck,nolintlint
+		Client:             mgr.GetClient(),
+		Scheme:             mgr.GetScheme(),
+		Recorder:           mgr.GetEventRecorderFor("gitopsrepository-controller"), //nolint:staticcheck,nolintlint
+		SourceRegistry:     source.DefaultRegistry(),
+		ControllerRegistry: gitopscontroller.DefaultRegistry(mgr.GetClient()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "GitOpsRepository")
 		os.Exit(1)

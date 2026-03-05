@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -34,6 +35,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	"github.com/aotanami/aotanami/internal/compliance"
 	"github.com/aotanami/aotanami/internal/conditions"
 	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
 	"github.com/aotanami/aotanami/internal/scanner"
@@ -145,6 +147,7 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Run each requested scanner.
 	var allFindings []aotanamiv1alpha1.Finding
+	var scanErrors []string
 	var summary aotanamiv1alpha1.ScanSummary
 	summary.ResourcesScanned = int32(len(pods)) //nolint:gosec // Pod count is bounded
 
@@ -158,6 +161,9 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		results, scanErr := s.Scan(ctx, pods, nil)
 		if scanErr != nil {
 			log.Error(scanErr, "Scanner failed", "scanner", s.Name())
+			r.Recorder.Event(scan, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonReconcileError,
+				fmt.Sprintf("Scanner %q failed: %v", s.Name(), scanErr))
+			scanErrors = append(scanErrors, fmt.Sprintf("%s: %v", s.Name(), scanErr))
 			continue
 		}
 
@@ -195,6 +201,37 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	summary.TotalFindings = int32(len(allFindings)) //nolint:gosec // Findings count is bounded
+
+	// ── Evaluate compliance against CIS Kubernetes Benchmark ──
+	var complianceFindings []compliance.Finding
+	for _, f := range allFindings {
+		complianceFindings = append(complianceFindings, compliance.Finding{
+			RuleType:          f.Category,
+			Severity:          f.Severity,
+			Title:             f.Title,
+			ResourceKind:      f.Resource.Kind,
+			ResourceNamespace: f.Resource.Namespace,
+			ResourceName:      f.Resource.Name,
+		})
+	}
+
+	compReport := compliance.EvaluateFindings(compliance.FrameworkCISK8s, complianceFindings)
+	log.Info("Compliance evaluation complete",
+		"framework", compReport.Framework,
+		"passed", compReport.Summary.Passed,
+		"failed", compReport.Summary.Failed,
+		"compliancePct", fmt.Sprintf("%.1f%%", compReport.Summary.CompliancePct))
+
+	if compReport.Summary.Failed > 0 {
+		r.Recorder.Event(scan, corev1.EventTypeWarning, "ComplianceViolation",
+			fmt.Sprintf("CIS Kubernetes Benchmark: %.1f%% compliant (%d/%d controls passed, %d failed)",
+				compReport.Summary.CompliancePct,
+				compReport.Summary.Passed,
+				compReport.Summary.TotalControls,
+				compReport.Summary.Failed))
+	}
+
+	aotmetrics.CompliancePctGauge.WithLabelValues(string(compReport.Framework)).Set(compReport.Summary.CompliancePct)
 
 	// ── Create ScanReport child resource ──
 	reportName := fmt.Sprintf("%s-%d", scan.Name, time.Now().Unix())
@@ -237,7 +274,6 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// ── Update ClusterScan status ──
 	now := metav1.Now()
-	scan.Status.Phase = aotanamiv1alpha1.PhaseCompleted
 	scan.Status.LastScheduleTime = &now
 	scan.Status.CompletedAt = &now
 	scan.Status.FindingsCount = summary.TotalFindings
@@ -247,8 +283,18 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		aotanamiv1alpha1.ReasonScanSuccess,
 		fmt.Sprintf("Scan completed: %d findings across %d resources", summary.TotalFindings, summary.ResourcesScanned),
 		scan.Generation)
-	conditions.MarkTrue(&scan.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-		aotanamiv1alpha1.ReasonReconcileSuccess, "Scan completed successfully", scan.Generation)
+
+	if len(scanErrors) > 0 {
+		conditions.MarkFalse(&scan.Status.Conditions, aotanamiv1alpha1.ConditionReady,
+			aotanamiv1alpha1.ReasonReconcileFailed,
+			fmt.Sprintf("Scans completed with %d error(s): %s", len(scanErrors), strings.Join(scanErrors, "; ")),
+			scan.Generation)
+		scan.Status.Phase = aotanamiv1alpha1.PhaseDegraded
+	} else {
+		conditions.MarkTrue(&scan.Status.Conditions, aotanamiv1alpha1.ConditionReady,
+			aotanamiv1alpha1.ReasonReconcileSuccess, "Scan completed successfully", scan.Generation)
+		scan.Status.Phase = aotanamiv1alpha1.PhaseCompleted
+	}
 
 	if err := r.Status().Update(ctx, scan); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)

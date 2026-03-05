@@ -1,112 +1,194 @@
-# Aotanami — Digital Employee & Agentic AI Guide
+# Aotanami — Digital SRE & Security Engineer
 
-Welcome to the **Aotanami Digital Employee Brain** documentation. While Aotanami is built as a Kubernetes Operator, its true power lies in its "Agentic AI" capabilities — the ability to observe, correlate, reason, and autonomously remediate issues just like a human SRE or Security Engineer.
+Welcome to the **Aotanami Brain** documentation. While Aotanami is technically a Kubernetes Operator, its identity is that of a **Digital SRE and Security Engineer** — an agentic AI system that does the job of a full-time site reliability and security engineer, autonomously observing, reasoning, and acting on your clusters 24/7.
 
-This document details the internal intelligence architecture built in Phase 2.
+This document details the internal intelligence architecture.
 
-## The Brain Architecture (`internal/`)
-
-The intelligence of Aotanami lives entirely within the `internal/` packages. These packages form the reasoning pipeline that converts raw Kubernetes telemetry into actionable GitOps Pull Requests.
+## The Agentic Pipeline: Observe → Reason → Act
 
 ```mermaid
 graph TB
-    subgraph "Observation Layer"
-        Watch[monitor: Resource Watcher]
-        Scan[scanner: Security Scanners]
-        Threat[threat: Threat & CVE Feeds]
-        Cost[costoptimizer: Resource Usage]
-        Drift[drift: Config Drift]
+    subgraph "Observe"
+        SC["SecurityPolicy Controller<br/>security scanning"]
+        MC["MonitoringPolicy Controller<br/>pod restarts, events"]
+        CS["ClusterScan Controller<br/>scheduled compliance scans"]
     end
 
-    subgraph "Reasoning Layer (The Brain)"
-        Anomaly[anomaly: Statistical Baseline Engine]
-        Correlator[correlator: Incident Correlation Engine]
-        Compliance[compliance: Framework Mapping]
-        LLM[llm: AI Client & Context Builder]
+    subgraph "Reason"
+        AD["Anomaly Detector<br/>σ-deviation baselines"]
+        CE["Correlator Engine<br/>time-window incident grouping"]
+        CF["Compliance Framework<br/>CIS Benchmark evaluation"]
+        LD["Live Drift Detector<br/>cluster vs Git diffing"]
+        LLM["LLM Reasoner<br/>structured JSON fix plans"]
     end
 
-    subgraph "Action Layer"
-        Remediation[remediation: Auto-Fix Engine]
-        GitOps[gitops: GitHub App Integration]
-        Notify[notifier: Multi-Channel Alerts]
+    subgraph "Act"
+        RE["Remediation Engine<br/>risk-scored fix validation"]
+        GH["GitHub App Engine<br/>JWT auth, PR lifecycle"]
+        NF["Notifier<br/>Slack, Teams, PagerDuty"]
     end
 
-    Watch & Scan & Threat & Cost & Drift --> Anomaly
-    Watch & Scan & Threat & Cost & Drift --> Correlator
-    Anomaly --> Correlator
-    Scan --> Compliance
-    
-    Correlator -->|Correlated Incidents| LLM
-    Compliance -->|Violations| LLM
-    
-    LLM -->|Fix Plans & Analysis| Remediation
-    Remediation -->|Pull Requests| GitOps
-    Remediation -->|Alerts| Notify
+    SC -->|findings| CE
+    MC -->|pod metrics| AD
+    AD -->|anomalies| CE
+    CS -->|findings| CF
+    CF -->|violations| CE
+
+    CE -->|correlated incidents| LLM
+    LD -->|drift results| CE
+
+    LLM -->|JSON fix plan| RE
+    RE -->|PR| GH
+    RE -->|alerts| NF
 ```
 
 ---
 
-## Core Agentic Components
+## Core Intelligence Components
 
-### 1. Large Language Model Integration (`internal/llm`)
-The LLM package is the reasoning core. It is built to be resilient, cost-effective, and safe for autonomous 24/7 operation.
-- **BYO API Keys:** Supports OpenRouter, OpenAI, and Anthropic.
-- **Resilience:** Implements automatic retries with exponential backoff and a **Circuit Breaker** pattern. If an LLM provider goes down or rate-limits aggressively, the circuit breaks to prevent log spam and endless retries, falling back to degraded (alert-only) mode.
-- **Context Window Management:** Carefully tracks token usage to prevent blowing budgets or hitting context limits.
+### 1. Anomaly Detection (`internal/anomaly`)
 
-### 2. Auto-Remediation Engine (`internal/remediation`)
-The remediation engine is responsible for converting an abstract security finding into a concrete, valid Kubernetes YAML patch.
-- **Dry-Run Validation:** Before proposing a fix, it can dry-run the patch against against the apiserver to ensure it won't break the cluster.
-- **Risk Scoring:** It calculates a numeric risk score (0-100) based on severity, blast radius, and the complexity of the proposed YAML changes.
-- **Blast Radius Protection:** Hard limits on how many workloads a single automated PR can touch.
+The anomaly engine replaces static alert thresholds with **dynamic statistical baselines**.
 
-### 3. GitOps Automation (`internal/gitops`)
-When operating in **Protect Mode**, Aotanami uses this package to autonomously fix your repositories.
-- Authenticates securely via a **GitHub App installation** (no personal access tokens required).
-- Clones target repositories, checks out fresh branches, applies the YAML patches generated by `remediation`, and opens fully formatted Pull Requests.
-- Handles PR title standardization, branch name sanitization, and markdown evidence formatting.
+| Feature | Implementation |
+|---|---|
+| **Baseline Learning** | Configurable learning period (default 24h) during which no anomalies are reported |
+| **σ-Deviation Detection** | Triggers when a value exceeds `mean ± (sensitivity × σ)` from the sliding baseline |
+| **Sliding Windows** | Maintains the last 1000 data points per metric key, pruning older values |
+| **Severity Classification** | `medium` (≥ sensitivity σ), `high` (≥ 1.5× sensitivity σ), `critical` (≥ 2× sensitivity σ) |
 
-### 4. Incident Correlation (`internal/correlator`)
-Security alerts in isolation are noisy. The correlator groups related signals into holistic incidents.
-- E.g., A `resource-limits` finding + `OOMKilled` pod event + `anomaly` spike in memory = A single correlated incident for the LLM to diagnose.
+**How the Digital SRE uses it:** The MonitoringPolicy controller feeds pod restart counts into the anomaly detector. When a restart spike deviates beyond 3σ from the baseline, it's ingested into the correlator as an `EventAnomaly`.
 
-### 5. Anomaly Detection (`internal/anomaly`)
-Traditional alerts rely on static thresholds. The anomaly engine builds dynamic baselines.
-- Calculates moving averages and standard deviations for pod restart rates, API errors, and resource spikes.
-- Uses sliding windows to differentiate between normal deployment spikes and true anomalous behavior.
+### 2. Incident Correlation (`internal/correlator`)
 
-### 6. Configuration Drift (`internal/drift`)
-Detects "ClickOps". Compares the live Kubernetes Apiserver state against the declarative state defined in the GitOps repository. 
-- Strips out dynamic Kubernetes fields (status, resourceVersion) to provide accurate diffs.
+Security alerts in isolation are noise. The correlator **groups related signals into unified incidents**, just like a human SRE triaging a page.
+
+| Feature | Implementation |
+|---|---|
+| **Time-Window Grouping** | Events for the same `namespace/resource` within a configurable window (default 5 min) are merged |
+| **Severity Escalation** | Incident severity always escalates to the highest severity among its events |
+| **Incident Lifecycle** | Each incident gets a unique ID (`INC-000001`), tracks open/resolved state |
+| **Event Types** | `security_violation`, `anomaly`, `pod_crash`, `resource_exhaustion`, `config_drift` |
+
+**How the Digital SRE uses it:** The SecurityPolicy controller and anomaly detector both feed events into the correlator. The RemediationPolicy controller queries open incidents for LLM diagnosis.
+
+### 3. Remediation Engine (`internal/remediation`)
+
+The remediation engine converts abstract findings into **concrete, validated Kubernetes fixes**.
+
+| Feature | Implementation |
+|---|---|
+| **Structured LLM Output** | System prompt requests JSON with a precise schema: `{analysis, fixes[], risk_assessment, risk_score}` |
+| **JSON Extraction** | `extractJSON()` handles raw JSON, markdown code blocks (` ```json `), and brace-matched extraction |
+| **Graceful Fallback** | If the LLM returns unstructured text, wraps it as a single fix entry |
+| **Risk Scoring** | LLM-provided score (0-100) when available, heuristic fallback based on severity + fix count |
+| **Strategy Modes** | `dry-run` (log only), `auto-fix` (submit PR), `manual` (create but don't submit) |
+| **Blast Radius Protection** | Hard limit on files changed per PR (default 20) |
+
+### 4. GitHub App Engine (`internal/github`)
+
+When operating in **Protect Mode**, Aotanami uses the GitHub App engine to autonomously fix your repositories. **Zero external dependencies** — implemented entirely with Go's standard library.
+
+| Feature | Implementation |
+|---|---|
+| **JWT Authentication** | RS256-signed JWTs generated from the GitHub App private key (`crypto/rsa`, `crypto/sha256`) |
+| **Token Management** | Installation access tokens are cached and auto-refreshed before expiry |
+| **Authenticated Transport** | Custom `http.RoundTripper` auto-injects the `Authorization` header on all requests |
+| **PR Lifecycle** | Creates branch → commits files → opens PR → applies labels |
+| **File Operations** | Supports create, update, and delete file operations |
+
+### 5. Compliance Framework (`internal/compliance`)
+
+Maps security findings to industry compliance controls, generating **audit-ready reports with evidence**.
+
+| Feature | Implementation |
+|---|---|
+| **CIS Kubernetes Benchmark** | 15 controls mapped to scanner rule types (pod-security, RBAC, secrets, etc.) |
+| **Finding Evaluation** | `EvaluateFindings()` maps findings to controls via `RelatedRuleTypes`, attaches evidence |
+| **Multi-Framework** | Architecture supports CIS, NIST 800-53, SOC 2, PCI-DSS, HIPAA, ISO 27001 |
+| **ClusterScan Integration** | After every scan, evaluates CIS compliance and emits `ComplianceViolation` Kubernetes events |
+
+### 6. Live Drift Detection (`internal/drift`)
+
+Detects "ClickOps" — compares live Kubernetes state against Git-declared desired state.
+
+| Feature | Implementation |
+|---|---|
+| **Recursive Object Diffing** | Deeply compares live and desired resource specs, field by field |
+| **Ignored Fields** | Strips `.metadata.resourceVersion`, `.metadata.uid`, `.status`, managed fields |
+| **Shadow Resources** | Detects resources existing in the cluster but not in Git (HTTP 404 from Git = shadow) |
+| **9 Resource Types** | Deployment, StatefulSet, DaemonSet, Service, ConfigMap, Secret, NetworkPolicy, Role, RoleBinding |
+| **Severity Classification** | Security-related fields (securityContext, hostNetwork) → high; RBAC → critical |
+
+### 7. Notifier (`internal/notifier`)
+
+Multi-channel alert delivery with production-grade reliability features.
+
+| Feature | Implementation |
+|---|---|
+| **Channels** | Slack (Block Kit), Teams (Adaptive Cards), PagerDuty (Events API v2), generic webhooks |
+| **Severity Filtering** | Each channel has a `MinSeverity` — low-severity alerts skip high-urgency channels |
+| **Deduplication** | Alerts with the same `DeduplicationKey` are sent at most once within a cooldown window |
+| **Rate Limiting** | Per-channel rate limiter prevents notification storms |
+
+### 8. LLM Client (`internal/llm`)
+
+The reasoning core. Built for resilient, cost-effective, 24/7 autonomous operation.
+
+| Feature | Implementation |
+|---|---|
+| **Multi-Provider** | OpenRouter, OpenAI, Anthropic, Azure OpenAI, Ollama (local), Custom endpoints |
+| **Circuit Breaker** | If a provider fails `N` times consecutively, stops sending requests for a cooldown period |
+| **Exponential Backoff** | Automatic retries with configurable backoff (500ms → 10s) |
+| **Token Budgeting** | Tracks prompt + completion tokens per request for cost control |
+| **Prompt Cache** | Deduplicates identical requests to avoid redundant LLM calls |
+
+---
+
+## Controller Orchestration
+
+The Digital SRE's autonomy lives in the **7 Kubernetes controllers** that wire the pipeline together:
+
+| Controller | Observe | Reason | Act |
+|---|---|---|---|
+| `SecurityPolicy` | Scans pods for violations | Feeds findings into correlator | — |
+| `MonitoringPolicy` | Watches pod restart counts | Feeds into anomaly detector → correlator | — |
+| `RemediationPolicy` | — | Queries correlator for open incidents | Generates LLM plan → opens GitOps PR |
+| `ClusterScan` | Runs scheduled security scans | Evaluates CIS compliance | Creates ScanReport CRs |
+| `GitOpsRepository` | Discovers repo structure | — | Provides Git context for remediation |
+| `CostPolicy` | Analyzes resource utilization | Identifies optimization opportunities | — |
+| `AotanamiConfig` | — | — | Configures global settings |
 
 ---
 
 ## Operating Modes
 
-Aotanami's agentic loop operates in two distinct modes depending on your configuration:
-
 ### 🔍 Audit Mode (Default)
-In this mode, the Brain observes and reasons, but **does not act**.
-1. Identifies vulnerabilities or anomalies.
-2. LLM generates a root-cause analysis and a suggested fix.
-3. Information is routed via `internal/notifier` to Slack, Teams, or PagerDuty.
-4. **No cluster modifications happen.**
+In this mode, the Digital SRE observes and reasons, but **does not act** on the cluster.
+1. SecurityPolicy identifies vulnerabilities, MonitoringPolicy detects anomalies
+2. Correlator groups related events into incidents
+3. LLM generates root-cause analysis and suggested fix
+4. Notifier routes the analysis to Slack, Teams, or PagerDuty
+5. **No repository modifications or PRs are created.**
 
 ### 🛡️ Protect Mode
-When a `GitOpsRepository` CRD is configured, Aotanami gains autonomy.
-1. Identifies vulnerabilities or anomalies.
-2. LLM writes the raw YAML patch.
-3. `internal/remediation` validates the patch.
-4. `internal/gitops` checks out a branch on your IaC repo and opens a PR.
-5. SRE team reviews the PR. Once merged, ArgoCD/Flux applies it to the cluster.
+When a `GitOpsRepository` CRD is configured, the Digital SRE gains autonomy.
+1. Correlator emits an incident
+2. RemediationPolicy queries the LLM for a structured JSON fix plan
+3. Remediation engine validates the plan and scores the risk
+4. GitHub engine creates a branch, commits the fix, and opens a PR
+5. Human team reviews and merges the PR
+6. ArgoCD/Flux applies the change to the cluster
 
 ---
 
-## Developing the Digital Employee
+## Development Guidelines
 
-When contributing to Aotanami's intelligence, keep these principles in mind:
+When contributing to the Digital SRE's intelligence, follow these principles:
 
-1. **Safety First:** We operate in production clusters. Always prioritize the "least disruptive fix."
-2. **Handle Transients:** Network flakes and API limits happen. Always use `executeWithRetry` and respect Circuit Breaker states.
-3. **Pass Pointers for Large Structs:** Our configurations are large. As enforced by `golangci-lint` (gocritic), always pass large structs like `scanner.Finding` and `monitor.Config` by pointer (`*`) to avoid expensive memory copies on every iteration.
-4. **Rich Context, Low Tokens:** The LLM prompt builder must be surgical. Only include the exact YAML snippet and metric data needed for the decision, avoiding pasting entire multi-megabyte deployment manifests.
+1. **Safety First:** We operate in production clusters. Always prefer the least disruptive fix. The remediation engine defaults to `dry-run` mode.
+2. **Handle Transients:** Network flakes and API limits happen. Use exponential backoff and respect circuit breaker states.
+3. **Pass Pointers for Large Structs:** As enforced by `golangci-lint` (gocritic), pass `*scanner.Finding`, `*correlator.Event`, etc. by pointer to avoid expensive copies.
+4. **Rich Context, Low Tokens:** The LLM prompt must be surgical. Include only the YAML snippet and metric data needed for the diagnosis — not entire deployment manifests.
+5. **Structured Output:** Always request JSON-structured output from the LLM. Use `extractJSON()` for robust parsing with fallback.
+6. **Test Everything:** Every brain package has comprehensive test coverage. New features must include tests.

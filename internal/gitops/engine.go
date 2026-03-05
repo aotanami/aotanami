@@ -112,7 +112,12 @@ type GitHubConfig struct {
 
 // BranchName generates a standardized branch name for Aotanami remediation PRs.
 func BranchName(resource, namespace, finding string) string {
-	return fmt.Sprintf("aotanami/fix/%s-%s-%s", namespace, resource, sanitizeBranchName(finding))
+	branch := fmt.Sprintf("aotanami/fix/%s-%s-%s", namespace, resource, sanitizeBranchName(finding))
+	// Git branch names longer than 200 chars cause issues with some providers.
+	if len(branch) > 200 {
+		branch = branch[:200]
+	}
+	return branch
 }
 
 // PRTitle generates a standardized PR title.
@@ -160,6 +165,10 @@ func sanitizeBranchName(s string) string {
 	}
 	if len(result) > 40 {
 		result = result[:40]
+	}
+	// Guard against all-special-char input producing an empty branch segment.
+	if len(result) == 0 {
+		return "untitled"
 	}
 	return string(result)
 }

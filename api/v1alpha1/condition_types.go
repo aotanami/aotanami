@@ -49,6 +49,9 @@ const (
 	// PhaseSynced indicates a GitOps repository has been successfully synced.
 	PhaseSynced = "Synced"
 
+	// PhaseDiscovering indicates auto-discovery of repo structure or controller is in progress.
+	PhaseDiscovering = "Discovering"
+
 	// PhaseComplete indicates a report is finalized.
 	PhaseComplete = "Complete"
 )
@@ -77,6 +80,15 @@ const (
 
 	// ConditionGitOpsConnected indicates whether the GitOps repository is reachable.
 	ConditionGitOpsConnected = "GitOpsConnected"
+
+	// ConditionSourceDetected indicates whether the manifest source type has been determined.
+	ConditionSourceDetected = "SourceDetected"
+
+	// ConditionControllerLinked indicates whether a GitOps controller has been linked.
+	ConditionControllerLinked = "ControllerLinked"
+
+	// ConditionManifestsParsed indicates whether manifests were successfully parsed.
+	ConditionManifestsParsed = "ManifestsParsed"
 
 	// ConditionNotificationDelivered indicates whether the last notification was delivered.
 	ConditionNotificationDelivered = "NotificationDelivered"
@@ -129,6 +141,33 @@ const (
 
 	// ReasonProgressingMessage is used when reconciliation is actively progressing.
 	ReasonProgressingMessage = "Progressing"
+
+	// ReasonSourceAutoDetected indicates the manifest source type was auto-detected.
+	ReasonSourceAutoDetected = "SourceAutoDetected"
+
+	// ReasonSourceConfigured indicates the manifest source type was explicitly configured.
+	ReasonSourceConfigured = "SourceConfigured"
+
+	// ReasonHelmDetected indicates a Helm chart was detected.
+	ReasonHelmDetected = "HelmDetected"
+
+	// ReasonKustomizeDetected indicates Kustomize overlays were detected.
+	ReasonKustomizeDetected = "KustomizeDetected"
+
+	// ReasonControllerAutoDetected indicates the GitOps controller was auto-detected.
+	ReasonControllerAutoDetected = "ControllerAutoDetected"
+
+	// ReasonControllerNotFound indicates no GitOps controller was found on the cluster.
+	ReasonControllerNotFound = "ControllerNotFound"
+
+	// ReasonControllerLinked indicates Aotanami linked to a GitOps controller resource.
+	ReasonControllerLinked = "ControllerLinked"
+
+	// ReasonManifestParseError indicates an error parsing manifests.
+	ReasonManifestParseError = "ManifestParseError"
+
+	// ReasonManifestsParsed indicates manifests were successfully parsed.
+	ReasonManifestsParsed = "ManifestsParsed"
 )
 
 // Event reason constants for Kubernetes event recording.
@@ -156,6 +195,15 @@ const (
 
 	// EventReasonSingletonConflict is emitted when duplicate singleton resources exist.
 	EventReasonSingletonConflict = "SingletonConflict"
+
+	// EventReasonSourceDetected is emitted when the manifest source type is detected.
+	EventReasonSourceDetected = "SourceDetected"
+
+	// EventReasonControllerLinked is emitted when a GitOps controller is linked.
+	EventReasonControllerLinked = "ControllerLinked"
+
+	// EventReasonDiscoveryComplete is emitted when auto-discovery finishes.
+	EventReasonDiscoveryComplete = "DiscoveryComplete"
 )
 
 // Severity constants used across SecurityPolicy, ScanReport, and NotificationChannel.

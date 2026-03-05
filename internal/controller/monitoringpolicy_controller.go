@@ -32,15 +32,20 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
+	"github.com/aotanami/aotanami/internal/anomaly"
 	"github.com/aotanami/aotanami/internal/conditions"
+	"github.com/aotanami/aotanami/internal/correlator"
+	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
 )
 
 // MonitoringPolicyReconciler reconciles a MonitoringPolicy object.
 // It validates the monitoring configuration and sets up event/log watches.
 type MonitoringPolicyReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme           *runtime.Scheme
+	Recorder         record.EventRecorder
+	AnomalyDetector  *anomaly.Detector  // Shared anomaly detector for baseline learning.
+	CorrelatorEngine *correlator.Engine // Shared correlator for cross-signal correlation.
 }
 
 // +kubebuilder:rbac:groups=aotanami.com,resources=monitoringpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -52,6 +57,10 @@ type MonitoringPolicyReconciler struct {
 // Reconcile validates and activates the MonitoringPolicy.
 func (r *MonitoringPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
+	start := time.Now()
+	defer func() {
+		aotmetrics.ReconcileDuration.WithLabelValues("monitoringpolicy").Observe(time.Since(start).Seconds())
+	}()
 
 	policy := &aotanamiv1alpha1.MonitoringPolicy{}
 	if err := r.Get(ctx, req.NamespacedName, policy); err != nil {
@@ -62,6 +71,9 @@ func (r *MonitoringPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	log.Info("Reconciling MonitoringPolicy", "name", policy.Name, "namespace", policy.Namespace)
+
+	// Mark as reconciling.
+	conditions.MarkReconciling(&policy.Status.Conditions, "Reconciliation in progress", policy.Generation)
 
 	// Validate notification channels exist.
 	for _, chName := range policy.Spec.NotificationChannels {
@@ -75,6 +87,7 @@ func (r *MonitoringPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					aotanamiv1alpha1.ReasonTargetNotFound,
 					fmt.Sprintf("NotificationChannel %q not found", chName), policy.Generation)
 				policy.Status.Phase = aotanamiv1alpha1.PhaseDegraded
+				policy.Status.ObservedGeneration = policy.Generation
 				if statusErr := r.Status().Update(ctx, policy); statusErr != nil {
 					return ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
 				}
@@ -84,12 +97,20 @@ func (r *MonitoringPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
+	// ── Observe pod metrics for anomaly detection ──
+	var anomaliesDetected int
+	if r.AnomalyDetector != nil {
+		anomaliesDetected = r.observePodMetrics(ctx, policy)
+	}
+
 	// Mark as active.
 	now := metav1.Now()
 	policy.Status.Phase = aotanamiv1alpha1.PhaseActive
 	policy.Status.LastEventTime = &now
+	policy.Status.ObservedGeneration = policy.Generation
 	conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-		aotanamiv1alpha1.ReasonReconcileSuccess, "Monitoring policy is active", policy.Generation)
+		aotanamiv1alpha1.ReasonReconcileSuccess,
+		fmt.Sprintf("Monitoring policy is active (anomalies detected: %d)", anomaliesDetected), policy.Generation)
 
 	if err := r.Status().Update(ctx, policy); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
@@ -98,7 +119,74 @@ func (r *MonitoringPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	r.Recorder.Event(policy, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonReconciled,
 		fmt.Sprintf("MonitoringPolicy reconciled (event types: %v)", policy.Spec.EventFilters.Types))
 
+	aotmetrics.ReconcileTotal.WithLabelValues("monitoringpolicy", "success").Inc()
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+}
+
+// observePodMetrics lists pods in the policy's target namespaces and feeds
+// restart counts into the anomaly detector. Detected anomalies are ingested
+// into the correlator for cross-signal incident grouping.
+func (r *MonitoringPolicyReconciler) observePodMetrics(ctx context.Context, policy *aotanamiv1alpha1.MonitoringPolicy) int {
+	log := logf.FromContext(ctx)
+
+	// Use policy's target namespaces, or fall back to the policy's own namespace.
+	namespaces := policy.Spec.TargetNamespaces
+	if len(namespaces) == 0 {
+		namespaces = []string{policy.Namespace}
+	}
+
+	var anomaliesDetected int
+	for _, ns := range namespaces {
+		podList := &corev1.PodList{}
+		if err := r.List(ctx, podList, client.InNamespace(ns)); err != nil {
+			log.Error(err, "Failed to list pods for anomaly detection", "namespace", ns)
+			continue
+		}
+
+		for i := range podList.Items {
+			pod := &podList.Items[i]
+			if pod.Status.Phase != corev1.PodRunning {
+				continue
+			}
+
+			for _, cs := range pod.Status.ContainerStatuses {
+				key := fmt.Sprintf("%s/%s/%s/restarts", pod.Namespace, pod.Name, cs.Name)
+				anom := r.AnomalyDetector.Observe(key, float64(cs.RestartCount))
+				if anom == nil {
+					continue
+				}
+
+				anomaliesDetected++
+				log.Info("Anomaly detected",
+					"pod", pod.Name,
+					"container", cs.Name,
+					"severity", anom.Severity,
+					"deviation", fmt.Sprintf("%.1fσ", anom.DeviationSigma))
+
+				r.Recorder.Event(policy, corev1.EventTypeWarning, "AnomalyDetected",
+					fmt.Sprintf("Anomaly: %s (%.1fσ deviation)", anom.Message, anom.DeviationSigma))
+
+				// Feed into correlator for cross-signal correlation.
+				if r.CorrelatorEngine != nil {
+					r.CorrelatorEngine.Ingest(&correlator.Event{
+						Type:         correlator.EventAnomaly,
+						Source:       fmt.Sprintf("monitoringpolicy/%s", policy.Name),
+						Severity:     anom.Severity,
+						Namespace:    pod.Namespace,
+						Resource:     pod.Name,
+						ResourceKind: "Pod",
+						Message:      anom.Message,
+					})
+				}
+			}
+		}
+	}
+
+	if anomaliesDetected > 0 {
+		log.Info("Anomaly detection cycle complete", "anomaliesDetected", anomaliesDetected)
+	}
+
+	return anomaliesDetected
 }
 
 // SetupWithManager sets up the controller with the Manager.

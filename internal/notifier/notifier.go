@@ -226,7 +226,7 @@ func (n *Notifier) sendToChannel(ctx context.Context, ch *ChannelConfig, notif *
 	}
 }
 
-func (n *Notifier) sendSlack(ctx context.Context, _ *ChannelConfig, notif *Notification) error {
+func (n *Notifier) sendSlack(ctx context.Context, ch *ChannelConfig, notif *Notification) error {
 	emoji := severityEmoji(notif.Severity)
 	payload := map[string]interface{}{
 		"text": fmt.Sprintf("%s *[%s] %s*", emoji, notif.Severity, notif.Title),
@@ -254,10 +254,10 @@ func (n *Notifier) sendSlack(ctx context.Context, _ *ChannelConfig, notif *Notif
 			},
 		},
 	}
-	return n.postJSON(ctx, notif.DeduplicationKey, payload)
+	return n.postJSON(ctx, ch.WebhookURL, payload)
 }
 
-func (n *Notifier) sendTeams(ctx context.Context, _ *ChannelConfig, notif *Notification) error {
+func (n *Notifier) sendTeams(ctx context.Context, ch *ChannelConfig, notif *Notification) error {
 	color := severityColor(notif.Severity)
 	payload := map[string]interface{}{
 		"@type":      "MessageCard",
@@ -277,7 +277,7 @@ func (n *Notifier) sendTeams(ctx context.Context, _ *ChannelConfig, notif *Notif
 			},
 		},
 	}
-	return n.postJSON(ctx, notif.DeduplicationKey, payload)
+	return n.postJSON(ctx, ch.WebhookURL, payload)
 }
 
 func (n *Notifier) sendPagerDuty(ctx context.Context, ch *ChannelConfig, notif *Notification) error {

@@ -14,6 +14,7 @@
 //   - Webhook Handling: Processes GitHub webhooks for PR merge/close events
 //   - Repository Access: Read access to repository contents for drift detection
 //
-// The package uses the official go-github client library and is configured
-// via the AotanamiConfig's GitHub settings.
+// The package uses only Go's standard library (net/http, crypto) with zero
+// external dependencies, and is configured via the AotanamiConfig's GitHub
+// App settings.
 package github

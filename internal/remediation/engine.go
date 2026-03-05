@@ -8,7 +8,9 @@ package remediation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -120,14 +122,21 @@ func (e *Engine) GeneratePlan(ctx context.Context, finding *scanner.Finding) (*P
 	}
 
 	plan := &Plan{
-		Finding:     finding,
-		LLMAnalysis: resp.Content,
-		CreatedAt:   time.Now(),
+		Finding:   finding,
+		CreatedAt: time.Now(),
 	}
 
-	// Parse fixes from LLM response (the LLM returns structured recommendations).
-	plan.Fixes = extractFixes(resp.Content, finding)
-	plan.RiskScore = estimateRisk(finding, plan.Fixes)
+	// Parse fixes from LLM response (structured JSON or fallback to raw text).
+	fixes, analysis, llmRisk := extractFixes(resp.Content, finding)
+	plan.Fixes = fixes
+	plan.LLMAnalysis = analysis
+
+	// Use LLM-provided risk score if available, otherwise estimate heuristically.
+	if llmRisk >= 0 && llmRisk <= 100 {
+		plan.RiskScore = llmRisk
+	} else {
+		plan.RiskScore = estimateRisk(finding, plan.Fixes)
+	}
 
 	return plan, nil
 }
@@ -202,11 +211,30 @@ Rules:
 1. Always prefer the least disruptive fix.
 2. Never remove functionality — only tighten security.
 3. Explain the risk of NOT fixing and the risk of the fix itself.
-4. Output concrete YAML patches that can be directly applied.
-5. Consider blast radius — how many workloads will be affected.`
+4. Consider blast radius — how many workloads will be affected.
+5. Output concrete YAML patches that can be directly applied.
+
+You MUST respond with a JSON object in this exact format:
+{
+  "analysis": "Root cause analysis and risk assessment",
+  "fixes": [
+    {
+      "file_path": "path/to/file.yaml",
+      "description": "What this change does",
+      "patch": "Full YAML content of the fixed resource",
+      "operation": "update"
+    }
+  ],
+  "risk_assessment": "Impact analysis of applying this fix",
+  "risk_score": 25
+}
+
+The operation field must be one of: "create", "update", "delete".
+The risk_score field is 0-100 (0 = safe, 100 = dangerous).
+Respond ONLY with the JSON object, no additional text.`
 
 func buildRemediationPrompt(f *scanner.Finding) string {
-	return fmt.Sprintf(`Analyze this Kubernetes security finding and provide a fix:
+	return fmt.Sprintf(`Analyze this Kubernetes security finding and provide a fix as JSON:
 
 **Rule Type:** %s
 **Severity:** %s
@@ -215,25 +243,118 @@ func buildRemediationPrompt(f *scanner.Finding) string {
 **Resource:** %s %s/%s
 **Recommendation:** %s
 
-Please provide:
-1. Root cause analysis
-2. Concrete YAML fix (as a patch)
-3. Risk assessment of applying the fix
-4. Verification steps`, f.RuleType, f.Severity, f.Title, f.Description,
+Respond with the JSON object as specified in the system prompt.`, f.RuleType, f.Severity, f.Title, f.Description,
 		f.ResourceKind, f.ResourceNamespace, f.ResourceName, f.Recommendation)
 }
 
-func extractFixes(llmResponse string, finding *scanner.Finding) []Fix {
-	// In a full implementation, this would parse structured output from the LLM.
-	// For now, create a single fix entry with the LLM's recommendation.
+// llmResponse is the expected JSON structure from the LLM.
+type llmResponse struct {
+	Analysis       string   `json:"analysis"`
+	Fixes          []llmFix `json:"fixes"`
+	RiskAssessment string   `json:"risk_assessment"`
+	RiskScore      *int     `json:"risk_score,omitempty"`
+}
+
+type llmFix struct {
+	FilePath    string `json:"file_path"`
+	Description string `json:"description"`
+	Patch       string `json:"patch"`
+	Operation   string `json:"operation"`
+}
+
+func extractFixes(llmContent string, finding *scanner.Finding) ([]Fix, string, int) {
+	// Try to parse structured JSON from the LLM response.
+	jsonStr := extractJSON(llmContent)
+	if jsonStr != "" {
+		var resp llmResponse
+		if err := json.Unmarshal([]byte(jsonStr), &resp); err == nil && len(resp.Fixes) > 0 {
+			fixes := make([]Fix, 0, len(resp.Fixes))
+			for _, f := range resp.Fixes {
+				op := gitops.FileOpUpdate
+				switch f.Operation {
+				case "create":
+					op = gitops.FileOpCreate
+				case "delete":
+					op = gitops.FileOpDelete
+				}
+				fixes = append(fixes, Fix{
+					Description: f.Description,
+					FilePath:    f.FilePath,
+					Patch:       f.Patch,
+					Operation:   op,
+				})
+			}
+
+			analysis := resp.Analysis
+			if resp.RiskAssessment != "" {
+				analysis += "\n\nRisk Assessment: " + resp.RiskAssessment
+			}
+
+			riskScore := -1 // Sentinel: let estimateRisk calculate.
+			if resp.RiskScore != nil {
+				riskScore = *resp.RiskScore
+			}
+
+			return fixes, analysis, riskScore
+		}
+	}
+
+	// Fallback: LLM returned unstructured text. Wrap as a single fix.
 	return []Fix{
 		{
 			Description: fmt.Sprintf("Fix %s: %s", finding.RuleType, finding.Title),
 			FilePath:    fmt.Sprintf("k8s/%s/%s.yaml", finding.ResourceNamespace, finding.ResourceName),
-			Patch:       llmResponse,
+			Patch:       llmContent,
 			Operation:   gitops.FileOpUpdate,
 		},
+	}, llmContent, -1
+}
+
+// extractJSON finds JSON content in an LLM response, handling markdown code blocks.
+func extractJSON(s string) string {
+	// Try direct parse first.
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "{") {
+		return s
 	}
+
+	// Try extracting from ```json ... ``` code block.
+	if idx := strings.Index(s, "```json"); idx != -1 {
+		start := idx + len("```json")
+		if end := strings.Index(s[start:], "```"); end != -1 {
+			return strings.TrimSpace(s[start : start+end])
+		}
+	}
+
+	// Try extracting from ``` ... ``` code block.
+	if idx := strings.Index(s, "```"); idx != -1 {
+		start := idx + 3
+		if end := strings.Index(s[start:], "```"); end != -1 {
+			candidate := strings.TrimSpace(s[start : start+end])
+			if strings.HasPrefix(candidate, "{") {
+				return candidate
+			}
+		}
+	}
+
+	// Try finding a JSON object anywhere in the response.
+	if idx := strings.Index(s, "{"); idx != -1 {
+		// Find matching closing brace.
+		depth := 0
+		for i := idx; i < len(s); i++ {
+			switch s[i] {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth == 0 {
+					return s[idx : i+1]
+				}
+			}
+		}
+	}
+
+	return ""
 }
 
 func estimateRisk(finding *scanner.Finding, fixes []Fix) int {

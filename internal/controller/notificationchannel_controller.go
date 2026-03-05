@@ -23,7 +23,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -33,6 +32,7 @@ import (
 
 	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
 	"github.com/aotanami/aotanami/internal/conditions"
+	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
 )
 
 // NotificationChannelReconciler reconciles a NotificationChannel object.
@@ -51,6 +51,10 @@ type NotificationChannelReconciler struct {
 // Reconcile validates the notification channel configuration.
 func (r *NotificationChannelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
+	start := time.Now()
+	defer func() {
+		aotmetrics.ReconcileDuration.WithLabelValues("notificationchannel").Observe(time.Since(start).Seconds())
+	}()
 
 	channel := &aotanamiv1alpha1.NotificationChannel{}
 	if err := r.Get(ctx, req.NamespacedName, channel); err != nil {
@@ -61,6 +65,9 @@ func (r *NotificationChannelReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	log.Info("Reconciling NotificationChannel", "name", channel.Name, "type", channel.Spec.Type)
+
+	// Mark as reconciling.
+	conditions.MarkReconciling(&channel.Status.Conditions, "Reconciliation in progress", channel.Generation)
 
 	// Validate credential secret exists.
 	secret := &corev1.Secret{}
@@ -76,6 +83,7 @@ func (r *NotificationChannelReconciler) Reconcile(ctx context.Context, req ctrl.
 				aotanamiv1alpha1.ReasonSecretNotFound, "Credential secret not available", channel.Generation)
 			channel.Status.Phase = aotanamiv1alpha1.PhaseError
 			channel.Status.LastError = fmt.Sprintf("Secret %q not found", channel.Spec.CredentialSecret)
+			channel.Status.ObservedGeneration = channel.Generation
 			if statusErr := r.Status().Update(ctx, channel); statusErr != nil {
 				return ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
 			}
@@ -89,10 +97,9 @@ func (r *NotificationChannelReconciler) Reconcile(ctx context.Context, req ctrl.
 		aotanamiv1alpha1.ReasonSecretResolved, "Credential secret is available", channel.Generation)
 
 	// Mark as active.
-	now := metav1.Now()
 	channel.Status.Phase = aotanamiv1alpha1.PhaseActive
 	channel.Status.LastError = ""
-	_ = now // Intentionally not updating LastSentAt here — that happens when a notification is actually sent
+	channel.Status.ObservedGeneration = channel.Generation
 	conditions.MarkTrue(&channel.Status.Conditions, aotanamiv1alpha1.ConditionReady,
 		aotanamiv1alpha1.ReasonReconcileSuccess,
 		fmt.Sprintf("Channel type %q is configured and ready", channel.Spec.Type), channel.Generation)
@@ -104,6 +111,7 @@ func (r *NotificationChannelReconciler) Reconcile(ctx context.Context, req ctrl.
 	r.Recorder.Event(channel, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonReconciled,
 		fmt.Sprintf("NotificationChannel configured (type=%s)", channel.Spec.Type))
 
+	aotmetrics.ReconcileTotal.WithLabelValues("notificationchannel", "success").Inc()
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 

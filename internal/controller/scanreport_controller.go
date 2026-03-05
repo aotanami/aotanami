@@ -29,6 +29,7 @@ import (
 
 	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
 	"github.com/aotanami/aotanami/internal/conditions"
+	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
 )
 
 // ScanReportReconciler reconciles a ScanReport object.
@@ -64,6 +65,7 @@ func (r *ScanReportReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Ensure status reflects the report content.
 	if report.Status.Phase == "" {
 		report.Status.Phase = aotanamiv1alpha1.PhaseComplete
+		report.Status.ObservedGeneration = report.Generation
 		conditions.MarkTrue(&report.Status.Conditions, aotanamiv1alpha1.ConditionReady,
 			aotanamiv1alpha1.ReasonReconcileSuccess,
 			fmt.Sprintf("Report contains %d findings", report.Spec.Summary.TotalFindings),
@@ -72,6 +74,7 @@ func (r *ScanReportReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if err := r.Status().Update(ctx, report); err != nil {
 			return ctrl.Result{}, fmt.Errorf("updating ScanReport status: %w", err)
 		}
+		aotmetrics.ReconcileTotal.WithLabelValues("scanreport", "success").Inc()
 	}
 
 	return ctrl.Result{}, nil

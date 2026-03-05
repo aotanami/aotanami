@@ -32,6 +32,7 @@ import (
 
 	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
 	"github.com/aotanami/aotanami/internal/conditions"
+	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
 )
 
 // CostPolicyReconciler reconciles a CostPolicy object.
@@ -53,6 +54,10 @@ type CostPolicyReconciler struct {
 //nolint:gocyclo // Controller logic is inherently complex
 func (r *CostPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
+	start := time.Now()
+	defer func() {
+		aotmetrics.ReconcileDuration.WithLabelValues("costpolicy").Observe(time.Since(start).Seconds())
+	}()
 
 	policy := &aotanamiv1alpha1.CostPolicy{}
 	if err := r.Get(ctx, req.NamespacedName, policy); err != nil {
@@ -64,6 +69,9 @@ func (r *CostPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	log.Info("Reconciling CostPolicy", "name", policy.Name, "namespace", policy.Namespace,
 		"strategy", policy.Spec.ResizeStrategy)
+
+	// Mark as reconciling.
+	conditions.MarkReconciling(&policy.Status.Conditions, "Reconciliation in progress", policy.Generation)
 
 	// Resolve target namespaces and count pods.
 	var targetNamespaces []string
@@ -109,6 +117,7 @@ func (r *CostPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	policy.Status.Phase = aotanamiv1alpha1.PhaseActive
 	policy.Status.LastEvaluated = &now
 	policy.Status.RightsizingRecommendations = podsWithoutLimits
+	policy.Status.ObservedGeneration = policy.Generation
 
 	conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
 		aotanamiv1alpha1.ReasonReconcileSuccess,
@@ -122,6 +131,8 @@ func (r *CostPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	r.Recorder.Event(policy, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonReconciled,
 		fmt.Sprintf("CostPolicy evaluated: %d pods, %d need rightsizing", totalPods, podsWithoutLimits))
 
+	aotmetrics.ReconcileTotal.WithLabelValues("costpolicy", "success").Inc()
+	aotmetrics.CostRightsizingGauge.WithLabelValues(policy.Name, policy.Namespace).Set(float64(podsWithoutLimits))
 	return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
 }
 

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -34,6 +35,7 @@ import (
 
 	aotanamiv1alpha1 "github.com/aotanami/aotanami/api/v1alpha1"
 	"github.com/aotanami/aotanami/internal/conditions"
+	"github.com/aotanami/aotanami/internal/correlator"
 	aotmetrics "github.com/aotanami/aotanami/internal/metrics"
 	"github.com/aotanami/aotanami/internal/scanner"
 )
@@ -57,9 +59,10 @@ var severityOrder = map[string]int{
 // by severity, and updates the resource status with violation counts.
 type SecurityPolicyReconciler struct {
 	client.Client
-	Scheme          *runtime.Scheme
-	Recorder        record.EventRecorder
-	ScannerRegistry *scanner.Registry
+	Scheme           *runtime.Scheme
+	Recorder         record.EventRecorder
+	ScannerRegistry  *scanner.Registry
+	CorrelatorEngine *correlator.Engine // Shared correlator for cross-signal event correlation.
 }
 
 // +kubebuilder:rbac:groups=aotanami.com,resources=securitypolicies,verbs=get;list;watch;create;update;patch;delete
@@ -113,6 +116,7 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// ── Step 2: Run scanners for each rule ──
 	var allFindings []scanner.Finding
+	var scanErrors []string
 	minSeverity := severityOrder[policy.Spec.Severity]
 
 	for _, rule := range policy.Spec.Rules {
@@ -127,6 +131,7 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			log.Error(scanErr, "Scanner failed", "scanner", s.Name(), "ruleType", rule.Type)
 			r.Recorder.Event(policy, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonReconcileError,
 				fmt.Sprintf("Scanner %q failed: %v", s.Name(), scanErr))
+			scanErrors = append(scanErrors, fmt.Sprintf("%s: %v", s.Name(), scanErr))
 			continue
 		}
 
@@ -144,6 +149,23 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return severityOrder[allFindings[i].Severity] < severityOrder[allFindings[j].Severity]
 	})
 
+	// ── Step 2b: Feed findings into the correlator for cross-signal correlation ──
+	if r.CorrelatorEngine != nil && len(allFindings) > 0 {
+		for i := range allFindings {
+			f := &allFindings[i]
+			r.CorrelatorEngine.Ingest(&correlator.Event{
+				Type:         correlator.EventSecurityViolation,
+				Source:       fmt.Sprintf("securitypolicy/%s", policy.Name),
+				Severity:     f.Severity,
+				Namespace:    f.ResourceNamespace,
+				Resource:     f.ResourceName,
+				ResourceKind: f.ResourceKind,
+				Message:      f.Title,
+			})
+		}
+		log.Info("Ingested findings into correlator", "count", len(allFindings))
+	}
+
 	// ── Step 3: Update status ──
 	now := metav1.Now()
 	policy.Status.ViolationCount = int32(len(allFindings)) //nolint:gosec // Count is bounded
@@ -154,9 +176,6 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionScanCompleted,
 			aotanamiv1alpha1.ReasonViolationsFound,
 			fmt.Sprintf("Scan completed: %d violations found", len(allFindings)), policy.Generation)
-		conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-			aotanamiv1alpha1.ReasonReconcileSuccess, "Policy is active and scanning", policy.Generation)
-		policy.Status.Phase = aotanamiv1alpha1.PhaseActive
 
 		r.Recorder.Event(policy, corev1.EventTypeWarning, aotanamiv1alpha1.EventReasonViolationsDetected,
 			fmt.Sprintf("Found %d violations across %d pods (severity >= %s)",
@@ -177,12 +196,21 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	} else {
 		conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionScanCompleted,
 			aotanamiv1alpha1.ReasonNoViolations, "Scan completed with no violations", policy.Generation)
-		conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
-			aotanamiv1alpha1.ReasonReconcileSuccess, "Policy is active — no violations found", policy.Generation)
-		policy.Status.Phase = aotanamiv1alpha1.PhaseActive
 
 		r.Recorder.Event(policy, corev1.EventTypeNormal, aotanamiv1alpha1.EventReasonScanCompleted,
 			fmt.Sprintf("Scan completed with 0 violations across %d pods", len(pods)))
+	}
+
+	if len(scanErrors) > 0 {
+		conditions.MarkFalse(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
+			aotanamiv1alpha1.ReasonReconcileFailed,
+			fmt.Sprintf("Scans completed with %d error(s): %s", len(scanErrors), strings.Join(scanErrors, "; ")),
+			policy.Generation)
+		policy.Status.Phase = aotanamiv1alpha1.PhaseDegraded
+	} else {
+		conditions.MarkTrue(&policy.Status.Conditions, aotanamiv1alpha1.ConditionReady,
+			aotanamiv1alpha1.ReasonReconcileSuccess, "Policy is active and scanning", policy.Generation)
+		policy.Status.Phase = aotanamiv1alpha1.PhaseActive
 	}
 
 	// Record metrics.

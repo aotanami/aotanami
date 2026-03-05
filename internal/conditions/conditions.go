@@ -112,3 +112,20 @@ func MarkFalse(conditions *[]metav1.Condition, conditionType, reason, message st
 func MarkUnknown(conditions *[]metav1.Condition, conditionType, reason, message string, observedGeneration int64) {
 	Set(conditions, conditionType, metav1.ConditionUnknown, reason, message, observedGeneration)
 }
+
+// MarkReconciling is a convenience function to mark the Ready condition as Unknown
+// with reason "Progressing". This should be called at the start of every reconciliation
+// to signal that work is in progress.
+func MarkReconciling(conditions *[]metav1.Condition, message string, observedGeneration int64) {
+	Set(conditions, "Ready", metav1.ConditionUnknown, "Progressing", message, observedGeneration)
+}
+
+// HasChanged returns true if setting the condition would change its status.
+// Useful for avoiding redundant events.
+func HasChanged(conditions []metav1.Condition, conditionType string, newStatus metav1.ConditionStatus) bool {
+	c := Get(conditions, conditionType)
+	if c == nil {
+		return true // New condition is always a change.
+	}
+	return c.Status != newStatus
+}

@@ -2,118 +2,134 @@
 
 ## Overview
 
-Aotanami is a Kubernetes Operator built with [Kubebuilder](https://kubebuilder.io/) and [controller-runtime](https://github.com/kubernetes-sigs/controller-runtime). It runs as a single deployment in your cluster, continuously scanning workloads for security misconfigurations, compliance violations, and cost optimization opportunities.
+Aotanami is your **Digital SRE and Security Engineer** — a Kubernetes Operator built with [Kubebuilder](https://kubebuilder.io/) that autonomously **observes**, **reasons about**, and **acts on** security and reliability issues in your production clusters. It runs as a single deployment, continuously protecting your workloads while you focus on building features.
 
-**Think of it as a security guard that never sleeps** — it watches your Kubernetes pods around the clock and reports anything that looks wrong.
-
-## How It Works (The Simple Version)
+## How It Works: Observe → Reason → Act
 
 ```
-You create a SecurityPolicy     →    Aotanami scans pods    →    Findings appear in status
-         (what to check)               (automatically)            (what it found)
+SecurityPolicy scans pods  →  Correlator groups signals  →  LLM diagnoses root cause  →  GitHub PR with fix
+MonitoringPolicy watches  →  Anomaly detector fires     →  into a unified incident   →  or Slack/PagerDuty alert
+ClusterScan evaluates CIS  →  Compliance framework maps  →                            →
 ```
 
-1. **You tell Aotanami what to check** by creating Custom Resources (CRDs) like `SecurityPolicy` or `ClusterScan`
-2. **Aotanami watches your pods** and runs security scanners against them
-3. **Results show up** in the resource's `.status` field, as Kubernetes Events, and in Prometheus metrics
-4. **It keeps checking** — scanners re-run periodically to catch new violations
+1. **You declare intent** by creating CRDs like `SecurityPolicy`, `MonitoringPolicy`, or `ClusterScan`
+2. **Aotanami observes** — scanning pods, watching restart rates, evaluating compliance
+3. **The brain reasons** — anomaly detector builds baselines, correlator groups events into incidents, LLM generates structured JSON fix plans
+4. **The engine acts** — remediation engine validates fixes, GitHub engine opens PRs, notifier routes alerts
+5. **It never stops** — continuous reconciliation catches new violations, drift, and anomalies
 
 ## System Architecture
 
 ```mermaid
 graph TB
-    subgraph "Your Cluster"
+    subgraph "Kubernetes Cluster — Read-Only Access"
         Pods[Running Pods]
-        Secrets[Kubernetes Secrets]
+        Secrets[K8s Secrets]
         NS[Namespaces]
         Events[K8s Events]
         Logs[Pod Logs & Metrics]
     end
 
-    subgraph "Aotanami Operator Layer"
-        direction TB
-
-        subgraph "Controllers (The Eyes)"
-            ConfigCtrl[AotanamiConfig]
-            SecPolCtrl[SecurityPolicy]
-            ScanCtrl[ClusterScan]
-            CostCtrl[CostPolicy]
-            GitCtrl[GitOpsRepository]
-            MonCtrl[MonitoringPolicy]
+    subgraph "Aotanami — The Digital SRE"
+        subgraph "Observe (Controllers)"
+            SecPolCtrl["SecurityPolicy<br/>pod scanning"]
+            MonCtrl["MonitoringPolicy<br/>pod restart watch"]
+            ScanCtrl["ClusterScan<br/>scheduled compliance"]
+            CostCtrl["CostPolicy<br/>resource analysis"]
+            GitCtrl["GitOpsRepository<br/>repo discovery"]
         end
 
-        subgraph "Aotanami Brain (internal/*)"
-            Watch[monitor]
-            Scan[scanner: 8 engines]
-            Anomaly[anomaly]
-            Cost[costoptimizer]
-            Threat[threat]
-            Drift[drift]
-            Correlator[correlator]
-            LLM[llm: BYO Keys]
-            Remediation[remediation]
-            GitOps[gitops]
-            Notify[notifier]
+        subgraph "Reason (The Brain)"
+            AD["anomaly<br/>σ-deviation baselines"]
+            CE["correlator<br/>incident grouping"]
+            CF["compliance<br/>CIS/NIST/SOC2 mapping"]
+            LD["drift<br/>cluster vs Git diffing"]
+            LLM["llm<br/>structured JSON reasoning"]
+        end
+
+        subgraph "Act (Execution)"
+            RE["remediation<br/>risk-scored fix plans"]
+            GH["github<br/>JWT auth, PR lifecycle"]
+            NF["notifier<br/>dedup + rate limit"]
         end
     end
 
     subgraph "External Integrations"
-        GitHub["GitHub App (GitOps PRs)"]
-        Alerts["Slack/Teams/PagerDuty"]
-        Prometheus["Metrics"]
+        GitHub["Your GitOps Repo"]
+        Alerts["Slack · Teams · PagerDuty"]
+        Prometheus["Prometheus · Grafana"]
+        ArgoFlux["ArgoCD / Flux"]
     end
 
     Pods --> SecPolCtrl & ScanCtrl & CostCtrl
-    Events & Logs --> Watch
-    Secrets --> ConfigCtrl & GitCtrl
+    Events & Logs --> MonCtrl
+    Secrets --> GitCtrl
 
-    SecPolCtrl & ScanCtrl --> Scan
-    CostCtrl --> Cost
+    SecPolCtrl -->|findings| CE
+    MonCtrl -->|pod restarts| AD
+    ScanCtrl -->|findings| CF
+    AD -->|anomalies| CE
+    CF -->|violations| CE
+    CostCtrl -->|waste| CE
+    LD -->|drift| CE
 
-    Watch --> Anomaly
-    Scan & Anomaly & Cost & Threat & Drift --> Correlator
-    Correlator --> LLM
+    CE -->|correlated incidents| LLM
+    LLM -->|JSON fix plan| RE
 
-    LLM -->|Fix Plans| Remediation
-    Remediation -->|Pull Requests| GitOps
-    GitOps --> GitHub
-
-    LLM --> Notify
-    Notify --> Alerts
-    Watch & Scan --> Prometheus
+    RE -->|Protect Mode| GH
+    RE -->|Audit Mode| NF
+    GH --> GitHub
+    GitHub --> ArgoFlux
+    NF --> Alerts
+    SecPolCtrl & MonCtrl --> Prometheus
 ```
 
-## The Digital Employee Brain (Phase 2)
+## The Digital SRE Brain (`internal/`)
 
-Aotanami's true power goes beyond simple static scanning. The operator contains a full embedded intelligence pipeline designed to autonomously operate your cluster:
+The intelligence lives entirely within the `internal/` packages. These form the autonomous pipeline that converts raw Kubernetes telemetry into actionable GitOps Pull Requests.
 
-1. **LLM Engine (`internal/llm`)**: Built-in support for OpenRouter, Anthropic, and OpenAI with token budgeting, exponential backoff retries, and circuit breakers for production resilience.
-2. **Incident Correlation (`internal/correlator`)**: Correlates isolated security findings and anomalous metrics into holistic incidents, drastically reducing alert fatigue.
-3. **Auto-Remediation (`internal/remediation`)**: Analyzes structured findings and uses the LLM to generate precise, syntactically-valid Kubernetes YAML patches to fix the issue.
-4. **GitOps Automation (`internal/gitops`)**: Uses a GitHub App integration to securely check out your infrastructure repository, apply the generated YAML fixes, and open fully-documented Pull Requests.
-5. **Multi-Channel Notifier (`internal/notifier`)**: Smart alerting to Slack, Microsoft Teams, PagerDuty, webhooks, and email, with rate limiting and deduplication.
+### Observe Layer
 
-This pipeline effectively acts as a tireless, 24/7 Security/SRE engineer that identifies issues and proposes the code to fix them.
+| Package | What the Digital SRE Observes |
+|---|---|
+| `scanner` | 8 pluggable scanners — RBAC, container security, images, PodSecurity, secrets, network, privilege escalation, resource limits |
+| `monitor` | Real-time Kubernetes resource watcher with event dispatch |
+| `costoptimizer` | Resource utilization analysis — idle workloads, rightsizing, spot readiness |
 
-## Controllers — What Each One Does
+### Reason Layer
 
-Aotanami has **9 controllers**, each responsible for one type of Custom Resource:
+| Package | How the Digital SRE Thinks |
+|---|---|
+| `anomaly` | Statistical baseline engine — σ-deviation detection with sliding windows (1000 data points per metric) |
+| `correlator` | Time-windowed event grouping — merges security findings + anomalies + crashes into unified incidents |
+| `compliance` | Maps findings to CIS Kubernetes Benchmark controls (15 controls) with evidence attachment |
+| `drift` | Live drift detector — recursive object diffing across 9 resource types, shadow resource detection |
+| `llm` | Multi-provider LLM client — OpenRouter, OpenAI, Anthropic, Azure, Ollama with circuit breaker + retry |
 
-| Controller | What It Does | Key Behaviors |
-|---|---|---|
-| **AotanamiConfig** | Manages global operator settings | Enforces singleton (only one allowed), validates LLM API key secret exists |
-| **SecurityPolicy** | Scans pods for security violations | Targets pods by namespace/labels, runs scanners, filters by severity |
-| **ClusterScan** | Runs scheduled cluster-wide scans | Creates ScanReport children, enforces history limits, supports suspension |
-| **ScanReport** | Manages scan result lifecycle | Created by ClusterScan, stores findings as queryable K8s resources |
-| **MonitoringPolicy** | Validates monitoring configuration | Checks that referenced NotificationChannels exist |
-| **NotificationChannel** | Validates notification destinations | Checks that credential secrets exist and are accessible |
-| **CostPolicy** | Evaluates pod resource usage | Counts pods without resource limits, reports rightsizing recommendations |
-| **RemediationPolicy** | Validates remediation setup | Verifies GitOpsRepository and SecurityPolicy references exist |
-| **GitOpsRepository** | Manages repository sync lifecycle | Validates auth secrets, path configuration, manages sync state |
+### Act Layer
+
+| Package | How the Digital SRE Acts |
+|---|---|
+| `remediation` | LLM-powered fix generation — structured JSON output, risk scoring (0-100), blast radius protection |
+| `github` | GitHub App engine — RS256 JWT auth, token caching, branch → commit → PR → label lifecycle (stdlib only) |
+| `gitops` | GitOps interface + ArgoCD/Flux/Kustomize/Helm source discovery |
+| `notifier` | Multi-channel delivery — Slack, Teams, PagerDuty, webhooks with severity filtering + deduplication |
+
+## Controllers — The Digital SRE's Responsibilities
+
+| Controller | Observe | Reason | Act |
+|---|---|---|---|
+| **SecurityPolicy** | Scans pods for violations | Feeds findings → correlator | — |
+| **MonitoringPolicy** | Watches pod restart counts | Feeds → anomaly detector → correlator | — |
+| **ClusterScan** | Runs scheduled scans | Evaluates CIS compliance | Creates ScanReport CRs, emits ComplianceViolation events |
+| **RemediationPolicy** | — | Queries correlator for open incidents | LLM plan → validates → opens GitOps PR |
+| **GitOpsRepository** | Discovers repo structure | — | Provides Git context for remediation |
+| **CostPolicy** | Analyzes resource utilization | Identifies waste | — |
+| **AotanamiConfig** | — | — | Configures global settings |
 
 ### Controller Lifecycle
 
-Every controller follows the same lifecycle pattern:
+Every controller follows the standard lifecycle pattern:
 
 ```mermaid
 stateDiagram-v2
@@ -129,105 +145,82 @@ stateDiagram-v2
 
 ## Scanner Engine
 
-The scanner engine is a **pluggable system** — each scanner registers itself by rule type, and controllers look them up from a shared registry.
-
-### How Scanners Work
+The scanner engine is **pluggable** — each scanner registers by rule type, and controllers look them up from a shared registry.
 
 ```
-SecurityPolicy.spec.rules[].type    →    Registry.Get(type)    →    scanner.Scan(pods)    →    []Finding
+SecurityPolicy.spec.rules[].type  →  Registry.Get(type)  →  scanner.Scan(pods)  →  []Finding
 ```
-
-1. Your SecurityPolicy lists rules like `type: container-security-context`
-2. The controller looks up `container-security-context` in the scanner registry
-3. The scanner receives the target pods and checks for violations
-4. Each violation is returned as a `Finding` with severity, title, description, and recommendation
 
 ### Available Scanners
 
 | Scanner | Rule Type | What It Checks |
 |---|---|---|
-| **Container Security Context** | `container-security-context` | runAsNonRoot, privileged mode, readOnlyRootFilesystem, allowPrivilegeEscalation |
-| **Resource Limits** | `resource-limits` | Missing CPU/memory requests and limits on containers |
+| **Container Security Context** | `container-security-context` | runAsNonRoot, privileged, readOnlyRootFilesystem, allowPrivilegeEscalation |
+| **Resource Limits** | `resource-limits` | Missing CPU/memory requests and limits |
 | **Image Pinning** | `image-vulnerability` | `:latest` tags, missing digest pins |
-| **Pod Security** | `pod-security` | hostNetwork, hostPID, hostIPC, hostPath volumes, dangerous capabilities (SYS_ADMIN, NET_RAW) |
-| **Privilege Escalation** | `privilege-escalation` | Running as root (UID 0), auto-mounted service account tokens, unmasked /proc |
-| **Secrets Exposure** | `secrets-exposure` | Hardcoded secrets in env vars, envFrom with secretRef, sensitive data patterns |
-| **Network Policy** | `network-policy` | Pods without labels (untargetable by NetworkPolicy), hostPort usage |
-| **RBAC Audit** | `rbac-audit` | Default service account usage, admin-named service accounts |
-
-### Adding a New Scanner
-
-The scanner engine is designed to be extended. To add a new scanner:
-
-1. Create a file in `internal/scanner/` implementing the `Scanner` interface
-2. Register it in `DefaultRegistry()` in `internal/scanner/scanner.go`
-
-```go
-// Your scanner must implement this interface:
-type Scanner interface {
-    Name() string                                              // Human-readable name
-    RuleType() string                                          // Matches SecurityPolicy rule type
-    Scan(ctx context.Context, pods []corev1.Pod, params map[string]string) ([]Finding, error)
-}
-```
+| **Pod Security** | `pod-security` | hostNetwork, hostPID, hostIPC, hostPath, SYS_ADMIN, NET_RAW |
+| **Privilege Escalation** | `privilege-escalation` | Root UID, auto-mounted tokens, unmasked /proc |
+| **Secrets Exposure** | `secrets-exposure` | Hardcoded secrets in env vars, sensitive patterns |
+| **Network Policy** | `network-policy` | Unlabeled pods, hostPort usage |
+| **RBAC Audit** | `rbac-audit` | Default service account usage, admin-named SAs |
 
 ## Status Conditions
 
-Every Aotanami resource uses **Kubernetes-standard status conditions** to communicate its state. This follows the same patterns used by cert-manager, Crossplane, and other production operators.
+Every resource uses **Kubernetes-standard status conditions**:
 
 | Condition | Meaning |
 |---|---|
-| `Ready` | The resource is fully reconciled and operational |
-| `SecretResolved` | A referenced Kubernetes Secret exists and is accessible |
-| `ScanCompleted` | A security scan has finished running |
-| `GitOpsConnected` | A referenced GitOps repository is available |
-
-Each condition includes:
-- `status`: True, False, or Unknown
-- `reason`: Machine-readable reason code
-- `message`: Human-readable description
-- `lastTransitionTime`: When the condition last changed
-- `observedGeneration`: Which generation of the spec was processed
+| `Ready` | Fully reconciled and operational |
+| `SecretResolved` | Referenced K8s Secret is accessible |
+| `ScanCompleted` | Security scan finished |
+| `GitOpsConnected` | GitOps repository available |
 
 ## Prometheus Metrics
 
-Aotanami exposes custom Prometheus metrics at the standard `/metrics` endpoint:
-
 | Metric | Type | What It Tracks |
 |---|---|---|
-| `aotanami_controller_reconcile_total` | Counter | Total reconcile operations per controller and result |
-| `aotanami_controller_reconcile_duration_seconds` | Histogram | How long each reconcile takes |
+| `aotanami_controller_reconcile_total` | Counter | Reconcile operations per controller |
+| `aotanami_controller_reconcile_duration_seconds` | Histogram | Reconcile latency |
 | `aotanami_scanner_findings_total` | Counter | Findings by scanner and severity |
 | `aotanami_scanner_resources_scanned_total` | Counter | Total resources scanned |
 | `aotanami_policy_violations` | Gauge | Current violations per policy |
 | `aotanami_clusterscan_completed_total` | Counter | Completed cluster scans |
-| `aotanami_clusterscan_findings` | Gauge | Findings from last scan run |
+| `aotanami_clusterscan_findings` | Gauge | Findings from last scan |
 | `aotanami_cost_rightsizing_recommendations` | Gauge | Pending rightsizing recommendations |
 
 ## Security Model
 
-- **Read-only cluster access**: Aotanami uses only `get`, `list`, `watch` verbs on cluster resources
-- **No direct mutations**: All fixes are delivered as GitOps PRs, never applied directly
-- **API key isolation**: LLM API keys stored in Kubernetes Secrets, never logged or exposed
-- **Non-root container**: Runs as UID 65532 in a `scratch` image with read-only rootfs
-- **Signed artifacts**: All container images and Helm charts are Cosign-signed with SBOM attestations
-- **Admission webhooks**: Validates and defaults SecurityPolicy resources before they are persisted
+- **Read-only cluster access**: Only `get`, `list`, `watch` verbs on cluster resources
+- **No direct mutations**: All fixes delivered as GitOps PRs, never applied directly
+- **API key isolation**: LLM keys in Kubernetes Secrets, never logged
+- **Non-root container**: UID 65532, `scratch` image, read-only rootfs
+- **Signed artifacts**: Cosign-signed images with SBOM attestations
+- **Admission webhooks**: Validates SecurityPolicy resources before persistence
 
 ## Project Layout
 
 ```
 aotanami/
 ├── api/v1alpha1/           # CRD type definitions (9 types + conditions)
-├── cmd/main.go             # Operator entrypoint — wires controllers + scanners
+├── cmd/main.go             # Entrypoint — wires controllers, brain, scanners
 ├── config/                 # Kustomize manifests (CRDs, RBAC, webhook, samples)
 ├── internal/
-│   ├── controller/         # 9 reconciliation controllers
+│   ├── controller/         # 7 controllers (Observe → Reason → Act)
 │   ├── scanner/            # 8 security scanners + registry
-│   ├── conditions/         # Status condition helper functions
-│   ├── metrics/            # Custom Prometheus metrics
-│   ├── version/            # Build version injection
-│   └── webhook/            # Admission webhook (defaulting + validation)
+│   ├── anomaly/            # σ-deviation baseline engine
+│   ├── correlator/         # Time-windowed incident correlation
+│   ├── compliance/         # CIS/NIST/SOC2 framework mapping
+│   ├── drift/              # Live cluster-vs-Git drift detection
+│   ├── remediation/        # LLM-powered fix generation + risk scoring
+│   ├── llm/                # Multi-provider LLM client + circuit breaker
+│   ├── github/             # GitHub App engine (stdlib only)
+│   ├── gitops/             # GitOps interface + source discovery
+│   ├── notifier/           # Multi-channel notifications
+│   ├── monitor/            # Real-time resource watcher
+│   ├── conditions/         # Status condition helpers
+│   ├── metrics/            # Prometheus metrics
+│   └── webhook/            # Admission webhook
 ├── charts/                 # Helm chart
 ├── test/                   # E2E tests
-└── docs/                   # This documentation
+└── docs/                   # Documentation
 ```

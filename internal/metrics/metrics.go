@@ -149,6 +149,119 @@ var (
 		},
 		[]string{"policy", "namespace"},
 	)
+
+	// ── GitOps Metrics ──
+
+	// GitOpsSyncStatusGauge tracks the sync status of GitOps repositories.
+	GitOpsSyncStatusGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "aotanami",
+			Subsystem: "gitops",
+			Name:      "sync_status",
+			Help:      "Sync status of GitOps repositories (1 = synced, 0 = not synced).",
+		},
+		[]string{"repository", "namespace", "source_type", "controller_type"},
+	)
+
+	// GitOpsDiscoveredAppsGauge tracks the number of discovered applications.
+	GitOpsDiscoveredAppsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "aotanami",
+			Subsystem: "gitops",
+			Name:      "discovered_applications",
+			Help:      "Number of applications discovered by the GitOps controller adapter.",
+		},
+		[]string{"repository", "namespace", "controller_type"},
+	)
+
+	// ── Brain Package Metrics ──
+
+	// AnomalyDetectedTotal counts anomalies detected by the anomaly engine.
+	AnomalyDetectedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "aotanami",
+			Subsystem: "anomaly",
+			Name:      "detected_total",
+			Help:      "Total anomalies detected by metric key and severity.",
+		},
+		[]string{"metric_key", "severity"},
+	)
+
+	// CorrelatorIncidentsTotal counts incidents created by the correlator.
+	CorrelatorIncidentsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "aotanami",
+			Subsystem: "correlator",
+			Name:      "incidents_total",
+			Help:      "Total incidents created by the correlator engine.",
+		},
+		[]string{"severity"},
+	)
+
+	// CorrelatorOpenIncidents tracks the current number of open incidents.
+	CorrelatorOpenIncidents = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "aotanami",
+			Subsystem: "correlator",
+			Name:      "open_incidents",
+			Help:      "Current number of open (unresolved) incidents.",
+		},
+	)
+
+	// RemediationPRsTotal counts pull requests created by the remediation engine.
+	RemediationPRsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "aotanami",
+			Subsystem: "remediation",
+			Name:      "prs_created_total",
+			Help:      "Total pull requests created by the remediation engine.",
+		},
+		[]string{"strategy"}, // dry-run, auto-fix
+	)
+
+	// RemediationRiskScore tracks the risk score of the latest remediation plan.
+	RemediationRiskScore = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "aotanami",
+			Subsystem: "remediation",
+			Name:      "risk_score",
+			Help:      "Risk score (0-100) of the last remediation plan.",
+		},
+		[]string{"namespace"},
+	)
+
+	// DriftDetectedTotal counts drift results detected by the drift engine.
+	DriftDetectedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "aotanami",
+			Subsystem: "drift",
+			Name:      "detected_total",
+			Help:      "Total drifts detected by resource kind and type.",
+		},
+		[]string{"kind", "drift_type"}, // drift_type: added, modified, deleted
+	)
+
+	// CompliancePctGauge tracks the compliance percentage per framework.
+	CompliancePctGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "aotanami",
+			Subsystem: "compliance",
+			Name:      "posture_pct",
+			Help:      "Compliance posture percentage by framework.",
+		},
+		[]string{"framework"},
+	)
+
+	// NotifierDeliveredTotal counts notifications delivered by the notifier.
+	NotifierDeliveredTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "aotanami",
+			Subsystem: "notifier",
+			Name:      "delivered_total",
+			Help:      "Total notifications delivered by channel type and severity.",
+		},
+		[]string{"channel_type", "severity"},
+	)
 )
 
 func init() { //nolint:gochecknoinits // standard practice for prometheus
@@ -164,5 +277,16 @@ func init() { //nolint:gochecknoinits // standard practice for prometheus
 		ClusterScanCompletedTotal,
 		ClusterScanFindingsGauge,
 		CostRightsizingGauge,
+		GitOpsSyncStatusGauge,
+		GitOpsDiscoveredAppsGauge,
+		// Brain package metrics.
+		AnomalyDetectedTotal,
+		CorrelatorIncidentsTotal,
+		CorrelatorOpenIncidents,
+		RemediationPRsTotal,
+		RemediationRiskScore,
+		DriftDetectedTotal,
+		CompliancePctGauge,
+		NotifierDeliveredTotal,
 	)
 }
