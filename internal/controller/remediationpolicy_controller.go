@@ -277,29 +277,31 @@ func incidentToFinding(incident *correlator.Incident) *scanner.Finding {
 
 // parseRepoURL extracts owner and repo name from a Git URL.
 // Handles both HTTPS and SSH URL formats.
-func parseRepoURL(url string) (string, string) {
+func parseRepoURL(url string) (owner, repo string) {
 	// Simple heuristic: extract from "github.com/owner/repo" pattern.
 	// Works for: https://github.com/owner/repo.git, git@github.com:owner/repo.git
-	parts := []string{"", ""}
 	for i := len(url) - 1; i >= 0; i-- {
-		if url[i] == '/' || url[i] == ':' {
-			remainder := url[i+1:]
-			// Strip .git suffix.
-			if len(remainder) > 4 && remainder[len(remainder)-4:] == ".git" {
-				remainder = remainder[:len(remainder)-4]
-			}
-			parts[1] = remainder
-			// Find owner.
-			for j := i - 1; j >= 0; j-- {
-				if url[j] == '/' || url[j] == ':' || url[j] == '@' {
-					parts[0] = url[j+1 : i]
-					return parts[0], parts[1]
-				}
-			}
-			break
+		if url[i] != '/' && url[i] != ':' {
+			continue
 		}
+
+		remainder := url[i+1:]
+		// Strip .git suffix.
+		if len(remainder) > 4 && remainder[len(remainder)-4:] == ".git" {
+			remainder = remainder[:len(remainder)-4]
+		}
+		repo = remainder
+
+		// Find owner.
+		for j := i - 1; j >= 0; j-- {
+			if url[j] == '/' || url[j] == ':' || url[j] == '@' {
+				owner = url[j+1 : i]
+				return owner, repo
+			}
+		}
+		break
 	}
-	return parts[0], parts[1]
+	return "", ""
 }
 
 // SetupWithManager sets up the controller with the Manager.

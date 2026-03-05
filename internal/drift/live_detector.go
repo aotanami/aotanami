@@ -17,6 +17,7 @@ limitations under the License.
 package drift
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -69,7 +70,7 @@ type LiveDetectorConfig struct {
 }
 
 // NewLiveDetector creates a new LiveDetector.
-func NewLiveDetector(cfg LiveDetectorConfig) *LiveDetector {
+func NewLiveDetector(cfg *LiveDetectorConfig) *LiveDetector {
 	baseRef := cfg.BaseRef
 	if baseRef == "" {
 		baseRef = "main"
@@ -190,7 +191,7 @@ func (d *LiveDetector) compareResource(ctx context.Context, live *unstructured.U
 	if err := json.Unmarshal(gitContent, &desired.Object); err != nil {
 		// Try YAML — handle multi-document files by taking the first document.
 		yamlContent := gitContent
-		if idx := strings.Index(string(gitContent), "\n---\n"); idx >= 0 {
+		if idx := bytes.Index(gitContent, []byte("\n---\n")); idx >= 0 {
 			yamlContent = gitContent[:idx]
 		}
 		jsonBytes, yamlErr := yamlutil.YAMLToJSON(yamlContent)

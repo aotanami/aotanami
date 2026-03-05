@@ -17,13 +17,13 @@ limitations under the License.
 package github
 
 import (
+	"context"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -137,7 +137,7 @@ func (c *Client) generateJWT() (string, error) {
 func (c *Client) createInstallationToken(jwt string) (string, time.Time, error) {
 	url := fmt.Sprintf("%s/app/installations/%d/access_tokens", c.baseURL, c.installationID)
 
-	req, err := http.NewRequest(http.MethodPost, url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, http.NoBody)
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -149,7 +149,7 @@ func (c *Client) createInstallationToken(jwt string) (string, time.Time, error) 
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("requesting installation token: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
 		return "", time.Time{}, fmt.Errorf("installation token request returned %d", resp.StatusCode)
@@ -170,8 +170,8 @@ func (c *Client) createInstallationToken(jwt string) (string, time.Time, error) 
 // to avoid pulling in a JWT library dependency.
 func signJWT(key *rsa.PrivateKey, claims map[string]interface{}) (string, error) {
 	header := map[string]string{"alg": "RS256", "typ": "JWT"}
-	headerJSON, _ := json.Marshal(header) //nolint:errcheck
-	claimsJSON, _ := json.Marshal(claims) //nolint:errcheck
+	headerJSON, _ := json.Marshal(header)
+	claimsJSON, _ := json.Marshal(claims)
 
 	headerB64 := base64.RawURLEncoding.EncodeToString(headerJSON)
 	claimsB64 := base64.RawURLEncoding.EncodeToString(claimsJSON)
@@ -196,6 +196,7 @@ type tokenTransport struct {
 	base   http.RoundTripper
 }
 
+// RoundTrip adds the bearer token to requests.
 func (t *tokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	token, err := t.client.Token()
 	if err != nil {
@@ -209,21 +210,4 @@ func (t *tokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req2.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
 	return t.base.RoundTrip(req2)
-}
-
-// Retry helper for GitHub API rate limiting.
-func retryWithBackoff(attempts int, fn func() error) error {
-	for i := 0; i < attempts; i++ {
-		err := fn()
-		if err == nil {
-			return nil
-		}
-		if i < attempts-1 {
-			wait := time.Duration(math.Pow(2, float64(i))) * time.Second
-			time.Sleep(wait)
-		} else {
-			return err
-		}
-	}
-	return nil
 }

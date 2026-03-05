@@ -191,7 +191,7 @@ func (e *Engine) createPR(ctx context.Context, plan *Plan, owner, repo string) (
 		Files:      files,
 	}
 
-	result, err := e.gitopsEngine.CreatePullRequest(ctx, pr)
+	result, err := e.gitopsEngine.CreatePullRequest(ctx, &pr)
 	if err != nil {
 		return nil, fmt.Errorf("remediation: create PR: %w", err)
 	}
@@ -262,7 +262,7 @@ type llmFix struct {
 	Operation   string `json:"operation"`
 }
 
-func extractFixes(llmContent string, finding *scanner.Finding) ([]Fix, string, int) {
+func extractFixes(llmContent string, finding *scanner.Finding) (fixes []Fix, analysis string, riskScore int) {
 	// Try to parse structured JSON from the LLM response.
 	jsonStr := extractJSON(llmContent)
 	if jsonStr != "" {

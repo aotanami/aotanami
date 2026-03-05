@@ -34,6 +34,8 @@ import (
 // GitHubEngine implements gitops.Engine using the GitHub REST API.
 // It supports GitHub App authentication and all CRUD operations needed
 // for the Aotanami auto-remediation workflow.
+//
+//nolint:revive // External package wrapper
 type GitHubEngine struct {
 	client  *Client
 	http    *http.Client
@@ -53,7 +55,7 @@ func NewEngine(client *Client, log logr.Logger) *GitHubEngine {
 
 // CreatePullRequest implements gitops.Engine.CreatePullRequest.
 // It creates a branch, commits files, and opens a PR.
-func (e *GitHubEngine) CreatePullRequest(ctx context.Context, pr gitops.PullRequest) (*gitops.PullRequestResult, error) {
+func (e *GitHubEngine) CreatePullRequest(ctx context.Context, pr *gitops.PullRequest) (*gitops.PullRequestResult, error) {
 	e.log.Info("Creating pull request",
 		"owner", pr.RepoOwner, "repo", pr.RepoName,
 		"head", pr.HeadBranch, "base", pr.BaseBranch,
@@ -275,7 +277,7 @@ func (e *GitHubEngine) deleteFile(ctx context.Context, owner, repo, path, branch
 	return err
 }
 
-func (e *GitHubEngine) openPR(ctx context.Context, pr gitops.PullRequest) (*gitops.PullRequestResult, error) {
+func (e *GitHubEngine) openPR(ctx context.Context, pr *gitops.PullRequest) (*gitops.PullRequestResult, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/pulls", e.baseURL, pr.RepoOwner, pr.RepoName)
 	payload := map[string]interface{}{
 		"title": pr.Title,
@@ -336,7 +338,7 @@ func (e *GitHubEngine) doRequest(ctx context.Context, method, url string, payloa
 	if err != nil {
 		return nil, fmt.Errorf("executing request: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

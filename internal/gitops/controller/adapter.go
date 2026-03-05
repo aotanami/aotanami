@@ -97,7 +97,7 @@ type Adapter interface {
 	ListApplications(ctx context.Context, repoURL string) ([]Application, error)
 
 	// GetSyncStatus returns detailed sync status for a specific application.
-	GetSyncStatus(ctx context.Context, app Application) (*SyncStatus, error)
+	GetSyncStatus(ctx context.Context, app *Application) (*SyncStatus, error)
 }
 
 // Registry is a thread-safe registry of controller Adapter implementations.
@@ -137,11 +137,11 @@ func (r *Registry) List() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	types := make([]string, 0, len(r.adapters))
+	adapterTypes := make([]string, 0, len(r.adapters))
 	for t := range r.adapters {
-		types = append(types, t)
+		adapterTypes = append(adapterTypes, t)
 	}
-	return types
+	return adapterTypes
 }
 
 // DetectInstalled probes the cluster for installed GitOps controllers.
@@ -195,13 +195,6 @@ func NewArgoCDAdapter(c client.Client) *ArgoCDAdapter {
 // Type returns "argocd".
 func (a *ArgoCDAdapter) Type() string { return "argocd" }
 
-// argoCDAppGVR is the GVR for ArgoCD Application resources.
-var argoCDAppGVR = schema.GroupVersionResource{
-	Group:    "argoproj.io",
-	Version:  "v1alpha1",
-	Resource: "applications",
-}
-
 // Detect checks if ArgoCD is installed by listing Application CRDs.
 func (a *ArgoCDAdapter) Detect(ctx context.Context) (bool, error) {
 	list := &unstructured.UnstructuredList{}
@@ -251,7 +244,7 @@ func (a *ArgoCDAdapter) ListApplications(ctx context.Context, repoURL string) ([
 }
 
 // GetSyncStatus returns sync status for an ArgoCD Application.
-func (a *ArgoCDAdapter) GetSyncStatus(ctx context.Context, app Application) (*SyncStatus, error) {
+func (a *ArgoCDAdapter) GetSyncStatus(ctx context.Context, app *Application) (*SyncStatus, error) {
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "argoproj.io",
@@ -425,7 +418,7 @@ func (a *FluxAdapter) ListApplications(ctx context.Context, repoURL string) ([]A
 }
 
 // GetSyncStatus returns sync status for a Flux Kustomization or HelmRelease.
-func (a *FluxAdapter) GetSyncStatus(ctx context.Context, app Application) (*SyncStatus, error) {
+func (a *FluxAdapter) GetSyncStatus(ctx context.Context, app *Application) (*SyncStatus, error) {
 	obj := &unstructured.Unstructured{}
 
 	switch app.SourceType {

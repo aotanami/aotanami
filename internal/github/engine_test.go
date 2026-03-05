@@ -93,7 +93,7 @@ func TestGitHubEngine_CreatePullRequest(t *testing.T) {
 		},
 	}
 
-	result, err := engine.CreatePullRequest(context.Background(), pr)
+	result, err := engine.CreatePullRequest(context.Background(), &pr)
 	if err != nil {
 		t.Fatalf("CreatePullRequest failed: %v", err)
 	}

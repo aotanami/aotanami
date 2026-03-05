@@ -288,7 +288,7 @@ func (r *GitOpsRepositoryReconciler) detectController(ctx context.Context, repo 
 		return
 	}
 
-	repo.Status.DiscoveredApplications = int32(len(apps))
+	repo.Status.DiscoveredApplications = int32(len(apps)) //nolint:gosec // Application count is bounded by API limits
 
 	if len(apps) > 0 {
 		conditions.MarkTrue(&repo.Status.Conditions, aotanamiv1alpha1.ConditionControllerLinked,
@@ -345,9 +345,7 @@ func simulateFileDiscovery(paths []string, helm *aotanamiv1alpha1.HelmSource, ku
 			chartPath = paths[0]
 		}
 		files = append(files, filepath.Join(strings.TrimSuffix(chartPath, "/"), "Chart.yaml"))
-		for _, vf := range helm.ValuesFiles {
-			files = append(files, vf)
-		}
+		files = append(files, helm.ValuesFiles...)
 	}
 
 	// If Kustomize config is present, add kustomization.yaml hint.

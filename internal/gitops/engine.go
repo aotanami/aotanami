@@ -83,7 +83,7 @@ type PullRequestResult struct {
 // Engine is the interface for GitOps operations.
 type Engine interface {
 	// CreatePullRequest creates a PR with the given changes.
-	CreatePullRequest(ctx context.Context, pr PullRequest) (*PullRequestResult, error)
+	CreatePullRequest(ctx context.Context, pr *PullRequest) (*PullRequestResult, error)
 
 	// GetFile retrieves a file from a repository.
 	GetFile(ctx context.Context, owner, repo, path, ref string) ([]byte, error)

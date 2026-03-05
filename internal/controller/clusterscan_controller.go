@@ -204,7 +204,8 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// ── Evaluate compliance against CIS Kubernetes Benchmark ──
 	var complianceFindings []compliance.Finding
-	for _, f := range allFindings {
+	for i := range allFindings {
+		f := &allFindings[i]
 		complianceFindings = append(complianceFindings, compliance.Finding{
 			RuleType:          f.Category,
 			Severity:          f.Severity,

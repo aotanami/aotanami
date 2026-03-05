@@ -149,7 +149,8 @@ func (r *MonitoringPolicyReconciler) observePodMetrics(ctx context.Context, poli
 				continue
 			}
 
-			for _, cs := range pod.Status.ContainerStatuses {
+			for j := range pod.Status.ContainerStatuses {
+				cs := &pod.Status.ContainerStatuses[j]
 				key := fmt.Sprintf("%s/%s/%s/restarts", pod.Namespace, pod.Name, cs.Name)
 				anom := r.AnomalyDetector.Observe(key, float64(cs.RestartCount))
 				if anom == nil {

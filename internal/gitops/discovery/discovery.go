@@ -78,6 +78,8 @@ type Result struct {
 //   - Raw manifests by the presence of .yaml, .yml, or .json files
 //
 // The function supports monorepos with multiple sources in different directories.
+//
+//nolint:gocyclo // Discovery logic inherently checks many file patterns
 func Discover(files []string) *Result {
 	result := &Result{}
 
@@ -153,7 +155,7 @@ func Discover(files []string) *Result {
 
 // DiscoverForPaths runs discovery scoped to specific paths within a file list.
 // Only files under the specified paths are considered.
-func DiscoverForPaths(files []string, paths []string) *Result {
+func DiscoverForPaths(files, paths []string) *Result {
 	var filtered []string
 	for _, f := range files {
 		for _, p := range paths {

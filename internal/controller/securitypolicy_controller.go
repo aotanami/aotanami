@@ -73,6 +73,8 @@ type SecurityPolicyReconciler struct {
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile implements the main reconciliation loop for SecurityPolicy.
+//
+//nolint:gocyclo // Controller reconciliation logic is inherently complex.
 func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	start := time.Now()

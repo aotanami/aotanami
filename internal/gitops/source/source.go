@@ -40,6 +40,15 @@ import (
 	"sync"
 )
 
+const (
+	extYaml              = ".yaml"
+	extYml               = ".yml"
+	fileChart            = "chart.yaml"
+	fileChartYml         = "chart.yml"
+	fileKustomization    = "kustomization.yaml"
+	fileKustomizationYml = "kustomization.yml"
+)
+
 // Manifest represents a single Kubernetes manifest discovered in a repository.
 type Manifest struct {
 	// Path is the file path relative to the repo root.
@@ -108,7 +117,7 @@ type Source interface {
 	Detect(files []string) bool
 
 	// Parse extracts Kubernetes manifests from the source.
-	Parse(ctx context.Context, opts ParseOptions) (*ParseResult, error)
+	Parse(ctx context.Context, opts *ParseOptions) (*ParseResult, error)
 }
 
 // Registry is a thread-safe registry of Source implementations.
@@ -192,7 +201,7 @@ func (s *RawSource) Type() string { return "raw" }
 func (s *RawSource) Detect(_ []string) bool { return true }
 
 // Parse discovers YAML/JSON files and returns them as manifests.
-func (s *RawSource) Parse(_ context.Context, opts ParseOptions) (*ParseResult, error) {
+func (s *RawSource) Parse(_ context.Context, opts *ParseOptions) (*ParseResult, error) {
 	result := &ParseResult{
 		SourceType: "raw",
 		Metadata:   map[string]string{},
@@ -200,14 +209,14 @@ func (s *RawSource) Parse(_ context.Context, opts ParseOptions) (*ParseResult, e
 
 	for _, f := range opts.Files {
 		ext := strings.ToLower(filepath.Ext(f))
-		if ext != ".yaml" && ext != ".yml" && ext != ".json" {
+		if ext != extYaml && ext != extYml && ext != ".json" {
 			continue
 		}
 
 		// Skip Helm and Kustomize marker files.
 		base := strings.ToLower(filepath.Base(f))
-		if base == "chart.yaml" || base == "chart.yml" ||
-			base == "kustomization.yaml" || base == "kustomization.yml" {
+		if base == fileChart || base == fileChartYml ||
+			base == fileKustomization || base == fileKustomizationYml {
 			continue
 		}
 
@@ -233,7 +242,7 @@ func (s *HelmSourceParser) Type() string { return "helm" }
 func (s *HelmSourceParser) Detect(files []string) bool {
 	for _, f := range files {
 		base := strings.ToLower(filepath.Base(f))
-		if base == "chart.yaml" || base == "chart.yml" {
+		if base == fileChart || base == "chart.yml" {
 			return true
 		}
 	}
@@ -241,7 +250,9 @@ func (s *HelmSourceParser) Detect(files []string) bool {
 }
 
 // Parse discovers Helm chart files and returns them as manifests.
-func (s *HelmSourceParser) Parse(_ context.Context, opts ParseOptions) (*ParseResult, error) {
+//
+//nolint:gocyclo // Parsing chart directories is complex but well-contained
+func (s *HelmSourceParser) Parse(_ context.Context, opts *ParseOptions) (*ParseResult, error) {
 	result := &ParseResult{
 		SourceType: "helm",
 		Metadata:   map[string]string{},
@@ -255,7 +266,7 @@ func (s *HelmSourceParser) Parse(_ context.Context, opts ParseOptions) (*ParseRe
 		base := strings.ToLower(filepath.Base(f))
 		ext := strings.ToLower(filepath.Ext(f))
 
-		if base == "chart.yaml" || base == "chart.yml" {
+		if base == fileChart || base == "chart.yml" {
 			chartPath = f
 			continue
 		}
@@ -268,7 +279,7 @@ func (s *HelmSourceParser) Parse(_ context.Context, opts ParseOptions) (*ParseRe
 		}
 
 		// Collect template files.
-		if ext == ".yaml" || ext == ".yml" || ext == ".tpl" {
+		if ext == extYaml || ext == extYml || ext == ".tpl" {
 			rel, _ := filepath.Rel(opts.Path, f)
 			if strings.HasPrefix(rel, "templates"+string(filepath.Separator)) || strings.HasPrefix(rel, "templates/") {
 				templateFiles = append(templateFiles, f)
@@ -288,8 +299,8 @@ func (s *HelmSourceParser) Parse(_ context.Context, opts ParseOptions) (*ParseRe
 	}
 
 	// Values files — include both discovered and user-specified.
-	allValues := append(valuesFiles, opts.HelmValuesFiles...)
-	for i, vf := range allValues {
+	valuesFiles = append(valuesFiles, opts.HelmValuesFiles...)
+	for i, vf := range valuesFiles {
 		result.Metadata[fmt.Sprintf("valuesFile.%d", i)] = vf
 	}
 
@@ -315,7 +326,7 @@ func (s *KustomizeSourceParser) Type() string { return "kustomize" }
 func (s *KustomizeSourceParser) Detect(files []string) bool {
 	for _, f := range files {
 		base := strings.ToLower(filepath.Base(f))
-		if base == "kustomization.yaml" || base == "kustomization.yml" || base == "kustomization" {
+		if base == fileKustomization || base == "kustomization.yml" || base == "kustomization" {
 			return true
 		}
 	}
@@ -323,7 +334,7 @@ func (s *KustomizeSourceParser) Detect(files []string) bool {
 }
 
 // Parse discovers Kustomize files and returns them as manifests.
-func (s *KustomizeSourceParser) Parse(_ context.Context, opts ParseOptions) (*ParseResult, error) {
+func (s *KustomizeSourceParser) Parse(_ context.Context, opts *ParseOptions) (*ParseResult, error) {
 	result := &ParseResult{
 		SourceType: "kustomize",
 		Metadata:   map[string]string{},
@@ -335,13 +346,13 @@ func (s *KustomizeSourceParser) Parse(_ context.Context, opts ParseOptions) (*Pa
 		base := strings.ToLower(filepath.Base(f))
 		ext := strings.ToLower(filepath.Ext(f))
 
-		if base == "kustomization.yaml" || base == "kustomization.yml" || base == "kustomization" {
+		if base == fileKustomization || base == "kustomization.yml" || base == "kustomization" {
 			kustomizationFile = f
 			continue
 		}
 
 		// Include all YAML resources referenced by kustomization.
-		if ext == ".yaml" || ext == ".yml" || ext == ".json" {
+		if ext == extYaml || ext == extYml || ext == ".json" {
 			result.Manifests = append(result.Manifests, Manifest{
 				Path: f,
 			})

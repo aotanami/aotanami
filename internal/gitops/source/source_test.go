@@ -41,7 +41,7 @@ func TestRawSourceDetect(t *testing.T) {
 
 func TestRawSourceParse(t *testing.T) {
 	s := &RawSource{}
-	result, err := s.Parse(context.Background(), ParseOptions{
+	result, err := s.Parse(context.Background(), &ParseOptions{
 		Files: []string{
 			"deployment.yaml",
 			"service.yml",
@@ -88,7 +88,7 @@ func TestHelmSourceDetect(t *testing.T) {
 
 func TestHelmSourceParse(t *testing.T) {
 	s := &HelmSourceParser{}
-	result, err := s.Parse(context.Background(), ParseOptions{
+	result, err := s.Parse(context.Background(), &ParseOptions{
 		Path: "charts/myapp",
 		Files: []string{
 			"charts/myapp/Chart.yaml",
@@ -140,7 +140,7 @@ func TestKustomizeSourceDetect(t *testing.T) {
 
 func TestKustomizeSourceParse(t *testing.T) {
 	s := &KustomizeSourceParser{}
-	result, err := s.Parse(context.Background(), ParseOptions{
+	result, err := s.Parse(context.Background(), &ParseOptions{
 		Path: "overlays/prod",
 		Files: []string{
 			"overlays/prod/kustomization.yaml",
