@@ -35,7 +35,7 @@ Think of a seasoned SRE who:
 
 That's Zelyo. All automated, all autonomous, all with **read-only cluster access**.
 
-**Bring your own LLM API keys** (OpenRouter, OpenAI, Anthropic, Azure OpenAI, Ollama) — Zelyo Operator is heavily optimized to minimize token usage.
+**Bring your own LLM API keys** (OpenRouter, OpenAI, Anthropic, Azure OpenAI, Ollama) — Zelyo is heavily optimized to minimize token usage.
 
 ### What a Digital SRE & Security Engineer Does
 
