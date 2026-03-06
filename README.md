@@ -20,9 +20,11 @@
 
 ---
 
-## What is Zelyo Operator?
+## What is Zelyo?
 
-Zelyo Operator is your **Digital SRE and Security Engineer** — a self-hosted Kubernetes Operator powered by **Agentic AI** that does the job of a full-time site reliability and security engineer. It doesn't just alert — it **observes**, **reasons**, and **acts**, continuously protecting your production clusters while you sleep.
+**Zelyo** is your **Digital SRE and Security Engineer** powered by **Agentic AI** that does the job of a full-time site reliability and security engineer. It doesn't just alert — it **observes**, **reasons**, and **acts**, continuously protecting your production clusters while you sleep.
+
+The **Zelyo Operator** is a self-hosted Kubernetes Operator that allows you to manage and automate the lifecycle of Zelyo within your cluster.
 
 Think of a seasoned SRE who:
 - 👁️ **Watches** every pod restart, OOMKill, security misconfiguration, and RBAC drift
@@ -31,13 +33,13 @@ Think of a seasoned SRE who:
 - 🔧 **Fixes** problems by generating production-ready YAML patches and opening GitOps PRs
 - 📋 **Reports** compliance posture against CIS Benchmarks, NIST 800-53, SOC 2, and PCI-DSS
 
-That's Zelyo Operator. All automated, all autonomous, all with **read-only cluster access**.
+That's Zelyo. All automated, all autonomous, all with **read-only cluster access**.
 
-**Bring your own LLM API keys** (OpenRouter, OpenAI, Anthropic, Azure OpenAI, Ollama) — Zelyo Operator is heavily optimized to minimize token usage.
+**Bring your own LLM API keys** (OpenRouter, OpenAI, Anthropic, Azure OpenAI, Ollama) — Zelyo is heavily optimized to minimize token usage.
 
 ### What a Digital SRE & Security Engineer Does
 
-| Responsibility | How Zelyo Operator Handles It |
+| Responsibility | How Zelyo Handles It |
 |---|---|
 | 🔒 **Security Scanning** | Continuously scans for RBAC issues, image CVEs, PodSecurity violations, secrets exposure, and network policy gaps |
 | 🛡️ **Compliance Auditing** | Maps scan findings to CIS Kubernetes Benchmark controls, generates audit-ready reports with evidence |
@@ -51,7 +53,7 @@ That's Zelyo Operator. All automated, all autonomous, all with **read-only clust
 
 ### The Agentic Pipeline: Observe → Reason → Act
 
-Unlike traditional scanning tools that dump findings and walk away, Zelyo Operator operates as a **closed-loop autonomous agent**:
+Unlike traditional scanning tools that dump findings and walk away, Zelyo operates as a **closed-loop autonomous agent**:
 
 ```mermaid
 graph LR
@@ -95,7 +97,7 @@ graph TB
         Metrics[Resource Metrics]
     end
 
-    subgraph "Zelyo Operator — The Digital SRE"
+    subgraph "Zelyo — The Digital SRE"
         subgraph "Observe"
             Watcher[Real-Time Watcher]
             Scanner[Security Scanner]

@@ -1,6 +1,6 @@
 # Compliance Frameworks
 
-As your Digital SRE and Security Engineer, Zelyo Operator automatically evaluates your cluster against industry-standard compliance frameworks. Every `ClusterScan` maps security findings to specific compliance controls, generates audit-ready reports with evidence, and emits `ComplianceViolation` Kubernetes events.
+As your Digital SRE and Security Engineer, Zelyo automatically evaluates your cluster against industry-standard compliance frameworks. Every `ClusterScan` maps security findings to specific compliance controls, generates audit-ready reports with evidence, and emits `ComplianceViolation` Kubernetes events.
 
 ## Supported Frameworks
 
