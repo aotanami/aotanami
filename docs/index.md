@@ -28,9 +28,11 @@ hide:
 
 ---
 
-## What is Zelyo Operator?
+## What is Zelyo?
 
-Zelyo Operator is your **Digital SRE and Security Engineer** — a self-hosted Kubernetes Operator powered by **Agentic AI** that does the job of a full-time site reliability and security engineer. It autonomously **observes** your cluster, **reasons** about security findings and anomalies using LLMs, and **acts** by opening GitOps PRs with production-ready fixes — all with **read-only cluster access**.
+**Zelyo** is your **Digital SRE and Security Engineer** powered by **Agentic AI** that does the job of a full-time site reliability and security engineer. It autonomously **observes** your cluster, **reasons** about security findings and anomalies using LLMs, and **acts** by opening GitOps PRs with production-ready fixes — all with **read-only cluster access**.
+
+The **Zelyo Operator** is a self-hosted Kubernetes Operator that allows you to manage and automate the lifecycle of Zelyo within your cluster.
 
 **Bring your own LLM API keys** (OpenRouter, OpenAI, Anthropic, Azure, Ollama) — optimized for minimal token usage.
 
@@ -128,7 +130,7 @@ graph TB
         Metrics[Resource Metrics]
     end
 
-    subgraph "Zelyo Operator — The Digital SRE"
+    subgraph "Zelyo — The Digital SRE"
         subgraph "Observe"
             Watcher[Real-Time Watcher]
             Scanner[Security Scanner]
