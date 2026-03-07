@@ -250,42 +250,13 @@ func (s *HelmSourceParser) Detect(files []string) bool {
 }
 
 // Parse discovers Helm chart files and returns them as manifests.
-//
-//nolint:gocyclo // Parsing chart directories is complex but well-contained
 func (s *HelmSourceParser) Parse(_ context.Context, opts *ParseOptions) (*ParseResult, error) {
 	result := &ParseResult{
 		SourceType: "helm",
 		Metadata:   map[string]string{},
 	}
 
-	var chartPath string
-	var valuesFiles []string
-	var templateFiles []string
-
-	for _, f := range opts.Files {
-		base := strings.ToLower(filepath.Base(f))
-		ext := strings.ToLower(filepath.Ext(f))
-
-		if base == fileChart || base == "chart.yml" {
-			chartPath = f
-			continue
-		}
-
-		// Collect values files.
-		if base == "values.yaml" || base == "values.yml" ||
-			strings.HasPrefix(base, "values-") || strings.HasPrefix(base, "values_") {
-			valuesFiles = append(valuesFiles, f)
-			continue
-		}
-
-		// Collect template files.
-		if ext == extYaml || ext == extYml || ext == ".tpl" {
-			rel, _ := filepath.Rel(opts.Path, f)
-			if strings.HasPrefix(rel, "templates"+string(filepath.Separator)) || strings.HasPrefix(rel, "templates/") {
-				templateFiles = append(templateFiles, f)
-			}
-		}
-	}
+	chartPath, valuesFiles, templateFiles := s.classifyHelmFiles(opts)
 
 	if chartPath != "" {
 		result.Metadata["chartPath"] = chartPath
@@ -312,6 +283,35 @@ func (s *HelmSourceParser) Parse(_ context.Context, opts *ParseOptions) (*ParseR
 	}
 
 	return result, nil
+}
+
+// classifyHelmFiles categorizes files into Chart.yaml, values files, and template files.
+func (s *HelmSourceParser) classifyHelmFiles(opts *ParseOptions) (chartPath string, valuesFiles []string, templateFiles []string) {
+	for _, f := range opts.Files {
+		base := strings.ToLower(filepath.Base(f))
+		ext := strings.ToLower(filepath.Ext(f))
+
+		if base == fileChart || base == "chart.yml" {
+			chartPath = f
+			continue
+		}
+
+		// Collect values files.
+		if base == "values.yaml" || base == "values.yml" ||
+			strings.HasPrefix(base, "values-") || strings.HasPrefix(base, "values_") {
+			valuesFiles = append(valuesFiles, f)
+			continue
+		}
+
+		// Collect template files.
+		if ext == extYaml || ext == extYml || ext == ".tpl" {
+			rel, _ := filepath.Rel(opts.Path, f)
+			if strings.HasPrefix(rel, "templates"+string(filepath.Separator)) || strings.HasPrefix(rel, "templates/") {
+				templateFiles = append(templateFiles, f)
+			}
+		}
+	}
+	return
 }
 
 // --- Kustomize Source ---
