@@ -78,15 +78,29 @@ type Result struct {
 //   - Raw manifests by the presence of .yaml, .yml, or .json files
 //
 // The function supports monorepos with multiple sources in different directories.
-//
-//nolint:gocyclo // Discovery logic inherently checks many file patterns
 func Discover(files []string) *Result {
 	result := &Result{}
 
-	// Track detected source directories to avoid duplicates.
-	helmDirs := make(map[string]bool)
-	kustomizeDirs := make(map[string]bool)
-	yamlDirs := make(map[string]bool)
+	helmDirs, kustomizeDirs, yamlDirs := categorizeFiles(files, result)
+
+	appendRawSources(result, helmDirs, kustomizeDirs, yamlDirs)
+
+	// Sort sources for deterministic output.
+	sort.Slice(result.Sources, func(i, j int) bool {
+		return result.Sources[i].Path < result.Sources[j].Path
+	})
+
+	// Determine primary type.
+	result.PrimaryType = determinePrimaryType(result.Sources)
+
+	return result
+}
+
+// categorizeFiles scans the file list and populates the result sources for Helm and Kustomize.
+func categorizeFiles(files []string, result *Result) (helmDirs, kustomizeDirs, yamlDirs map[string]bool) {
+	helmDirs = make(map[string]bool)
+	kustomizeDirs = make(map[string]bool)
+	yamlDirs = make(map[string]bool)
 
 	for _, f := range files {
 		dir := filepath.Dir(f)
@@ -119,13 +133,14 @@ func Discover(files []string) *Result {
 			}
 
 		case ext == ".yaml" || ext == ".yml" || ext == ".json":
-			// Only add raw YAML dirs that aren't already claimed by Helm or Kustomize.
-			// We'll filter these after the full scan.
 			yamlDirs[dir] = true
 		}
 	}
+	return
+}
 
-	// Add raw source dirs that aren't already covered by Helm or Kustomize.
+// appendRawSources adds raw YAML directories that are not already handled by Helm or Kustomize.
+func appendRawSources(result *Result, helmDirs, kustomizeDirs, yamlDirs map[string]bool) {
 	for dir := range yamlDirs {
 		if helmDirs[dir] || kustomizeDirs[dir] {
 			continue
@@ -141,16 +156,6 @@ func Discover(files []string) *Result {
 			Metadata: map[string]string{},
 		})
 	}
-
-	// Sort sources for deterministic output.
-	sort.Slice(result.Sources, func(i, j int) bool {
-		return result.Sources[i].Path < result.Sources[j].Path
-	})
-
-	// Determine primary type.
-	result.PrimaryType = determinePrimaryType(result.Sources)
-
-	return result
 }
 
 // DiscoverForPaths runs discovery scoped to specific paths within a file list.

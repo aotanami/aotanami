@@ -62,32 +62,40 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
-//nolint:gocyclo
-func main() {
-	var metricsAddr string
-	var metricsCertPath, metricsCertName, metricsCertKey string
-	var webhookCertPath, webhookCertName, webhookCertKey string
-	var enableLeaderElection bool
-	var probeAddr string
-	var secureMetrics bool
-	var enableHTTP2 bool
-	var tlsOpts []func(*tls.Config)
-	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
+// cliFlags holds all parsed command-line flags.
+type cliFlags struct {
+	metricsAddr          string
+	metricsCertPath      string
+	metricsCertName      string
+	metricsCertKey       string
+	webhookCertPath      string
+	webhookCertName      string
+	webhookCertKey       string
+	enableLeaderElection bool
+	probeAddr            string
+	secureMetrics        bool
+	enableHTTP2          bool
+}
+
+// parseFlags registers and parses all CLI flags.
+func parseFlags() cliFlags {
+	var f cliFlags
+	flag.StringVar(&f.metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
+	flag.StringVar(&f.probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.BoolVar(&f.enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.BoolVar(&secureMetrics, "metrics-secure", true,
+	flag.BoolVar(&f.secureMetrics, "metrics-secure", true,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
-	flag.StringVar(&webhookCertPath, "webhook-cert-path", "", "The directory that contains the webhook certificate.")
-	flag.StringVar(&webhookCertName, "webhook-cert-name", "tls.crt", "The name of the webhook certificate file.")
-	flag.StringVar(&webhookCertKey, "webhook-cert-key", "tls.key", "The name of the webhook key file.")
-	flag.StringVar(&metricsCertPath, "metrics-cert-path", "",
+	flag.StringVar(&f.webhookCertPath, "webhook-cert-path", "", "The directory that contains the webhook certificate.")
+	flag.StringVar(&f.webhookCertName, "webhook-cert-name", "tls.crt", "The name of the webhook certificate file.")
+	flag.StringVar(&f.webhookCertKey, "webhook-cert-key", "tls.key", "The name of the webhook key file.")
+	flag.StringVar(&f.metricsCertPath, "metrics-cert-path", "",
 		"The directory that contains the metrics server certificate.")
-	flag.StringVar(&metricsCertName, "metrics-cert-name", "tls.crt", "The name of the metrics server certificate file.")
-	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
-	flag.BoolVar(&enableHTTP2, "enable-http2", false,
+	flag.StringVar(&f.metricsCertName, "metrics-cert-name", "tls.crt", "The name of the metrics server certificate file.")
+	flag.StringVar(&f.metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
+	flag.BoolVar(&f.enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	opts := zap.Options{
 		Development: true,
@@ -96,56 +104,59 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	return f
+}
 
-	// Log version information on startup.
-	setupLog.Info("Starting Zelyo Operator",
-		"version", version.Version,
-		"commit", version.Commit,
-		"buildDate", version.Date)
-
+// buildTLSOpts returns base TLS options, optionally disabling HTTP/2.
+func buildTLSOpts(enableHTTP2 bool) []func(*tls.Config) {
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
 	// prevent from being vulnerable to the HTTP/2 Stream Cancellation and
 	// Rapid Reset CVEs. For more information see:
 	// - https://github.com/advisories/GHSA-qppj-fm5r-hxr3
 	// - https://github.com/advisories/GHSA-4374-p667-p6c8
-	disableHTTP2 := func(c *tls.Config) {
-		setupLog.Info("Disabling HTTP/2")
-		c.NextProtos = []string{"http/1.1"}
+	if enableHTTP2 {
+		return nil
 	}
-
-	if !enableHTTP2 {
-		tlsOpts = append(tlsOpts, disableHTTP2)
+	return []func(*tls.Config){
+		func(c *tls.Config) {
+			setupLog.Info("Disabling HTTP/2")
+			c.NextProtos = []string{"http/1.1"}
+		},
 	}
+}
 
-	// Initial webhook TLS options
-	webhookTLSOpts := tlsOpts
+// buildWebhookServer creates the webhook server with the appropriate TLS config.
+func buildWebhookServer(f cliFlags, tlsOpts []func(*tls.Config)) webhook.Server {
 	webhookServerOptions := webhook.Options{
-		TLSOpts: webhookTLSOpts,
+		TLSOpts: tlsOpts,
 	}
 
-	if len(webhookCertPath) > 0 {
+	if len(f.webhookCertPath) > 0 {
 		setupLog.Info("Initializing webhook certificate watcher using provided certificates",
-			"webhook-cert-path", webhookCertPath, "webhook-cert-name", webhookCertName, "webhook-cert-key", webhookCertKey)
+			"webhook-cert-path", f.webhookCertPath, "webhook-cert-name", f.webhookCertName, "webhook-cert-key", f.webhookCertKey)
 
-		webhookServerOptions.CertDir = webhookCertPath
-		webhookServerOptions.CertName = webhookCertName
-		webhookServerOptions.KeyName = webhookCertKey
+		webhookServerOptions.CertDir = f.webhookCertPath
+		webhookServerOptions.CertName = f.webhookCertName
+		webhookServerOptions.KeyName = f.webhookCertKey
 	}
 
-	webhookServer := webhook.NewServer(webhookServerOptions)
+	return webhook.NewServer(webhookServerOptions)
+}
 
+// buildMetricsOptions creates the metrics server configuration.
+func buildMetricsOptions(f cliFlags, tlsOpts []func(*tls.Config)) metricsserver.Options {
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:
 	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.23.1/pkg/metrics/server
 	// - https://book.kubebuilder.io/reference/metrics.html
 	metricsServerOptions := metricsserver.Options{
-		BindAddress:   metricsAddr,
-		SecureServing: secureMetrics,
+		BindAddress:   f.metricsAddr,
+		SecureServing: f.secureMetrics,
 		TLSOpts:       tlsOpts,
 	}
 
-	if secureMetrics {
+	if f.secureMetrics {
 		// FilterProvider is used to protect the metrics endpoint with authn/authz.
 		// These configurations ensure that only authorized users and service accounts
 		// can access the metrics endpoint. The RBAC are configured in 'config/rbac/kustomization.yaml'. More info:
@@ -156,21 +167,108 @@ func main() {
 	// If the certificate is not specified, controller-runtime will automatically
 	// generate self-signed certificates for the metrics server. While convenient for development and testing,
 	// this setup is not recommended for production.
-	if len(metricsCertPath) > 0 {
+	if len(f.metricsCertPath) > 0 {
 		setupLog.Info("Initializing metrics certificate watcher using provided certificates",
-			"metrics-cert-path", metricsCertPath, "metrics-cert-name", metricsCertName, "metrics-cert-key", metricsCertKey)
+			"metrics-cert-path", f.metricsCertPath, "metrics-cert-name", f.metricsCertName, "metrics-cert-key", f.metricsCertKey)
 
-		metricsServerOptions.CertDir = metricsCertPath
-		metricsServerOptions.CertName = metricsCertName
-		metricsServerOptions.KeyName = metricsCertKey
+		metricsServerOptions.CertDir = f.metricsCertPath
+		metricsServerOptions.CertName = f.metricsCertName
+		metricsServerOptions.KeyName = f.metricsCertKey
 	}
+
+	return metricsServerOptions
+}
+
+// setupControllers registers all Kubernetes controllers with the manager.
+func setupControllers(mgr ctrl.Manager, scannerRegistry *scanner.Registry, correlatorEngine *correlator.Engine, anomalyDetector *anomaly.Detector, remediationEngine *remediation.Engine) {
+	mustSetup := func(name string, err error) {
+		if err != nil {
+			setupLog.Error(err, "Failed to create controller", "controller", name)
+			os.Exit(1)
+		}
+	}
+
+	mustSetup("SecurityPolicy", (&controller.SecurityPolicyReconciler{
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Recorder:         mgr.GetEventRecorderFor("securitypolicy-controller"), //nolint:staticcheck,nolintlint
+		ScannerRegistry:  scannerRegistry,
+		CorrelatorEngine: correlatorEngine,
+	}).SetupWithManager(mgr))
+
+	mustSetup("RemediationPolicy", (&controller.RemediationPolicyReconciler{
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		Recorder:          mgr.GetEventRecorderFor("remediationpolicy-controller"), //nolint:staticcheck,nolintlint
+		CorrelatorEngine:  correlatorEngine,
+		RemediationEngine: remediationEngine,
+	}).SetupWithManager(mgr))
+
+	mustSetup("ClusterScan", (&controller.ClusterScanReconciler{
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		Recorder:        mgr.GetEventRecorderFor("clusterscan-controller"), //nolint:staticcheck,nolintlint
+		ScannerRegistry: scannerRegistry,
+	}).SetupWithManager(mgr))
+
+	mustSetup("ScanReport", (&controller.ScanReportReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("scanreport-controller"), //nolint:staticcheck,nolintlint
+	}).SetupWithManager(mgr))
+
+	mustSetup("CostPolicy", (&controller.CostPolicyReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("costpolicy-controller"), //nolint:staticcheck,nolintlint
+	}).SetupWithManager(mgr))
+
+	mustSetup("MonitoringPolicy", (&controller.MonitoringPolicyReconciler{
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Recorder:         mgr.GetEventRecorderFor("monitoringpolicy-controller"), //nolint:staticcheck,nolintlint
+		AnomalyDetector:  anomalyDetector,
+		CorrelatorEngine: correlatorEngine,
+	}).SetupWithManager(mgr))
+
+	mustSetup("NotificationChannel", (&controller.NotificationChannelReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("notificationchannel-controller"), //nolint:staticcheck,nolintlint
+	}).SetupWithManager(mgr))
+
+	mustSetup("ZelyoConfig", (&controller.ZelyoConfigReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("zelyoconfig-controller"), //nolint:staticcheck,nolintlint
+	}).SetupWithManager(mgr))
+
+	mustSetup("GitOpsRepository", (&controller.GitOpsRepositoryReconciler{
+		Client:             mgr.GetClient(),
+		Scheme:             mgr.GetScheme(),
+		Recorder:           mgr.GetEventRecorderFor("gitopsrepository-controller"), //nolint:staticcheck,nolintlint
+		SourceRegistry:     source.DefaultRegistry(),
+		ControllerRegistry: gitopscontroller.DefaultRegistry(mgr.GetClient()),
+	}).SetupWithManager(mgr))
+}
+
+func main() {
+	f := parseFlags()
+
+	// Log version information on startup.
+	setupLog.Info("Starting Zelyo Operator",
+		"version", version.Version,
+		"commit", version.Commit,
+		"buildDate", version.Date)
+
+	tlsOpts := buildTLSOpts(f.enableHTTP2)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
-		Metrics:                metricsServerOptions,
-		WebhookServer:          webhookServer,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
+		Metrics:                buildMetricsOptions(f, tlsOpts),
+		WebhookServer:          buildWebhookServer(f, tlsOpts),
+		HealthProbeBindAddress: f.probeAddr,
+		LeaderElection:         f.enableLeaderElection,
 		LeaderElectionID:       "zelyo.ai",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
@@ -216,87 +314,7 @@ func main() {
 		"anomalySensitivity", anomaly.DefaultConfig().Sensitivity,
 		"remediationStrategy", "dry-run")
 
-	if err := (&controller.SecurityPolicyReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		Recorder:         mgr.GetEventRecorderFor("securitypolicy-controller"), //nolint:staticcheck,nolintlint
-		ScannerRegistry:  scannerRegistry,
-		CorrelatorEngine: correlatorEngine,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "SecurityPolicy")
-		os.Exit(1)
-	}
-	if err := (&controller.RemediationPolicyReconciler{
-		Client:            mgr.GetClient(),
-		Scheme:            mgr.GetScheme(),
-		Recorder:          mgr.GetEventRecorderFor("remediationpolicy-controller"), //nolint:staticcheck,nolintlint
-		CorrelatorEngine:  correlatorEngine,
-		RemediationEngine: remediationEngine,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "RemediationPolicy")
-		os.Exit(1)
-	}
-	if err := (&controller.ClusterScanReconciler{
-		Client:          mgr.GetClient(),
-		Scheme:          mgr.GetScheme(),
-		Recorder:        mgr.GetEventRecorderFor("clusterscan-controller"), //nolint:staticcheck,nolintlint
-		ScannerRegistry: scannerRegistry,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "ClusterScan")
-		os.Exit(1)
-	}
-	if err := (&controller.ScanReportReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("scanreport-controller"), //nolint:staticcheck,nolintlint
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "ScanReport")
-		os.Exit(1)
-	}
-	if err := (&controller.CostPolicyReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("costpolicy-controller"), //nolint:staticcheck,nolintlint
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "CostPolicy")
-		os.Exit(1)
-	}
-	if err := (&controller.MonitoringPolicyReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		Recorder:         mgr.GetEventRecorderFor("monitoringpolicy-controller"), //nolint:staticcheck,nolintlint
-		AnomalyDetector:  anomalyDetector,
-		CorrelatorEngine: correlatorEngine,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "MonitoringPolicy")
-		os.Exit(1)
-	}
-	if err := (&controller.NotificationChannelReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("notificationchannel-controller"), //nolint:staticcheck,nolintlint
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "NotificationChannel")
-		os.Exit(1)
-	}
-	if err := (&controller.ZelyoConfigReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("zelyoconfig-controller"), //nolint:staticcheck,nolintlint
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "ZelyoConfig")
-		os.Exit(1)
-	}
-	if err := (&controller.GitOpsRepositoryReconciler{
-		Client:             mgr.GetClient(),
-		Scheme:             mgr.GetScheme(),
-		Recorder:           mgr.GetEventRecorderFor("gitopsrepository-controller"), //nolint:staticcheck,nolintlint
-		SourceRegistry:     source.DefaultRegistry(),
-		ControllerRegistry: gitopscontroller.DefaultRegistry(mgr.GetClient()),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "GitOpsRepository")
-		os.Exit(1)
-	}
+	setupControllers(mgr, scannerRegistry, correlatorEngine, anomalyDetector, remediationEngine)
 
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
 		if err := webhookv1alpha1.SetupSecurityPolicyWebhookWithManager(mgr); err != nil {
