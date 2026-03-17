@@ -6,7 +6,7 @@
 # ── CRD Management ──────────────────────────────────────────────────────
 crds:
   # -- Install CRDs with the chart. Disable if you manage CRDs separately.
-  install: true
+  install: false
   # -- Keep CRDs on helm uninstall (prevents accidental CR deletion)
   keep: true
   # -- Annotations to add to all CRD resources
