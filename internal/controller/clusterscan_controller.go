@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -68,8 +69,6 @@ type ClusterScanReconciler struct {
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile runs the scan lifecycle for a ClusterScan resource.
-//
-//nolint:gocyclo // Controller logic is inherently complex
 func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -86,41 +85,65 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		"generation", scan.Generation, "scanners", scan.Spec.Scanners)
 
 	// ── Handle deletion / finalizer ──
+	if result, done, err := r.handleFinalizer(ctx, scan); done {
+		return result, err
+	}
+
+	// ── Check if suspended ──
+	if result, done, err := r.handleSuspend(ctx, scan); done {
+		return result, err
+	}
+
+	// ── Run the scan ──
+	return r.executeScan(ctx, scan, log)
+}
+
+// handleFinalizer manages the deletion lifecycle and finalizer.
+// Returns (result, true, err) if the reconcile should stop, or (_, false, nil) to continue.
+func (r *ClusterScanReconciler) handleFinalizer(ctx context.Context, scan *zelyov1alpha1.ClusterScan) (ctrl.Result, bool, error) {
 	if !scan.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(scan, clusterScanFinalizer) {
 			if err := r.cleanupScanReports(ctx, scan); err != nil {
-				return ctrl.Result{}, fmt.Errorf("cleaning up ScanReports: %w", err)
+				return ctrl.Result{}, true, fmt.Errorf("cleaning up ScanReports: %w", err)
 			}
 			controllerutil.RemoveFinalizer(scan, clusterScanFinalizer)
 			if err := r.Update(ctx, scan); err != nil {
-				return ctrl.Result{}, fmt.Errorf("removing finalizer: %w", err)
+				return ctrl.Result{}, true, fmt.Errorf("removing finalizer: %w", err)
 			}
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, true, nil
 	}
 
 	// Ensure finalizer is set.
 	if !controllerutil.ContainsFinalizer(scan, clusterScanFinalizer) {
 		controllerutil.AddFinalizer(scan, clusterScanFinalizer)
 		if err := r.Update(ctx, scan); err != nil {
-			return ctrl.Result{}, fmt.Errorf("adding finalizer: %w", err)
+			return ctrl.Result{}, true, fmt.Errorf("adding finalizer: %w", err)
 		}
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{Requeue: true}, true, nil
 	}
 
-	// ── Check if suspended ──
-	if scan.Spec.Suspend {
-		log.Info("ClusterScan is suspended — skipping")
-		conditions.MarkFalse(&scan.Status.Conditions, zelyov1alpha1.ConditionReady,
-			"Suspended", "Scan is suspended", scan.Generation)
-		scan.Status.Phase = zelyov1alpha1.PhasePending
-		if err := r.Status().Update(ctx, scan); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
-		}
-		return ctrl.Result{RequeueAfter: defaultScanInterval}, nil
+	return ctrl.Result{}, false, nil
+}
+
+// handleSuspend checks if the scan is suspended and updates status accordingly.
+func (r *ClusterScanReconciler) handleSuspend(ctx context.Context, scan *zelyov1alpha1.ClusterScan) (ctrl.Result, bool, error) {
+	if !scan.Spec.Suspend {
+		return ctrl.Result{}, false, nil
 	}
 
-	// ── Run the scan ──
+	logf.FromContext(ctx).Info("ClusterScan is suspended — skipping")
+	conditions.MarkFalse(&scan.Status.Conditions, zelyov1alpha1.ConditionReady,
+		"Suspended", "Scan is suspended", scan.Generation)
+	scan.Status.Phase = zelyov1alpha1.PhasePending
+	if err := r.Status().Update(ctx, scan); err != nil {
+		return ctrl.Result{}, true, fmt.Errorf("updating status: %w", err)
+	}
+	return ctrl.Result{RequeueAfter: defaultScanInterval}, true, nil
+}
+
+// executeScan performs the actual scanning, compliance evaluation, and report creation.
+func (r *ClusterScanReconciler) executeScan(ctx context.Context, scan *zelyov1alpha1.ClusterScan, log logr.Logger) (ctrl.Result, error) {
 	r.Recorder.Event(scan, corev1.EventTypeNormal, zelyov1alpha1.EventReasonScanStarted,
 		fmt.Sprintf("Starting cluster scan with %d scanners", len(scan.Spec.Scanners)))
 
@@ -134,18 +157,47 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Resolve target pods.
 	pods, err := r.resolveTargetPods(ctx, scan)
 	if err != nil {
-		r.Recorder.Event(scan, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
-			fmt.Sprintf("Failed to resolve target pods: %v", err))
-		scan.Status.Phase = zelyov1alpha1.PhaseFailed
-		conditions.MarkFalse(&scan.Status.Conditions, zelyov1alpha1.ConditionReady,
-			zelyov1alpha1.ReasonReconcileFailed, fmt.Sprintf("Target resolution failed: %v", err), scan.Generation)
-		if statusErr := r.Status().Update(ctx, scan); statusErr != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
-		}
-		return ctrl.Result{RequeueAfter: defaultScanInterval}, nil
+		return r.handleTargetResolutionError(ctx, scan, err)
 	}
 
-	// Run each requested scanner.
+	// Run scanners and collect results.
+	allFindings, summary, scanErrors := r.runScanners(ctx, scan, pods, log)
+
+	// Evaluate compliance.
+	r.evaluateCompliance(ctx, scan, allFindings, log)
+
+	// Create ScanReport.
+	reportName, err := r.createScanReport(ctx, scan, allFindings, summary)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Enforce history limit.
+	if err := r.enforceHistoryLimit(ctx, scan); err != nil {
+		log.Error(err, "Failed to enforce history limit")
+	}
+
+	// Update final status.
+	r.updateFinalStatus(ctx, scan, summary, reportName, scanErrors, log)
+
+	return ctrl.Result{RequeueAfter: defaultScanInterval}, nil
+}
+
+// handleTargetResolutionError marks the scan as failed when pod resolution fails.
+func (r *ClusterScanReconciler) handleTargetResolutionError(ctx context.Context, scan *zelyov1alpha1.ClusterScan, err error) (ctrl.Result, error) {
+	r.Recorder.Event(scan, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
+		fmt.Sprintf("Failed to resolve target pods: %v", err))
+	scan.Status.Phase = zelyov1alpha1.PhaseFailed
+	conditions.MarkFalse(&scan.Status.Conditions, zelyov1alpha1.ConditionReady,
+		zelyov1alpha1.ReasonReconcileFailed, fmt.Sprintf("Target resolution failed: %v", err), scan.Generation)
+	if statusErr := r.Status().Update(ctx, scan); statusErr != nil {
+		return ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
+	}
+	return ctrl.Result{RequeueAfter: defaultScanInterval}, nil
+}
+
+// runScanners executes each registered scanner and aggregates findings.
+func (r *ClusterScanReconciler) runScanners(ctx context.Context, scan *zelyov1alpha1.ClusterScan, pods []corev1.Pod, log logr.Logger) ([]zelyov1alpha1.Finding, zelyov1alpha1.ScanSummary, []string) {
 	var allFindings []zelyov1alpha1.Finding
 	var scanErrors []string
 	var summary zelyov1alpha1.ScanSummary
@@ -183,26 +235,32 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				Recommendation: f.Recommendation,
 			}
 			allFindings = append(allFindings, finding)
-
-			// Update summary counts.
-			switch f.Severity {
-			case zelyov1alpha1.SeverityCritical:
-				summary.Critical++
-			case zelyov1alpha1.SeverityHigh:
-				summary.High++
-			case zelyov1alpha1.SeverityMedium:
-				summary.Medium++
-			case zelyov1alpha1.SeverityLow:
-				summary.Low++
-			case zelyov1alpha1.SeverityInfo:
-				summary.Info++
-			}
+			incrementSeverityCount(&summary, f.Severity)
 		}
 	}
 
 	summary.TotalFindings = int32(len(allFindings)) //nolint:gosec // Findings count is bounded
+	return allFindings, summary, scanErrors
+}
 
-	// ── Evaluate compliance against CIS Kubernetes Benchmark ──
+// incrementSeverityCount updates the summary severity counter for a finding.
+func incrementSeverityCount(summary *zelyov1alpha1.ScanSummary, severity string) {
+	switch severity {
+	case zelyov1alpha1.SeverityCritical:
+		summary.Critical++
+	case zelyov1alpha1.SeverityHigh:
+		summary.High++
+	case zelyov1alpha1.SeverityMedium:
+		summary.Medium++
+	case zelyov1alpha1.SeverityLow:
+		summary.Low++
+	case zelyov1alpha1.SeverityInfo:
+		summary.Info++
+	}
+}
+
+// evaluateCompliance runs CIS Kubernetes Benchmark evaluation on the findings.
+func (r *ClusterScanReconciler) evaluateCompliance(ctx context.Context, scan *zelyov1alpha1.ClusterScan, allFindings []zelyov1alpha1.Finding, log logr.Logger) {
 	var complianceFindings []compliance.Finding
 	for i := range allFindings {
 		f := &allFindings[i]
@@ -233,8 +291,12 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	aotmetrics.CompliancePctGauge.WithLabelValues(string(compReport.Framework)).Set(compReport.Summary.CompliancePct)
+}
 
-	// ── Create ScanReport child resource ──
+// createScanReport creates a ScanReport child resource with the scan results.
+func (r *ClusterScanReconciler) createScanReport(ctx context.Context, scan *zelyov1alpha1.ClusterScan, allFindings []zelyov1alpha1.Finding, summary zelyov1alpha1.ScanSummary) (string, error) {
+	log := logf.FromContext(ctx)
+
 	reportName := fmt.Sprintf("%s-%d", scan.Name, time.Now().Unix())
 	report := &zelyov1alpha1.ScanReport{
 		ObjectMeta: metav1.ObjectMeta{
@@ -251,16 +313,14 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		},
 	}
 
-	// Set owner reference so reports are GC'd with the scan.
 	if err := controllerutil.SetControllerReference(scan, report, r.Scheme); err != nil {
-		return ctrl.Result{}, fmt.Errorf("setting owner reference on ScanReport: %w", err)
+		return "", fmt.Errorf("setting owner reference on ScanReport: %w", err)
 	}
 
 	if err := r.Create(ctx, report); err != nil {
-		return ctrl.Result{}, fmt.Errorf("creating ScanReport: %w", err)
+		return "", fmt.Errorf("creating ScanReport: %w", err)
 	}
 
-	// Mark the report as complete.
 	report.Status.Phase = zelyov1alpha1.PhaseComplete
 	conditions.MarkTrue(&report.Status.Conditions, zelyov1alpha1.ConditionReady,
 		zelyov1alpha1.ReasonReconcileSuccess, "Report is complete", report.Generation)
@@ -268,12 +328,11 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		log.Error(err, "Failed to update ScanReport status")
 	}
 
-	// ── Enforce history limit ──
-	if err := r.enforceHistoryLimit(ctx, scan); err != nil {
-		log.Error(err, "Failed to enforce history limit")
-	}
+	return reportName, nil
+}
 
-	// ── Update ClusterScan status ──
+// updateFinalStatus sets the final status, records events, and emits metrics.
+func (r *ClusterScanReconciler) updateFinalStatus(ctx context.Context, scan *zelyov1alpha1.ClusterScan, summary zelyov1alpha1.ScanSummary, reportName string, scanErrors []string, log logr.Logger) {
 	now := metav1.Now()
 	scan.Status.LastScheduleTime = &now
 	scan.Status.CompletedAt = &now
@@ -298,7 +357,7 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if err := r.Status().Update(ctx, scan); err != nil {
-		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		log.Error(err, "Failed to update ClusterScan status")
 	}
 
 	r.Recorder.Event(scan, corev1.EventTypeNormal, zelyov1alpha1.EventReasonScanCompleted,
@@ -315,8 +374,6 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	aotmetrics.ClusterScanFindingsGauge.WithLabelValues(scan.Name, scan.Namespace).Set(float64(summary.TotalFindings))
 	aotmetrics.ResourcesScannedTotal.WithLabelValues("clusterscan").Add(float64(summary.ResourcesScanned))
 	aotmetrics.ReconcileTotal.WithLabelValues("clusterscan", "success").Inc()
-
-	return ctrl.Result{RequeueAfter: defaultScanInterval}, nil
 }
 
 // resolveTargetPods lists running pods matching the scan's scope.

@@ -50,8 +50,6 @@ type CostPolicyReconciler struct {
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 
 // Reconcile validates the CostPolicy and evaluates workload resource usage.
-//
-//nolint:gocyclo // Controller logic is inherently complex
 func (r *CostPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	start := time.Now()
@@ -73,22 +71,37 @@ func (r *CostPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Mark as reconciling.
 	conditions.MarkReconciling(&policy.Status.Conditions, "Reconciliation in progress", policy.Generation)
 
-	// Resolve target namespaces and count pods.
-	var targetNamespaces []string
-	if len(policy.Spec.TargetNamespaces) > 0 {
-		targetNamespaces = policy.Spec.TargetNamespaces
-	} else {
-		nsList := &corev1.NamespaceList{}
-		if err := r.List(ctx, nsList); err != nil {
-			return ctrl.Result{}, fmt.Errorf("listing namespaces: %w", err)
-		}
-		for i := range nsList.Items {
-			ns := &nsList.Items[i]
-			targetNamespaces = append(targetNamespaces, ns.Name)
-		}
+	// Resolve target namespaces.
+	targetNamespaces, err := r.resolveTargetNamespaces(ctx, policy)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
-	// Count pods without resource limits (idle detection basis).
+	// Count pods and determine rightsizing candidates.
+	totalPods, podsWithoutLimits := r.evaluateRightsizing(ctx, targetNamespaces)
+
+	// Update status.
+	return r.updateStatus(ctx, policy, targetNamespaces, totalPods, podsWithoutLimits)
+}
+
+func (r *CostPolicyReconciler) resolveTargetNamespaces(ctx context.Context, policy *zelyov1alpha1.CostPolicy) ([]string, error) {
+	if len(policy.Spec.TargetNamespaces) > 0 {
+		return policy.Spec.TargetNamespaces, nil
+	}
+
+	nsList := &corev1.NamespaceList{}
+	if err := r.List(ctx, nsList); err != nil {
+		return nil, fmt.Errorf("listing namespaces: %w", err)
+	}
+
+	var targetNamespaces []string
+	for i := range nsList.Items {
+		targetNamespaces = append(targetNamespaces, nsList.Items[i].Name)
+	}
+	return targetNamespaces, nil
+}
+
+func (r *CostPolicyReconciler) evaluateRightsizing(ctx context.Context, targetNamespaces []string) (int32, int32) {
 	var totalPods, podsWithoutLimits int32
 	for _, ns := range targetNamespaces {
 		podList := &corev1.PodList{}
@@ -100,19 +113,28 @@ func (r *CostPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				continue
 			}
 			totalPods++
+
 			// Count containers without limits
-			for j := range podList.Items[i].Spec.Containers {
-				c := &podList.Items[i].Spec.Containers[j]
-				if c.Resources.Limits.Cpu() == nil || c.Resources.Limits.Cpu().IsZero() ||
-					c.Resources.Limits.Memory() == nil || c.Resources.Limits.Memory().IsZero() {
-					podsWithoutLimits++
-					break
-				}
+			if r.podNeedsRightsizing(&podList.Items[i]) {
+				podsWithoutLimits++
 			}
 		}
 	}
+	return totalPods, podsWithoutLimits
+}
 
-	// Update status.
+func (r *CostPolicyReconciler) podNeedsRightsizing(pod *corev1.Pod) bool {
+	for j := range pod.Spec.Containers {
+		c := &pod.Spec.Containers[j]
+		if c.Resources.Limits.Cpu() == nil || c.Resources.Limits.Cpu().IsZero() ||
+			c.Resources.Limits.Memory() == nil || c.Resources.Limits.Memory().IsZero() {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *CostPolicyReconciler) updateStatus(ctx context.Context, policy *zelyov1alpha1.CostPolicy, targetNamespaces []string, totalPods, podsWithoutLimits int32) (ctrl.Result, error) {
 	now := metav1.Now()
 	policy.Status.Phase = zelyov1alpha1.PhaseActive
 	policy.Status.LastEvaluated = &now
