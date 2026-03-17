@@ -2,30 +2,67 @@
 
 Welcome to Zelyo Operator! This guide will walk you through a **from-scratch** setup on your local machine using **k3d**, **cert-manager**, and the **Zelyo Operator** Helm chart.
 
-## Prerequisites
+---
 
-Make sure you have the following tools installed:
+### 🗺️ Your Journey at a Glance
 
-- **Docker**: For running the local cluster.
-- **k3d**: To create a lightweight Kubernetes cluster.
-- **kubectl**: To interact with the cluster.
-- **Helm**: To install the charts.
+In about 5-10 minutes, you'll go from a blank slate to an AI-powered security scanner:
+
+```mermaid
+graph LR
+    A[Start] --> B[Clean Cluster]
+    B --> C[Cert-Manager]
+    C --> D[Zelyo Operator]
+    D --> E[Observe & Reason]
+    style E fill:#00cfd0,stroke:#333,stroke-width:2px
+```
 
 ---
 
-## Step 1: Create a Local Cluster
+## 🛠️ Prerequisites
 
-First, let's create a fresh cluster named `zelyo`.
+Before we begin, ensure you have these tools installed:
+
+- **[Docker](https://docs.docker.com/get-docker/)**: The engine for our local cluster.
+- **[k3d](https://k3d.io/)**: For a lightweight, fast local Kubernetes setup.
+- **[kubectl](https://kubernetes.io/docs/tasks/tools/)**: To command your cluster.
+- **[Helm](https://helm.sh/docs/intro/install/)**: To install the "apps" (charts).
+
+---
+
+## 🛑 Step 0: Clean the Slates
+*Progress: ⬛⬜⬜⬜⬜⬜ 0%*
+
+To ensure no port conflicts or "leftover" processes interfere, let's start fresh:
+
+```bash
+# Delete the existing zelyo cluster if it exists
+k3d cluster delete zelyo
+
+# Optional: Prune unused networks
+docker network prune -f
+```
+
+---
+
+## 🏗️ Step 1: Create a Fresh Local Cluster
+*Progress: 🟦⬛⬜⬜⬜⬜ 20%*
+
+Create a single-node cluster named `zelyo`.
 
 ```bash
 k3d cluster create zelyo
 ```
 
+??? info "What's happening here?"
+    k3d is launching a Kubernetes cluster inside a Docker container. It's much faster than traditional VMs.
+
 ---
 
-## Step 2: Install cert-manager
+## 🛡️ Step 2: Install cert-manager
+*Progress: 🟦🟦⬛⬜⬜⬜ 40%*
 
-Zelyo Operator requires **cert-manager** to handle TLS certificates for its admission webhooks. Installation takes about 1 minute.
+Zelyo uses **webhooks** to intercept security violations. Webhooks require HTTPS, which means they need **TLS Certificates**. cert-manager will automate this for us.
 
 ```bash
 # Install cert-manager via Helm OCI
@@ -34,32 +71,20 @@ helm install cert-manager oci://quay.io/jetstack/charts/cert-manager \
   --namespace cert-manager \
   --create-namespace \
   --set crds.enabled=true
-```
 
-## Step 3: Wait for Readiness
-
-Wait until all cert-manager components are healthy before proceeding.
-
-```bash
+# Wait for readiness
 kubectl wait --for=condition=Ready pods --all -n cert-manager --timeout=120s
 ```
 
 ---
 
-## Step 4: Add LLM API Secret & Install Zelyo Operator
 
-Now, create the namespace and the secret containing your LLM API key (e.g., from OpenRouter). Then, install the operator using its OCI chart.
+## 🚢 Step 3: Launch Zelyo Operator
+*Progress: 🟦🟦🟦🟦⬛⬜ 80%*
+
+Now, let's install the operator itself using the official OCI Helm chart.
 
 ```bash
-# Create the namespace
-kubectl create namespace zelyo-system
-
-# Add your LLM API key as a Kubernetes secret
-kubectl create secret generic zelyo-llm \
-  --namespace zelyo-system \
-  --from-literal=api-key=<YOUR_OPENROUTER_API_KEY>
-
-# Install Zelyo Operator from OCI registry
 helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
   --namespace zelyo-system \
   --create-namespace \
@@ -69,29 +94,26 @@ helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
   --set webhook.certManager.enabled=true
 ```
 
-## Step 5: Verify Installation
-
-Check if the operator pod is running. It might take a moment to pull the image and start.
-
-```bash
-kubectl get pods -n zelyo-system
-```
+!!! tip "Verification"
+    Check if the operator is running properly:
+    `kubectl get pods -n zelyo-system`
 
 ---
 
-## Step 6: Test Observation (Observe → Reason)
+## 🔍 Step 4: Test Your First Scan
+*Progress: 🟦🟦🟦🟦🟦🟦 100%*
 
-### 6.1 Deploy a Test Workload
-Deploy a deliberately insecure pod so Zelyo has something to find:
+### 4.1 Deploy a "Naughty" Pod
+Deploy a deliberately insecure pod for Zelyo to find:
 
 ```bash
 kubectl run insecure-nginx --image=nginx:latest --restart=Never -n default
 ```
 
-### 6.2 Create a SecurityPolicy
-Save this as `test-security-policy.yaml`:
+### 4.2 apply a SecurityPolicy
+Save this as `test-security-policy.yaml` and apply it:
 
-```yaml
+```bash
 apiVersion: zelyo.ai/v1alpha1
 kind: SecurityPolicy
 metadata:
@@ -116,35 +138,31 @@ spec:
       enforce: true
 ```
 
-Apply the policy:
-
 ```bash
 kubectl apply -f test-security-policy.yaml
 ```
 
-### 6.3 Verify the Findings
+??? tip "Troubleshooting: Webhook Error?"
+    If you get a 404 error when applying the YAML, the OCI chart might have old paths. Run the **[Webhook Patch](architecture.md#webhooks)** commands.
 
-Wait a few seconds for the scan to complete, then check the status:
+### 4.3 See the Results!
+Wait 10 seconds, then watch the magic:
 
 ```bash
+# Check the violation count
 kubectl get securitypolicies -n zelyo-system
-```
 
-You should see a count in the `VIOLATIONS` column. For detailed findings, run:
-
-```bash
+# See detailed AI reasoning
 kubectl describe securitypolicy baseline-security -n zelyo-system
 ```
 
 ---
 
-## What's Next?
+## 🎉 Congratulations!
+You now have a fully functional **Autonomous AI Security Agent** watching over your cluster.
 
-Now that you've got Zelyo Operator running, explore these guides:
-
-| Guide | What You'll Learn |
+| Next Milestone | What You'll Learn |
 |---|---|
 | [Quick Start Recipes](quickstart.md) | Copy-paste YAML for common use cases |
-| [Architecture](architecture.md) | The Observe → Reason → Act pipeline |
+| [Architecture](architecture.md) | How the **Observe → Reason → Act** loop works |
 | [GitOps Onboarding](gitops-onboarding.md) | Enable **Protect Mode** with auto-fixes |
-xes |
