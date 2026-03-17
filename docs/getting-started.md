@@ -1,86 +1,102 @@
 # Getting Started
 
-Welcome to Zelyo Operator! This guide will walk you through setting up a local development environment and running your first security scan — even if you've never worked with Kubernetes operators before.
+Welcome to Zelyo Operator! This guide will walk you through a **from-scratch** setup on your local machine using **k3d**, **cert-manager**, and the **Zelyo Operator** Helm chart.
 
-## What You'll Need
+## Prerequisites
 
-Before starting, make sure you have these tools installed:
+Make sure you have the following tools installed:
 
-| Tool | Version | Why You Need It |
-|---|---|---|
-| [Go](https://go.dev/dl/) | 1.24+ | Zelyo Operator is written in Go |
-| [Docker](https://docs.docker.com/get-docker/) | Latest | Builds container images |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/) | Latest | Talks to Kubernetes clusters |
-| [kind](https://kind.sigs.k8s.io/) | Latest | Creates a local Kubernetes cluster on your laptop |
-| [Kubebuilder](https://kubebuilder.io/) | 4.x | Generates operator scaffolding |
-| [Helm](https://helm.sh/docs/intro/install/) | 3.x | Installs Zelyo Operator into a cluster |
+- **Docker**: For running the local cluster.
+- **k3d**: To create a lightweight Kubernetes cluster.
+- **kubectl**: To interact with the cluster.
+- **Helm**: To install the charts.
 
-!!! tip "Don't have kind?"
-    You can also use [minikube](https://minikube.sigs.k8s.io/) or any other local Kubernetes setup. kind is recommended because it's the fastest to start.
+---
 
-## Step 1: Clone the Repository
+## Step 1: Create a Local Cluster
+
+First, let's create a fresh cluster named `zelyo`.
 
 ```bash
-git clone https://github.com/zelyo-ai/zelyo-operator.git
-cd zelyo-operator
+k3d cluster create zelyo
 ```
 
-## Step 2: Create a Local Cluster
+---
+
+## Step 2: Install cert-manager
+
+Zelyo Operator requires **cert-manager** to handle TLS certificates for its admission webhooks. Installation takes about 1 minute.
 
 ```bash
-kind create cluster --name zelyo-operator-dev
+# Install cert-manager via Helm OCI
+helm install cert-manager oci://quay.io/jetstack/charts/cert-manager \
+  --version v1.20.0 \
+  --namespace cert-manager \
+  --create-namespace \
+  --set crds.enabled=true
 ```
 
-This creates a single-node Kubernetes cluster running inside Docker. It takes about 30 seconds.
+## Step 3: Wait for Readiness
 
-Verify it's running:
+Wait until all cert-manager components are healthy before proceeding.
 
 ```bash
-kubectl cluster-info --context kind-zelyo-operator-dev
+kubectl wait --for=condition=Ready pods --all -n cert-manager --timeout=120s
 ```
 
-## Step 3: Install Zelyo Operator's CRDs
+---
 
-CRDs (Custom Resource Definitions) teach Kubernetes about Zelyo Operator's resource types — things like `SecurityPolicy` and `ClusterScan`.
+## Step 4: Add LLM API Secret & Install Zelyo Operator
+
+Now, create the namespace and the secret containing your LLM API key (e.g., from OpenRouter). Then, install the operator using its OCI chart.
 
 ```bash
-make install
+# Create the namespace
+kubectl create namespace zelyo-system
+
+# Add your LLM API key as a Kubernetes secret
+kubectl create secret generic zelyo-llm \
+  --namespace zelyo-system \
+  --from-literal=api-key=<YOUR_OPENROUTER_API_KEY>
+
+# Install Zelyo Operator from OCI registry
+helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
+  --namespace zelyo-system \
+  --create-namespace \
+  --set config.llm.provider=openrouter \
+  --set config.llm.model=anthropic/claude-sonnet-4-20250514 \
+  --set config.llm.apiKeySecret=zelyo-llm \
+  --set webhook.certManager.enabled=true
 ```
 
-Verify the CRDs are installed:
+## Step 5: Verify Installation
+
+Check if the operator pod is running. It might take a moment to pull the image and start.
 
 ```bash
-kubectl get crds | grep zelyo-operator
+kubectl get pods -n zelyo-system
 ```
 
-You should see 9 CRDs listed (securitypolicies, clusterscans, scanreports, etc.).
+---
 
-## Step 4: Run the Operator Locally
+## Step 6: Test Observation (Observe → Reason)
+
+### 6.1 Deploy a Test Workload
+Deploy a deliberately insecure pod so Zelyo has something to find:
 
 ```bash
-make run
+kubectl run insecure-nginx --image=nginx:latest --restart=Never -n default
 ```
 
-This starts Zelyo Operator on your laptop, connected to your kind cluster. You'll see log output as it starts up, including:
-
-```
-INFO    Scanner registry initialized    {"registeredScanners": ["container-security-context", "resource-limits", ...]}
-INFO    Starting Controller Manager
-```
-
-!!! note "Leave this terminal running"
-    Open a new terminal for the next steps. The operator needs to keep running to process your resources.
-
-## Step 5: Create Your First SecurityPolicy
-
-Save this as `my-first-policy.yaml`:
+### 6.2 Create a SecurityPolicy
+Save this as `test-security-policy.yaml`:
 
 ```yaml
 apiVersion: zelyo.ai/v1alpha1
 kind: SecurityPolicy
 metadata:
   name: baseline-security
-  namespace: default
+  namespace: zelyo-system
 spec:
   severity: medium
   match:
@@ -95,102 +111,32 @@ spec:
     - name: check-image-tags
       type: image-vulnerability
       enforce: false
+    - name: check-privilege-escalation
+      type: privilege-escalation
+      enforce: true
 ```
 
-Apply it:
+Apply the policy:
 
 ```bash
-kubectl apply -f my-first-policy.yaml
+kubectl apply -f test-security-policy.yaml
 ```
 
-## Step 6: Deploy a Test Workload
+### 6.3 Verify the Findings
 
-Let's deploy a deliberately insecure pod so Zelyo Operator has something to find:
+Wait a few seconds for the scan to complete, then check the status:
 
 ```bash
-kubectl run insecure-nginx --image=nginx:latest --restart=Never
+kubectl get securitypolicies -n zelyo-system
 ```
 
-This pod has several security issues:
-
-- Uses the `:latest` tag (not pinned)
-- No resource limits set
-- No security context configured (runs as root)
-
-## Step 7: Check What Zelyo Operator Found
-
-Wait a few seconds, then check the SecurityPolicy status:
+You should see a count in the `VIOLATIONS` column. For detailed findings, run:
 
 ```bash
-kubectl get securitypolicies
+kubectl describe securitypolicy baseline-security -n zelyo-system
 ```
 
-You should see something like:
-
-```
-NAME                SEVERITY   VIOLATIONS   PHASE    AGE
-baseline-security   medium     5            Active   30s
-```
-
-For detailed findings, describe the policy:
-
-```bash
-kubectl describe securitypolicy baseline-security
-```
-
-Look at the `Status` section — you'll see:
-
-- **Phase**: `Active` (the policy is working)
-- **ViolationCount**: Number of findings
-- **Conditions**: Detailed status like `ScanCompleted=True`
-- **Events**: Recent scan results
-
-## Step 8: Clean Up
-
-```bash
-# Delete the test pod
-kubectl delete pod insecure-nginx
-
-# Delete the policy
-kubectl delete securitypolicy baseline-security
-
-# Delete the kind cluster (when you're done)
-kind delete cluster --name zelyo-operator-dev
-```
-
-## Deploying to a Real Cluster
-
-### Via Helm (Recommended)
-
-```bash
-# 1. Create the namespace
-kubectl create namespace zelyo-system
-
-# 2. Create your LLM API key secret
-kubectl create secret generic zelyo-llm \
-  --namespace zelyo-system \
-  --from-literal=api-key=<YOUR_OPENROUTER_API_KEY>
-
-# 3. Install Zelyo Operator
-helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
-  --namespace zelyo-system \
-  --set config.llm.provider=openrouter \
-  --set config.llm.model=anthropic/claude-sonnet-4-20250514 \
-  --set config.llm.apiKeySecret=zelyo-llm
-
-# 4. Verify
-kubectl get pods -n zelyo-system
-```
-
-### Verify Image Signature
-
-Before deploying to production, verify that the image hasn't been tampered with:
-
-```bash
-cosign verify ghcr.io/zelyo-ai/zelyo-operator:<tag> \
-  --certificate-identity-regexp='.*' \
-  --certificate-oidc-issuer='https://token.actions.githubusercontent.com'
-```
+---
 
 ## What's Next?
 
@@ -198,9 +144,7 @@ Now that you've got Zelyo Operator running, explore these guides:
 
 | Guide | What You'll Learn |
 |---|---|
-| [Quick Start](quickstart.md) | Common recipes for security scanning |
-| [CRD Reference](crd-reference.md) | Every field in every CRD explained |
-| [Architecture](architecture.md) | How the operator works under the hood |
-| [Security Scanners](scanners.md) | What each scanner checks and how to configure it |
-| [Monitoring & Metrics](metrics.md) | Prometheus integration and alerting |
-| [GitOps Onboarding](gitops-onboarding.md) | Enable Protect Mode with automated PR fixes |
+| [Quick Start Recipes](quickstart.md) | Copy-paste YAML for common use cases |
+| [Architecture](architecture.md) | The Observe → Reason → Act pipeline |
+| [GitOps Onboarding](gitops-onboarding.md) | Enable **Protect Mode** with auto-fixes |
+xes |
