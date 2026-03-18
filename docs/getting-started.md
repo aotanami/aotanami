@@ -18,17 +18,19 @@ graph LR
 ```
 
 ---
+# What You'll Need
 
-## 🛠️ Prerequisites
+Before starting, make sure you have these tools installed:
 
-Before we begin, ensure you have these tools installed:
+| Tool | Version | Why You Need It |
+|---|---|---|
+| [Go](https://go.dev/dl/) | 1.24+ | Zelyo Operator is written in Go |
+| [Docker](https://docs.docker.com/get-docker/) | Latest | Builds container images |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | Latest | Talks to Kubernetes clusters |
+| [kind](https://kind.sigs.k8s.io/) | Latest | Creates a local Kubernetes cluster on your laptop |
+| [Kubebuilder](https://kubebuilder.io/) | 4.x | Generates operator scaffolding |
+| [Helm](https://helm.sh/docs/intro/install/) | 3.x | Installs Zelyo Operator into a cluster |
 
-- **[Docker](https://docs.docker.com/get-docker/)**: The engine for our local cluster.
-- **[k3d](https://k3d.io/)**: For a lightweight, fast local Kubernetes setup.
-- **[kubectl](https://kubernetes.io/docs/tasks/tools/)**: To command your cluster.
-- **[Helm](https://helm.sh/docs/intro/install/)**: To install the "apps" (charts).
-
----
 
 ## 🛑 Step 0: Clean the Slates
 *Progress: ⬛⬜⬜⬜⬜⬜ 0%*
@@ -161,8 +163,11 @@ kubectl describe securitypolicy baseline-security -n zelyo-system
 ## 🎉 Congratulations!
 You now have a fully functional **Autonomous AI Security Agent** watching over your cluster.
 
-| Next Milestone | What You'll Learn |
+| Guide | What You'll Learn |
 |---|---|
-| [Quick Start Recipes](quickstart.md) | Copy-paste YAML for common use cases |
-| [Architecture](architecture.md) | How the **Observe → Reason → Act** loop works |
-| [GitOps Onboarding](gitops-onboarding.md) | Enable **Protect Mode** with auto-fixes |
+| [Quick Start](quickstart.md) | Common recipes for security scanning |
+| [CRD Reference](crd-reference.md) | Every field in every CRD explained |
+| [Architecture](architecture.md) | How the operator works under the hood |
+| [Security Scanners](scanners.md) | What each scanner checks and how to configure it |
+| [Monitoring & Metrics](metrics.md) | Prometheus integration and alerting |
+| [GitOps Onboarding](gitops-onboarding.md) | Enable Protect Mode with automated PR fixes |
