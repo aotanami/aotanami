@@ -34,6 +34,7 @@ import (
 	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
 	"github.com/zelyo-ai/zelyo-operator/internal/correlator"
+	"github.com/zelyo-ai/zelyo-operator/internal/github"
 	aotmetrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
 	"github.com/zelyo-ai/zelyo-operator/internal/remediation"
 	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
@@ -178,6 +179,24 @@ func (r *RemediationPolicyReconciler) processIncidents(
 		severityFilter = "high"
 	}
 	minSev := severityOrder[severityFilter]
+
+	// ── Step 3: Initialize GitOps Engine from Secret ──
+	if repo.Spec.AuthSecret != "" {
+		secret := &corev1.Secret{}
+		secretKey := types.NamespacedName{Name: repo.Spec.AuthSecret, Namespace: repo.Namespace}
+		if err := r.Get(ctx, secretKey, secret); err == nil {
+			token := string(secret.Data["token"])
+			if token == "" {
+				token = string(secret.Data["api-key"])
+			}
+			if token != "" {
+				ghClient := github.NewPATClient(token, "")
+				ghEngine := github.NewEngine(ghClient, log.WithName("github-engine"))
+				r.RemediationEngine.SetGitOpsEngine(ghEngine)
+				log.Info("Successfully initialized GitOps engine for remediation", "repo", repo.Name)
+			}
+		}
+	}
 
 	// Respect MaxConcurrentPRs limit.
 	maxPRs := policy.Spec.MaxConcurrentPRs

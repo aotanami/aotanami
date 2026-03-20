@@ -114,7 +114,7 @@ nav:
   - Home: index.md
   - Getting Started:
       - Installation: getting-started.md
-      - Quick Start Recipes: quickstart.md
+      - End-to-End Guide: end-to-end-guide.md
   - User Guide:
       - Architecture: architecture.md
       - Troubleshooting: troubleshooting.md

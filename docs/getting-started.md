@@ -55,10 +55,9 @@ Create a single-node cluster named `zelyo`.
 ```bash
 k3d cluster create zelyo
 ```
----
-### info "What's happening here?"
-
-k3d is launching a Kubernetes cluster inside a Docker container. It's much faster than traditional VMs.
+> [!NOTE]
+> **What's happening here?**
+> k3d is launching a Kubernetes cluster inside a Docker container. It's much faster than traditional VMs.
 
 ---
 
@@ -97,13 +96,11 @@ helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
   --set webhook.certManager.enabled=true
 ```
 
-### tip "Verification"
-
-Check if the operator is running properly:
-
-```bash
-kubectl get pods -n zelyo-system
-```
+> [!TIP]
+> **Verification** — Check if the operator is running properly:
+> ```bash
+> kubectl get pods -n zelyo-system
+> ```
 
 ---
 
@@ -149,8 +146,9 @@ spec:
 kubectl apply -f test-security-policy.yaml
 ```
 
-!!! ERROR "Troubleshooting: Webhook Error?"
-    If you get a 404 error when applying the YAML, the OCI chart might have old paths. Run the **[Webhook Patch](troubleshooting.md#webhooks)** commands.
+> [!WARNING]
+> **Troubleshooting: Webhook Error?**
+> If you get a 404 error when applying the YAML, the OCI chart might have old paths. Run the **[Webhook Patch](troubleshooting.md#webhooks)** commands.
 
 ### 4.3 See the Results!
 Wait 10 seconds, then watch the magic:

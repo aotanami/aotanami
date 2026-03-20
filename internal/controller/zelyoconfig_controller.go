@@ -33,6 +33,8 @@ import (
 
 	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
+	"github.com/zelyo-ai/zelyo-operator/internal/llm"
+	"github.com/zelyo-ai/zelyo-operator/internal/remediation"
 )
 
 const (
@@ -45,8 +47,9 @@ const (
 // enforces singleton semantics, and manages the agent lifecycle phase.
 type ZelyoConfigReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme            *runtime.Scheme
+	Recorder          record.EventRecorder
+	RemediationEngine *remediation.Engine
 }
 
 // +kubebuilder:rbac:groups=zelyo.ai,resources=zelyoconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -158,6 +161,44 @@ func (r *ZelyoConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	conditions.MarkTrue(&config.Status.Conditions, zelyov1alpha1.ConditionLLMConfigured,
 		zelyov1alpha1.ReasonLLMReady,
 		fmt.Sprintf("LLM provider %q with model %q is configured", config.Spec.LLM.Provider, config.Spec.LLM.Model), config.Generation)
+
+	// ── Step 3: Inject LLM Client into Remediation Engine ──
+	if r.RemediationEngine != nil {
+		llmCfg := llm.DefaultConfig()
+		llmCfg.Provider = llm.Provider(config.Spec.LLM.Provider)
+		llmCfg.Model = config.Spec.LLM.Model
+		llmCfg.APIKey = string(secret.Data["api-key"])
+		if config.Spec.LLM.Endpoint != "" {
+			llmCfg.Endpoint = config.Spec.LLM.Endpoint
+		}
+		if config.Spec.LLM.Temperature != nil {
+			llmCfg.Temperature = *config.Spec.LLM.Temperature
+		}
+		if config.Spec.LLM.MaxTokensPerRequest > 0 {
+			llmCfg.MaxTokens = int(config.Spec.LLM.MaxTokensPerRequest)
+		}
+
+		llmClient, err := llm.NewClient(llmCfg)
+		if err != nil {
+			log.Error(err, "Failed to initialize LLM client from ZelyoConfig")
+			r.Recorder.Event(config, corev1.EventTypeWarning, "LLMInitializationFailed",
+				fmt.Sprintf("Failed to initialize LLM client: %v", err))
+		} else {
+			r.RemediationEngine.SetLLMClient(llmClient)
+			log.Info("Successfully injected LLM client into remediation engine",
+				"provider", llmCfg.Provider, "model", llmCfg.Model)
+
+			// Also update engine strategy based on config mode.
+			strategy := remediation.StrategyDryRun
+			if config.Spec.Mode == "protect" {
+				strategy = remediation.StrategyGitOpsPR
+			}
+			r.RemediationEngine.SetConfig(remediation.EngineConfig{
+				Strategy: strategy,
+			})
+		}
+	}
+
 	conditions.MarkTrue(&config.Status.Conditions, zelyov1alpha1.ConditionReady,
 		zelyov1alpha1.ReasonReconcileSuccess, "Zelyo Operator agent is active and ready", config.Generation)
 

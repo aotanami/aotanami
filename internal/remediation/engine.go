@@ -101,6 +101,24 @@ func NewEngine(llmClient llm.Client, ge gitops.Engine, cfg EngineConfig, log log
 	}
 }
 
+// SetLLMClient updates the LLM client used by the engine.
+func (e *Engine) SetLLMClient(client llm.Client) {
+	e.llmClient = client
+}
+
+// SetGitOpsEngine updates the GitOps engine used by the engine.
+func (e *Engine) SetGitOpsEngine(ge gitops.Engine) {
+	e.gitopsEngine = ge
+}
+
+// SetConfig updates the engine configuration.
+func (e *Engine) SetConfig(cfg EngineConfig) {
+	e.strategy = cfg.Strategy
+	if cfg.MaxBlastRadius > 0 {
+		e.maxBlastRadius = cfg.MaxBlastRadius
+	}
+}
+
 // GeneratePlan uses the LLM to analyze a finding and produce fix recommendations.
 func (e *Engine) GeneratePlan(ctx context.Context, finding *scanner.Finding) (*Plan, error) {
 	prompt := buildRemediationPrompt(finding)
