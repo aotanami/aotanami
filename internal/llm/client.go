@@ -142,6 +142,10 @@ type Config struct {
 
 	// CircuitBreaker configures circuit breaker behavior.
 	CircuitBreaker CircuitBreakerConfig `json:"circuit_breaker"`
+
+	// Fallback configures an optional fallback provider (e.g. local Ollama)
+	// that is used when the primary provider's circuit breaker opens.
+	Fallback *FallbackConfig `json:"fallback,omitempty"`
 }
 
 // RetryConfig configures exponential backoff retry.
@@ -189,6 +193,21 @@ func DefaultConfig() Config {
 	}
 }
 
+// FallbackConfig configures a fallback LLM provider.
+type FallbackConfig struct {
+	// Provider is the fallback LLM backend (typically "ollama").
+	Provider Provider `json:"provider"`
+
+	// Model is the fallback model identifier.
+	Model string `json:"model"`
+
+	// Endpoint is the fallback API URL.
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// APIKey is the fallback auth key (empty for Ollama).
+	APIKey string `json:"-"`
+}
+
 // NewClient creates a new LLM client for the given provider.
 //
 //nolint:gocritic // Config is a constructor param; intentional value copy
@@ -231,6 +250,29 @@ func NewClient(cfg Config) (Client, error) {
 		inner:            base,
 		failureThreshold: cfg.CircuitBreaker.FailureThreshold,
 		resetTimeout:     cfg.CircuitBreaker.ResetTimeout,
+	}
+
+	// Wrap with fallback if configured.
+	if cfg.Fallback != nil {
+		fallbackCfg := Config{
+			Provider:    cfg.Fallback.Provider,
+			Model:       cfg.Fallback.Model,
+			Endpoint:    cfg.Fallback.Endpoint,
+			APIKey:      cfg.Fallback.APIKey,
+			Temperature: cfg.Temperature,
+			MaxTokens:   cfg.MaxTokens,
+			Timeout:     cfg.Timeout,
+			Retry:       cfg.Retry,
+			CircuitBreaker: CircuitBreakerConfig{
+				FailureThreshold: cfg.CircuitBreaker.FailureThreshold,
+				ResetTimeout:     cfg.CircuitBreaker.ResetTimeout,
+			},
+		}
+		fallbackClient, fbErr := NewClient(fallbackCfg)
+		if fbErr != nil {
+			return nil, fmt.Errorf("llm: creating fallback client: %w", fbErr)
+		}
+		return NewFallbackClient(wrapped, fallbackClient), nil
 	}
 
 	return wrapped, nil
