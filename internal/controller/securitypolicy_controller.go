@@ -324,9 +324,10 @@ func (r *SecurityPolicyReconciler) sendNotifications(ctx context.Context, policy
 
 	// Build notifier configurations.
 	var notifierConfigs []notifier.ChannelConfig
-	for _, ch := range channels.Items {
+	for i := range channels.Items {
+		ch := &channels.Items[i]
 		log.Info("Evaluating channel", "name", ch.Name, "type", ch.Spec.Type, "severityFilter", ch.Spec.SeverityFilter)
-		
+
 		config := notifier.ChannelConfig{
 			Type:        notifier.ChannelType(ch.Spec.Type),
 			Name:        ch.Name,
@@ -366,7 +367,8 @@ func (r *SecurityPolicyReconciler) sendNotifications(ctx context.Context, policy
 	// Bundle findings into one notification for efficiency.
 	var msg strings.Builder
 	msg.WriteString("Found security violations in your cluster:\n\n")
-	for i, f := range findings {
+	for i := range findings {
+		f := &findings[i]
 		if i >= 10 {
 			msg.WriteString(fmt.Sprintf("\n... and %d more", len(findings)-10))
 			break

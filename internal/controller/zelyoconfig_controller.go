@@ -79,7 +79,52 @@ func (r *ZelyoConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		zelyov1alpha1.ReasonProgressingMessage, "Reconciliation in progress", config.Generation)
 
 	// ── Step 1: Enforce singleton ──
-	// Only one ZelyoConfig should exist per cluster.
+	if result, err := r.reconcileSingleton(ctx, config); err != nil || !result.IsZero() {
+		return result, err
+	}
+
+	// ── Step 2: Validate LLM API key secret ──
+	secret, result, err := r.reconcileLLMSecret(ctx, config)
+	if err != nil || !result.IsZero() {
+		return result, err
+	}
+
+	// ── Step 3: All checks passed — mark as Active ──
+	conditions.MarkTrue(&config.Status.Conditions, zelyov1alpha1.ConditionSecretResolved,
+		zelyov1alpha1.ReasonSecretResolved, "All referenced secrets are valid", config.Generation)
+	conditions.MarkTrue(&config.Status.Conditions, zelyov1alpha1.ConditionLLMConfigured,
+		zelyov1alpha1.ReasonLLMReady,
+		fmt.Sprintf("LLM provider %q with model %q is configured", config.Spec.LLM.Provider, config.Spec.LLM.Model), config.Generation)
+
+	// ── Step 4: Inject LLM Client into Remediation Engine ──
+	r.reconcileRemediationEngine(ctx, config, secret)
+
+	conditions.MarkTrue(&config.Status.Conditions, zelyov1alpha1.ConditionReady,
+		zelyov1alpha1.ReasonReconcileSuccess, "Zelyo Operator agent is active and ready", config.Generation)
+
+	now := metav1.Now()
+	config.Status.Phase = zelyov1alpha1.PhaseActive
+	config.Status.ActiveMode = config.Spec.Mode
+	config.Status.LastReconciled = &now
+	config.Status.ObservedGeneration = config.Generation
+
+	if err := r.Status().Update(ctx, config); err != nil {
+		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+	}
+
+	r.Recorder.Event(config, corev1.EventTypeNormal, zelyov1alpha1.EventReasonReconciled,
+		fmt.Sprintf("ZelyoConfig reconciled successfully (mode=%s, provider=%s)", config.Spec.Mode, config.Spec.LLM.Provider))
+
+	log.Info("ZelyoConfig reconciled successfully",
+		"phase", config.Status.Phase,
+		"mode", config.Status.ActiveMode,
+		"provider", config.Spec.LLM.Provider)
+
+	return ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
+}
+
+// reconcileSingleton ensures only one ZelyoConfig exists in the cluster.
+func (r *ZelyoConfigReconciler) reconcileSingleton(ctx context.Context, config *zelyov1alpha1.ZelyoConfig) (ctrl.Result, error) {
 	configList := &zelyov1alpha1.ZelyoConfigList{}
 	if err := r.List(ctx, configList); err != nil {
 		return ctrl.Result{}, fmt.Errorf("listing ZelyoConfigs: %w", err)
@@ -97,8 +142,11 @@ func (r *ZelyoConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		return ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
 	}
+	return ctrl.Result{}, nil
+}
 
-	// ── Step 2: Validate LLM API key secret ──
+// reconcileLLMSecret validates the presence and content of the LLM API key secret.
+func (r *ZelyoConfigReconciler) reconcileLLMSecret(ctx context.Context, config *zelyov1alpha1.ZelyoConfig) (*corev1.Secret, ctrl.Result, error) {
 	llmSecretName := config.Spec.LLM.APIKeySecret
 	if llmSecretName == "" {
 		conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionLLMConfigured,
@@ -108,9 +156,9 @@ func (r *ZelyoConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		config.Status.Phase = zelyov1alpha1.PhaseDegraded
 		config.Status.ObservedGeneration = config.Generation
 		if err := r.Status().Update(ctx, config); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+			return nil, ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 		}
-		return ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
+		return nil, ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
 	}
 
 	// Look up the secret in the operator's namespace (default to "zelyo-system").
@@ -131,11 +179,11 @@ func (r *ZelyoConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			config.Status.Phase = zelyov1alpha1.PhaseDegraded
 			config.Status.ObservedGeneration = config.Generation
 			if err := r.Status().Update(ctx, config); err != nil {
-				return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+				return nil, ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 			}
-			return ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
+			return nil, ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("fetching LLM secret: %w", err)
+		return nil, ctrl.Result{}, fmt.Errorf("fetching LLM secret: %w", err)
 	}
 
 	// Verify the secret contains the "api-key" data key.
@@ -150,19 +198,18 @@ func (r *ZelyoConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		config.Status.Phase = zelyov1alpha1.PhaseDegraded
 		config.Status.ObservedGeneration = config.Generation
 		if err := r.Status().Update(ctx, config); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+			return nil, ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 		}
-		return ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
+		return nil, ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
 	}
 
-	// ── Step 3: All checks passed — mark as Active ──
-	conditions.MarkTrue(&config.Status.Conditions, zelyov1alpha1.ConditionSecretResolved,
-		zelyov1alpha1.ReasonSecretResolved, "All referenced secrets are valid", config.Generation)
-	conditions.MarkTrue(&config.Status.Conditions, zelyov1alpha1.ConditionLLMConfigured,
-		zelyov1alpha1.ReasonLLMReady,
-		fmt.Sprintf("LLM provider %q with model %q is configured", config.Spec.LLM.Provider, config.Spec.LLM.Model), config.Generation)
+	return secret, ctrl.Result{}, nil
+}
 
-	// ── Step 3: Inject LLM Client into Remediation Engine ──
+// reconcileRemediationEngine initializes and injects the LLM client into the remediation engine.
+func (r *ZelyoConfigReconciler) reconcileRemediationEngine(ctx context.Context, config *zelyov1alpha1.ZelyoConfig, secret *corev1.Secret) {
+	log := logf.FromContext(ctx)
+
 	if r.RemediationEngine != nil {
 		llmCfg := llm.DefaultConfig()
 		llmCfg.Provider = llm.Provider(config.Spec.LLM.Provider)
@@ -198,29 +245,6 @@ func (r *ZelyoConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			})
 		}
 	}
-
-	conditions.MarkTrue(&config.Status.Conditions, zelyov1alpha1.ConditionReady,
-		zelyov1alpha1.ReasonReconcileSuccess, "Zelyo Operator agent is active and ready", config.Generation)
-
-	now := metav1.Now()
-	config.Status.Phase = zelyov1alpha1.PhaseActive
-	config.Status.ActiveMode = config.Spec.Mode
-	config.Status.LastReconciled = &now
-	config.Status.ObservedGeneration = config.Generation
-
-	if err := r.Status().Update(ctx, config); err != nil {
-		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
-	}
-
-	r.Recorder.Event(config, corev1.EventTypeNormal, zelyov1alpha1.EventReasonReconciled,
-		fmt.Sprintf("ZelyoConfig reconciled successfully (mode=%s, provider=%s)", config.Spec.Mode, config.Spec.LLM.Provider))
-
-	log.Info("ZelyoConfig reconciled successfully",
-		"phase", config.Status.Phase,
-		"mode", config.Status.ActiveMode,
-		"provider", config.Spec.LLM.Provider)
-
-	return ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
