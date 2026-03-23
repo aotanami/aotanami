@@ -113,7 +113,7 @@ plugins:
 nav:
   - Home: index.md
   - Getting Started:
-      - Quick Start: quickstart-guide.md
+      - Quick Start: quickstart.md
   - User Guide:
       - Architecture: architecture.md
       - Troubleshooting: troubleshooting.md
