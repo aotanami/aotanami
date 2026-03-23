@@ -2,8 +2,8 @@ apiVersion: v2
 name: zelyo-operator
 description: Zelyo Operator — Autonomous Kubernetes Protection powered by Agentic AI
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.0.1
+appVersion: "0.0.1"
 kubeVersion: ">=1.26.0-0"
 home: https://github.com/zelyo-ai/zelyo-operator
 icon: https://raw.githubusercontent.com/zelyo-ai/zelyo-operator/main/docs/assets/icon.png

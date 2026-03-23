@@ -150,13 +150,24 @@ kubectl create secret generic zelyo-llm \
   --namespace zelyo-system \
   --from-literal=api-key=<YOUR_OPENROUTER_API_KEY>
 
+# Install cert-manager (takes ~1m)
+helm install cert-manager oci://quay.io/jetstack/charts/cert-manager \
+  --version v1.20.0 \
+  --namespace cert-manager \
+  --create-namespace \
+  --set crds.enabled=true
+
+# Wait for cert-manager to be ready before installing the operator
+kubectl wait --for=condition=Ready pods --all -n cert-manager --timeout=120s
+
 # Install Zelyo Operator from OCI registry
 helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
   --namespace zelyo-system \
   --create-namespace \
   --set config.llm.provider=openrouter \
   --set config.llm.model=anthropic/claude-sonnet-4-20250514 \
-  --set config.llm.apiKeySecret=zelyo-llm
+  --set config.llm.apiKeySecret=zelyo-llm \
+  --set webhook.certManager.enabled=true
 
 # Verify the installation
 kubectl get pods -n zelyo-system
