@@ -76,6 +76,21 @@ rules:
   - patch
   - update
 - apiGroups:
+  - ""
+  resources:
+  - events
+  - persistentvolumeclaims
+  - persistentvolumes
+  - resourcequotas
+  - limitranges
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+- apiGroups:
   - argoproj.io
   resources:
   - applications
