@@ -28,8 +28,9 @@ kubectl patch validatingwebhookconfiguration zelyo-operator --type='json' \
 
 After patching, retry your `kubectl apply` — it should work immediately.
 
-!!! note "Permanent Fix in Progress"
-    This path mismatch only affects the published OCI chart `v0.0.1`. The local Helm chart template has been updated with the correct paths and the fix will be included in the next release.
+> [!NOTE]
+> **Permanent Fix in Progress**
+> This path mismatch only affects the published OCI chart `v0.0.1`. The local Helm chart template has been updated with the correct paths and the fix will be included in the next release.
 
 ---
 
