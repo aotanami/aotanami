@@ -196,7 +196,6 @@ graph TB
     kubectl apply -k https://github.com/zelyo-ai/zelyo/config/default
     ```
 
-[Full installation guide :material-arrow-right:](getting-started.md){ .md-button }
 
 ---
 

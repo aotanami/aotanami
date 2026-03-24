@@ -100,7 +100,7 @@ If you don't receive Slack messages despite having a `NotificationChannel`:
     ```bash
     kubectl get deployment zelyo-operator -n zelyo-system -o jsonpath='{.spec.template.spec.containers[0].image}'
     ```
-    *If it shows `0.0.1`, follow the **Build and Deploy the Local Operator** steps in the [End-to-End Guide](./end-to-end-guide.md).*
+    *If it shows `0.0.1`, follow the **Build and Deploy the Local Operator** steps in the [Quickstart](./quickstart.md).*
 
 4.  **Check Channel Existence**:
     ```bash
