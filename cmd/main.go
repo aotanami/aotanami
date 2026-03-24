@@ -280,9 +280,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&controller.ZelyoConfigReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("zelyoconfig-controller"), //nolint:staticcheck,nolintlint
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		Recorder:          mgr.GetEventRecorderFor("zelyoconfig-controller"), //nolint:staticcheck,nolintlint
+		RemediationEngine: remediationEngine,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "ZelyoConfig")
 		os.Exit(1)

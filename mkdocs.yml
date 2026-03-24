@@ -113,10 +113,10 @@ plugins:
 nav:
   - Home: index.md
   - Getting Started:
-      - Installation: getting-started.md
-      - Quick Start Recipes: quickstart.md
+      - Quick Start: quickstart.md
   - User Guide:
       - Architecture: architecture.md
+      - Troubleshooting: troubleshooting.md
       - Security Scanners: scanners.md
       - CRD Reference: crd-reference.md
       - Monitoring & Metrics: metrics.md

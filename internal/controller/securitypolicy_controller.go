@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,6 +38,7 @@ import (
 	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
 	"github.com/zelyo-ai/zelyo-operator/internal/correlator"
 	aotmetrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
+	"github.com/zelyo-ai/zelyo-operator/internal/notifier"
 	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
 )
 
@@ -168,6 +170,11 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		log.Info("Ingested findings into correlator", "count", len(allFindings))
 	}
 
+	// ── Step 2c: Send notifications to Slack/Teams/etc ──
+	if len(allFindings) > 0 {
+		r.sendNotifications(ctx, policy, allFindings)
+	}
+
 	// ── Step 3: Update status ──
 	now := metav1.Now()
 	policy.Status.ViolationCount = int32(len(allFindings)) //nolint:gosec // Count is bounded
@@ -296,6 +303,96 @@ func (r *SecurityPolicyReconciler) resolveTargetPods(ctx context.Context, policy
 	}
 
 	return allPods, nil
+}
+
+// sendNotifications fetches applicable NotificationChannels and delivers alerts.
+func (r *SecurityPolicyReconciler) sendNotifications(ctx context.Context, policy *zelyov1alpha1.SecurityPolicy, findings []scanner.Finding) {
+	log := logf.FromContext(ctx)
+	log.Info("Checking for notification channels", "policy", policy.Name, "findings", len(findings))
+
+	// List all notification channels in the cluster.
+	channels := &zelyov1alpha1.NotificationChannelList{}
+	if err := r.List(ctx, channels); err != nil {
+		log.Error(err, "Failed to list notification channels")
+		return
+	}
+
+	log.Info("Found notification channels", "count", len(channels.Items))
+	if len(channels.Items) == 0 {
+		return
+	}
+
+	// Build notifier configurations.
+	var notifierConfigs []notifier.ChannelConfig
+	for i := range channels.Items {
+		ch := &channels.Items[i]
+		log.Info("Evaluating channel", "name", ch.Name, "type", ch.Spec.Type, "severityFilter", ch.Spec.SeverityFilter)
+
+		config := notifier.ChannelConfig{
+			Type:        notifier.ChannelType(ch.Spec.Type),
+			Name:        ch.Name,
+			MinSeverity: notifier.Severity(ch.Spec.SeverityFilter),
+		}
+
+		// Handle Slack-specific config (using CredentialSecret for webhook URL).
+		if ch.Spec.Type == "slack" {
+			secret := &corev1.Secret{}
+			secretKey := types.NamespacedName{Name: ch.Spec.CredentialSecret, Namespace: ch.Namespace}
+			log.Info("Fetching Slack secret", "name", ch.Spec.CredentialSecret, "namespace", ch.Namespace)
+			if err := r.Get(ctx, secretKey, secret); err != nil {
+				log.Error(err, "Failed to fetch Slack webhook secret", "secret", ch.Spec.CredentialSecret)
+				continue
+			}
+			url := string(secret.Data["url"])
+			if url == "" {
+				url = string(secret.Data["webhook-url"])
+			}
+			if url != "" {
+				log.Info("Slack webhook URL found", "channel", ch.Name)
+				config.WebhookURL = url
+				notifierConfigs = append(notifierConfigs, config)
+			} else {
+				log.Info("Slack webhook URL EMPTY in secret", "channel", ch.Name, "secret", ch.Spec.CredentialSecret)
+			}
+		}
+	}
+
+	log.Info("Notifier configurations ready", "count", len(notifierConfigs))
+	if len(notifierConfigs) == 0 {
+		return
+	}
+
+	n := notifier.New(notifierConfigs, log.WithName("notifier"))
+
+	// Bundle findings into one notification for efficiency.
+	var msg strings.Builder
+	msg.WriteString("Found security violations in your cluster:\n\n")
+	for i := range findings {
+		f := &findings[i]
+		if i >= 10 {
+			msg.WriteString(fmt.Sprintf("\n... and %d more", len(findings)-10))
+			break
+		}
+		msg.WriteString(fmt.Sprintf("• *[%s]* %s (%s/%s)\n", f.Severity, f.Title, f.ResourceNamespace, f.ResourceName))
+	}
+
+	notif := &notifier.Notification{
+		Title:        fmt.Sprintf("🛡️ Zelyo Alert: %d Violations Detected", len(findings)),
+		Message:      msg.String(),
+		Severity:     notifier.Severity(findings[0].Severity), // Use highest severity.
+		Source:       fmt.Sprintf("securitypolicy/%s", policy.Name),
+		Namespace:    policy.Namespace,
+		ResourceKind: "SecurityPolicy",
+		ResourceName: policy.Name,
+		Timestamp:    time.Now(),
+	}
+
+	log.Info("Dispatching notification", "source", notif.Source, "violationCount", len(findings))
+	if err := n.Send(ctx, notif); err != nil {
+		log.Error(err, "Failed to send notifications")
+	} else {
+		log.Info("Successfully sent notifications", "channels", len(notifierConfigs))
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.

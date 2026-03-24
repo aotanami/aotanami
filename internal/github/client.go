@@ -41,6 +41,7 @@ type Client struct {
 	accessToken string
 	tokenExpiry time.Time
 	httpClient  *http.Client
+	isPAT       bool
 }
 
 // NewClient creates a new GitHub App client from the given configuration.
@@ -74,11 +75,29 @@ func NewClient(appID, installationID int64, privateKeyPEM []byte, baseURL string
 		privateKey:     key,
 		baseURL:        baseURL,
 		httpClient:     &http.Client{Timeout: 30 * time.Second},
+		isPAT:          false,
 	}, nil
 }
 
-// Token returns a valid installation access token, refreshing if needed.
+// NewPATClient creates a new GitHub client using a Personal Access Token (PAT).
+func NewPATClient(token, baseURL string) *Client {
+	if baseURL == "" {
+		baseURL = "https://api.github.com"
+	}
+	return &Client{
+		accessToken: token,
+		baseURL:     baseURL,
+		httpClient:  &http.Client{Timeout: 30 * time.Second},
+		isPAT:       true,
+	}
+}
+
+// Token returns a valid installation access token or PAT.
 func (c *Client) Token() (string, error) {
+	if c.isPAT {
+		return c.accessToken, nil
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
