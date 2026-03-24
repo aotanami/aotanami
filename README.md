@@ -330,7 +330,7 @@ make docker-push IMG=ghcr.io/zelyo-ai/zelyo-operator:dev
 
 | Document | Description |
 |---|---|
-| [Getting Started](docs/getting-started.md) | Step-by-step setup: clone, cluster, first policy, first scan |
+| [Getting Started](docs/quickstart.md) | Step-by-step setup: clone, cluster, first policy, first scan |
 | [Quick Start Recipes](docs/quickstart.md) | Copy-paste YAML recipes for common use cases |
 | [Architecture](docs/architecture.md) | System design, controllers, scanner engine, data flow |
 | [Security Scanners](docs/scanners.md) | All 8 scanners: what they check, severity levels, example policies |
