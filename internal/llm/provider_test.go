@@ -38,6 +38,33 @@ func TestParseRetryAfter_InvalidString(t *testing.T) {
 	}
 }
 
+func TestParseRetryAfter_HTTPDate(t *testing.T) {
+	// Use a future time so that parseRetryAfter should return a positive duration.
+	expiry := time.Now().Add(30 * time.Second)
+	header := expiry.UTC().Format(http.TimeFormat)
+
+	d := parseRetryAfter(header)
+	if d <= 0 {
+		t.Errorf("expected positive duration for HTTP-date, got %s", d)
+	}
+	// Allow a small margin for test execution time.
+	if d > 30*time.Second+1*time.Second {
+		t.Errorf("expected duration no greater than ~30s, got %s", d)
+	}
+}
+
+func TestParseRetryAfter_HTTPDate_WithWhitespace(t *testing.T) {
+	expiry := time.Now().Add(30 * time.Second)
+	header := "  " + expiry.UTC().Format(http.TimeFormat) + "  "
+
+	d := parseRetryAfter(header)
+	if d <= 0 {
+		t.Errorf("expected positive duration for padded HTTP-date, got %s", d)
+	}
+	if d > 30*time.Second+1*time.Second {
+		t.Errorf("expected duration no greater than ~30s for padded HTTP-date, got %s", d)
+	}
+}
 func TestAPIError_RetryAfterIncludedInMessage(t *testing.T) {
 	err := &APIError{
 		StatusCode: http.StatusTooManyRequests,
