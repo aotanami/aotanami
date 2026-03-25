@@ -45,7 +45,7 @@ func TestCircuitBreakerOpenStateRejectsUntilResetTimeout(t *testing.T) {
 	}
 
 	_, err = cb.Complete(context.Background(), Request{})
-	if err == nil || !strings.Contains(err.Error(), "circuit breaker OPEN") {
+	if err == nil || !errors.Is(err, ErrCircuitBreakerOpen) {
 		t.Fatalf("expected open-circuit rejection, got: %v", err)
 	}
 

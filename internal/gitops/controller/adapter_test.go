@@ -205,14 +205,15 @@ func TestParseArgoCDApplication(t *testing.T) {
 				}
 				return
 			}
-			if app == nil {
+			if app != nil {
+				if app.Name != tt.wantName {
+					t.Errorf("Name = %q, want %q", app.Name, tt.wantName)
+				}
+				if app.SourceType != tt.wantType {
+					t.Errorf("SourceType = %q, want %q", app.SourceType, tt.wantType)
+				}
+			} else {
 				t.Fatal("expected non-nil app")
-			}
-			if app.Name != tt.wantName {
-				t.Errorf("Name = %q, want %q", app.Name, tt.wantName)
-			}
-			if app.SourceType != tt.wantType {
-				t.Errorf("SourceType = %q, want %q", app.SourceType, tt.wantType)
 			}
 		})
 	}

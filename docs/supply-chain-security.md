@@ -21,7 +21,7 @@ Every release image is signed with [Cosign](https://github.com/sigstore/cosign) 
 ```bash
 # Verify the image signature
 cosign verify ghcr.io/zelyo-ai/zelyo-operator:v0.1.0 \
-  --certificate-identity-regexp='https://github.com/zelyo-ai/zelyo-operator' \
+  --certificate-identity-regexp='https://github.com/zelyo-ai/zelyo' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com'
 ```
 
@@ -31,7 +31,7 @@ Helm OCI charts are also Cosign-signed:
 
 ```bash
 cosign verify ghcr.io/zelyo-ai/charts/zelyo-operator:0.1.0 \
-  --certificate-identity-regexp='https://github.com/zelyo-ai/zelyo-operator' \
+  --certificate-identity-regexp='https://github.com/zelyo-ai/zelyo' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com'
 ```
 
@@ -48,7 +48,7 @@ cosign verify-attestation ghcr.io/zelyo-ai/zelyo-operator:v0.1.0 \
 
 # Or using the SLSA verifier CLI
 slsa-verifier verify-image ghcr.io/zelyo-ai/zelyo-operator:v0.1.0 \
-  --source-uri github.com/zelyo-ai/zelyo-operator
+  --source-uri github.com/zelyo-ai/zelyo
 ```
 
 ## SBOMs
@@ -63,7 +63,7 @@ Each release includes Software Bills of Materials in both SPDX and CycloneDX for
 # Verify SBOM attestation
 cosign verify-attestation ghcr.io/zelyo-ai/zelyo-operator:v0.1.0 \
   --type spdxjson \
-  --certificate-identity-regexp='https://github.com/zelyo-ai/zelyo-operator' \
+  --certificate-identity-regexp='https://github.com/zelyo-ai/zelyo' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com'
 
 # Download SBOMs from release page:

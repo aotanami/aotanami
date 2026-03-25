@@ -33,12 +33,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
-	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
-	gitopscontroller "github.com/zelyo-ai/zelyo-operator/internal/gitops/controller"
-	"github.com/zelyo-ai/zelyo-operator/internal/gitops/discovery"
-	"github.com/zelyo-ai/zelyo-operator/internal/gitops/source"
-	aotmetrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo/internal/conditions"
+	gitopscontroller "github.com/zelyo-ai/zelyo/internal/gitops/controller"
+	"github.com/zelyo-ai/zelyo/internal/gitops/discovery"
+	"github.com/zelyo-ai/zelyo/internal/gitops/source"
+	aotmetrics "github.com/zelyo-ai/zelyo/internal/metrics"
 )
 
 // GitOpsRepositoryReconciler reconciles a GitOpsRepository object.

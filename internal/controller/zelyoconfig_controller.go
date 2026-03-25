@@ -31,10 +31,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
-	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
-	"github.com/zelyo-ai/zelyo-operator/internal/llm"
-	"github.com/zelyo-ai/zelyo-operator/internal/remediation"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo/internal/conditions"
+	"github.com/zelyo-ai/zelyo/internal/llm"
+	"github.com/zelyo-ai/zelyo/internal/remediation"
 )
 
 const (

@@ -6,7 +6,8 @@ package llm
 
 import (
 	"context"
-	"strings"
+	"errors"
+	"fmt"
 )
 
 // FallbackClient wraps a primary LLM client with a fallback. When the primary
@@ -32,7 +33,11 @@ func NewFallbackClient(primary, fallback Client) Client {
 func (f *FallbackClient) Complete(ctx context.Context, req Request) (*Response, error) {
 	resp, err := f.primary.Complete(ctx, req)
 	if err != nil && isCircuitBreakerOpen(err) {
-		return f.fallback.Complete(ctx, req)
+		fbResp, fbErr := f.fallback.Complete(ctx, req)
+		if fbErr != nil {
+			return nil, fmt.Errorf("fallback failed: %w (primary: %v)", fbErr, err)
+		}
+		return fbResp, nil
 	}
 	return resp, err
 }
@@ -42,15 +47,10 @@ func (f *FallbackClient) Provider() Provider { return f.primary.Provider() }
 
 // Close releases resources held by both clients.
 func (f *FallbackClient) Close() error {
-	pErr := f.primary.Close()
-	fErr := f.fallback.Close()
-	if pErr != nil {
-		return pErr
-	}
-	return fErr
+	return errors.Join(f.primary.Close(), f.fallback.Close())
 }
 
 // isCircuitBreakerOpen checks if the error indicates the circuit breaker is open.
 func isCircuitBreakerOpen(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "circuit breaker OPEN")
+	return errors.Is(err, ErrCircuitBreakerOpen)
 }

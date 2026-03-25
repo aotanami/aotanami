@@ -13,6 +13,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -109,7 +110,7 @@ func (c *openAICompatClient) executeWithRetry(ctx context.Context, body openAICh
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			wait := backoff
+			var wait time.Duration
 
 			// If the previous error was a 429 with Retry-After, use that instead of backoff.
 			if apiErr, ok := lastErr.(*APIError); ok && apiErr.RetryAfter > 0 {
@@ -184,7 +185,7 @@ func (c *openAICompatClient) doRequest(ctx context.Context, body openAIChatReque
 
 	// Set extra headers for OpenRouter.
 	if c.cfg.Provider == ProviderOpenRouter {
-		httpReq.Header.Set("HTTP-Referer", "https://github.com/zelyo-ai/zelyo-operator")
+		httpReq.Header.Set("HTTP-Referer", "https://github.com/zelyo-ai/zelyo")
 		httpReq.Header.Set("X-Title", "Zelyo Operator")
 	}
 
@@ -270,6 +271,7 @@ func (e *APIError) Error() string {
 // parseRetryAfter parses a Retry-After header value.
 // It supports both seconds (integer) and HTTP-date formats.
 func parseRetryAfter(val string) time.Duration {
+	val = strings.TrimSpace(val)
 	if val == "" {
 		return 0
 	}

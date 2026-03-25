@@ -7,8 +7,8 @@ package remediation
 import (
 	"testing"
 
-	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
-	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
+	"github.com/zelyo-ai/zelyo/internal/gitops"
+	"github.com/zelyo-ai/zelyo/internal/scanner"
 )
 
 func TestExtractFixes_StructuredJSON(t *testing.T) {

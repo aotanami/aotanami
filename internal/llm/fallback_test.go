@@ -7,6 +7,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -28,7 +29,7 @@ func TestFallbackClient_PrimarySucceeds(t *testing.T) {
 func TestFallbackClient_CircuitBreakerOpenFallsBack(t *testing.T) {
 	primary := &stubClient{
 		provider: ProviderOpenAI,
-		err:      errors.New("llm: circuit breaker OPEN — provider openai has 5 consecutive failures, retrying after 30s"),
+		err:      fmt.Errorf("provider openai has 5 consecutive failures, retrying after 30s: %w", ErrCircuitBreakerOpen),
 	}
 	fallback := &stubClient{provider: ProviderOllama}
 
@@ -76,8 +77,8 @@ func TestIsCircuitBreakerOpen(t *testing.T) {
 	}{
 		{nil, false},
 		{errors.New("some random error"), false},
-		{errors.New("llm: circuit breaker OPEN — provider openai"), true},
-		{errors.New("circuit breaker OPEN"), true},
+		{fmt.Errorf("provider openai: %w", ErrCircuitBreakerOpen), true},
+		{ErrCircuitBreakerOpen, true},
 	}
 
 	for _, tt := range tests {
@@ -85,5 +86,55 @@ func TestIsCircuitBreakerOpen(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("isCircuitBreakerOpen(%v) = %v, want %v", tt.err, got, tt.want)
 		}
+	}
+}
+
+func TestFallbackClient_BothFailPreservesContext(t *testing.T) {
+	primaryErr := fmt.Errorf("provider openai: %w", ErrCircuitBreakerOpen)
+	fallbackErr := errors.New("ollama: connection refused")
+
+	primary := &stubClient{provider: ProviderOpenAI, err: primaryErr}
+	fallback := &stubClient{provider: ProviderOllama, err: fallbackErr}
+
+	fc := NewFallbackClient(primary, fallback)
+	_, err := fc.Complete(context.Background(), Request{})
+	if err == nil {
+		t.Fatal("expected error when both primary and fallback fail")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "fallback failed") {
+		t.Errorf("expected 'fallback failed' in error, got: %s", msg)
+	}
+	if !strings.Contains(msg, "connection refused") {
+		t.Errorf("expected fallback error in message, got: %s", msg)
+	}
+	if !strings.Contains(msg, "primary") {
+		t.Errorf("expected 'primary' context in message, got: %s", msg)
+	}
+}
+
+func TestNewClient_FallbackConfigCreatesWrappedClient(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Provider = ProviderOllama
+	cfg.APIKey = "" // Ollama doesn't need API key
+	cfg.Fallback = &FallbackConfig{
+		Provider: ProviderOllama,
+		Model:    "llama3",
+		Endpoint: "http://localhost:11434/v1",
+	}
+
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	fc, ok := client.(*FallbackClient)
+	if !ok {
+		t.Fatalf("expected *FallbackClient, got %T", client)
+	}
+	if fc.primary.Provider() != ProviderOllama {
+		t.Errorf("expected primary provider %s, got %s", ProviderOllama, fc.primary.Provider())
+	}
+	if fc.fallback.Provider() != ProviderOllama {
+		t.Errorf("expected fallback provider %s, got %s", ProviderOllama, fc.fallback.Provider())
 	}
 }

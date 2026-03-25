@@ -27,7 +27,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo/api/v1alpha1"
 )
 
 // log is for logging in this package.

@@ -16,9 +16,9 @@ import (
 
 	"github.com/go-logr/logr"
 
-	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
-	"github.com/zelyo-ai/zelyo-operator/internal/llm"
-	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
+	"github.com/zelyo-ai/zelyo/internal/gitops"
+	"github.com/zelyo-ai/zelyo/internal/llm"
+	"github.com/zelyo-ai/zelyo/internal/scanner"
 )
 
 // Strategy defines how a remediation should be applied.

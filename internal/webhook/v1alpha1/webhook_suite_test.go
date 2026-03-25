@@ -39,7 +39,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
