@@ -78,11 +78,12 @@ func TestGet_Found(t *testing.T) {
 	}
 
 	c := Get(conditions, "Ready")
-	if c == nil {
+	if c != nil {
+		if c.Status != metav1.ConditionTrue {
+			t.Errorf("expected True, got %s", c.Status)
+		}
+	} else {
 		t.Fatal("expected to find condition Ready")
-	}
-	if c.Status != metav1.ConditionTrue {
-		t.Errorf("expected True, got %s", c.Status)
 	}
 }
 

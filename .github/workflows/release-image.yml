@@ -64,7 +64,7 @@ jobs:
             org.opencontainers.image.description=Autonomous Kubernetes Protection — Powered by Agentic AI
             org.opencontainers.image.vendor=Zelyo AI
             org.opencontainers.image.licenses=Apache-2.0
-            org.opencontainers.image.documentation=https://github.com/zelyo-ai/zelyo-operator/tree/main/docs
+            org.opencontainers.image.documentation=https://github.com/zelyo-ai/zelyo/tree/main/docs
 
       # Reproducible builds: set SOURCE_DATE_EPOCH from the git commit timestamp
       - name: Set SOURCE_DATE_EPOCH

@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	yamlutil "sigs.k8s.io/yaml"
 
-	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
+	"github.com/zelyo-ai/zelyo/internal/gitops"
 )
 
 // LiveDetector implements the Detector interface by comparing live cluster

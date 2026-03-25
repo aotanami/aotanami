@@ -34,11 +34,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
-	"github.com/zelyo-ai/zelyo-operator/internal/compliance"
-	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
-	aotmetrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
-	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo/internal/compliance"
+	"github.com/zelyo-ai/zelyo/internal/conditions"
+	aotmetrics "github.com/zelyo-ai/zelyo/internal/metrics"
+	"github.com/zelyo-ai/zelyo/internal/scanner"
 )
 
 const (

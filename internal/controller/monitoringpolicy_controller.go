@@ -31,11 +31,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
-	"github.com/zelyo-ai/zelyo-operator/internal/anomaly"
-	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
-	"github.com/zelyo-ai/zelyo-operator/internal/correlator"
-	aotmetrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo/internal/anomaly"
+	"github.com/zelyo-ai/zelyo/internal/conditions"
+	"github.com/zelyo-ai/zelyo/internal/correlator"
+	aotmetrics "github.com/zelyo-ai/zelyo/internal/metrics"
 )
 
 // MonitoringPolicyReconciler reconciles a MonitoringPolicy object.

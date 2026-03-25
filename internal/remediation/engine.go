@@ -11,13 +11,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
 
-	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
-	"github.com/zelyo-ai/zelyo-operator/internal/llm"
-	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
+	"github.com/zelyo-ai/zelyo/internal/gitops"
+	"github.com/zelyo-ai/zelyo/internal/llm"
+	"github.com/zelyo-ai/zelyo/internal/scanner"
 )
 
 // Strategy defines how a remediation should be applied.
@@ -70,10 +71,13 @@ type Fix struct {
 // Engine orchestrates the remediation workflow.
 type Engine struct {
 	llmClient      llm.Client
-	gitopsEngine   gitops.Engine
+	gitopsEngine   gitops.Engine // Default engine for unregistered repos.
 	log            logr.Logger
 	strategy       Strategy
 	maxBlastRadius int // Max number of resources a single remediation can affect.
+
+	mu             sync.RWMutex
+	gitopsRegistry map[string]gitops.Engine // Keyed by "owner/repo".
 }
 
 // EngineConfig configures the remediation engine.
@@ -98,7 +102,28 @@ func NewEngine(llmClient llm.Client, ge gitops.Engine, cfg EngineConfig, log log
 		log:            log,
 		strategy:       cfg.Strategy,
 		maxBlastRadius: maxBlast,
+		gitopsRegistry: make(map[string]gitops.Engine),
 	}
+}
+
+// RegisterGitOpsEngine registers a repo-specific GitOps engine.
+// The key should be "owner/repo" (e.g. "zelyo-ai/infra-manifests").
+func (e *Engine) RegisterGitOpsEngine(repoKey string, engine gitops.Engine) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.gitopsRegistry[repoKey] = engine
+	e.log.Info("Registered GitOps engine for repository", "repo", repoKey)
+}
+
+// getGitOpsEngine returns the engine for a specific repo, falling back to the default.
+func (e *Engine) getGitOpsEngine(owner, repo string) gitops.Engine {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	key := owner + "/" + repo
+	if eng, ok := e.gitopsRegistry[key]; ok {
+		return eng
+	}
+	return e.gitopsEngine
 }
 
 // SetLLMClient updates the LLM client used by the engine.
@@ -184,8 +209,9 @@ func (e *Engine) ApplyPlan(ctx context.Context, plan *Plan, repoOwner, repoName 
 }
 
 func (e *Engine) createPR(ctx context.Context, plan *Plan, owner, repo string) (*gitops.PullRequestResult, error) {
-	if e.gitopsEngine == nil {
-		return nil, fmt.Errorf("remediation: GitOps engine not configured")
+	ge := e.getGitOpsEngine(owner, repo)
+	if ge == nil {
+		return nil, fmt.Errorf("remediation: GitOps engine not configured for %s/%s", owner, repo)
 	}
 
 	// Build file changes from fixes.
@@ -209,7 +235,7 @@ func (e *Engine) createPR(ctx context.Context, plan *Plan, owner, repo string) (
 		Files:      files,
 	}
 
-	result, err := e.gitopsEngine.CreatePullRequest(ctx, &pr)
+	result, err := ge.CreatePullRequest(ctx, &pr)
 	if err != nil {
 		return nil, fmt.Errorf("remediation: create PR: %w", err)
 	}

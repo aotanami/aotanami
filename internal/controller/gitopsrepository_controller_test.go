@@ -29,8 +29,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
-	"github.com/zelyo-ai/zelyo-operator/internal/gitops/source"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo/internal/gitops/source"
 )
 
 var _ = Describe("GitOpsRepository Controller", func() {

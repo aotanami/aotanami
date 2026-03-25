@@ -1,4 +1,4 @@
-module github.com/zelyo-ai/zelyo-operator
+module github.com/zelyo-ai/zelyo
 
 go 1.25.7
 

@@ -28,7 +28,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/zelyo-ai/zelyo-operator/test/utils"
+	"github.com/zelyo-ai/zelyo/test/utils"
 )
 
 var (

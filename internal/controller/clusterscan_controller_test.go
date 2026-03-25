@@ -28,8 +28,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
-	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo/internal/scanner"
 )
 
 var _ = Describe("ClusterScan Controller", func() {

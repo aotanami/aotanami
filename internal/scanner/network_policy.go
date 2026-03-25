@@ -22,7 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo/api/v1alpha1"
 )
 
 // NetworkPolicyScanner checks for missing network segmentation:

@@ -23,7 +23,7 @@ spec:
             description: >-
               Scanner {{ "{{" }} $labels.scanner {{ "}}" }} found
               {{ "{{" }} $value {{ "}}" }} critical findings.
-            runbook_url: https://github.com/zelyo-ai/zelyo-operator/blob/main/docs/runbooks/critical-violations.md
+            runbook_url: https://github.com/zelyo-ai/zelyo/blob/main/docs/runbooks/critical-violations.md
 
         - alert: Zelyo OperatorReconcileErrors
           expr: rate(zelyo-operator_controller_reconcile_total{result="error"}[5m]) > 0.1

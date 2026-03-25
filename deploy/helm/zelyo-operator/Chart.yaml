@@ -5,10 +5,10 @@ type: application
 version: 0.0.1
 appVersion: "0.0.1"
 kubeVersion: ">=1.26.0-0"
-home: https://github.com/zelyo-ai/zelyo-operator
-icon: https://raw.githubusercontent.com/zelyo-ai/zelyo-operator/main/docs/assets/icon.png
+home: https://github.com/zelyo-ai/zelyo
+icon: https://raw.githubusercontent.com/zelyo-ai/zelyo/main/docs/assets/icon.png
 sources:
-  - https://github.com/zelyo-ai/zelyo-operator
+  - https://github.com/zelyo-ai/zelyo
 maintainers:
   - name: Zelyo AI
     email: engineering@zelyo.ai
@@ -25,7 +25,7 @@ keywords:
   - cost-optimization
   - autonomous
 annotations:
-  org.opencontainers.image.source: https://github.com/zelyo-ai/zelyo-operator
+  org.opencontainers.image.source: https://github.com/zelyo-ai/zelyo
   org.opencontainers.image.description: "Zelyo Operator — Autonomous Kubernetes Protection"
   org.opencontainers.image.licenses: Apache-2.0
   artifacthub.io/license: Apache-2.0

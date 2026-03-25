@@ -142,6 +142,10 @@ type Config struct {
 
 	// CircuitBreaker configures circuit breaker behavior.
 	CircuitBreaker CircuitBreakerConfig `json:"circuit_breaker"`
+
+	// Fallback configures an optional fallback provider (e.g. local Ollama)
+	// that is used when the primary provider's circuit breaker opens.
+	Fallback *FallbackConfig `json:"fallback,omitempty"`
 }
 
 // RetryConfig configures exponential backoff retry.
@@ -189,6 +193,33 @@ func DefaultConfig() Config {
 	}
 }
 
+// FallbackConfig configures a fallback LLM provider.
+type FallbackConfig struct {
+	// Provider is the fallback LLM backend (typically "ollama").
+	Provider Provider `json:"provider"`
+
+	// Model is the fallback model identifier.
+	Model string `json:"model"`
+
+	// Endpoint is the fallback API URL.
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// APIKey is the fallback auth key (empty for Ollama).
+	APIKey string `json:"-"`
+
+	// Timeout overrides the primary client's timeout for the fallback.
+	// If zero, inherits the primary's timeout.
+	Timeout time.Duration `json:"timeout,omitempty"`
+
+	// Retry overrides the primary client's retry config for the fallback.
+	// If nil, inherits the primary's retry config.
+	Retry *RetryConfig `json:"retry,omitempty"`
+
+	// CircuitBreaker overrides the primary client's circuit breaker config.
+	// If nil, inherits the primary's circuit breaker config.
+	CircuitBreaker *CircuitBreakerConfig `json:"circuit_breaker,omitempty"`
+}
+
 // NewClient creates a new LLM client for the given provider.
 //
 //nolint:gocritic // Config is a constructor param; intentional value copy
@@ -197,28 +228,9 @@ func NewClient(cfg Config) (Client, error) {
 		return nil, fmt.Errorf("llm: API key required for provider %s", cfg.Provider)
 	}
 
-	var endpoint string
-	switch cfg.Provider {
-	case ProviderOpenRouter:
-		endpoint = defaultEndpoint(cfg.Endpoint, "https://openrouter.ai/api/v1")
-	case ProviderOpenAI:
-		endpoint = defaultEndpoint(cfg.Endpoint, "https://api.openai.com/v1")
-	case ProviderAnthropic:
-		endpoint = defaultEndpoint(cfg.Endpoint, "https://api.anthropic.com/v1")
-	case ProviderAzure:
-		if cfg.Endpoint == "" {
-			return nil, fmt.Errorf("llm: endpoint required for Azure OpenAI")
-		}
-		endpoint = cfg.Endpoint
-	case ProviderOllama:
-		endpoint = defaultEndpoint(cfg.Endpoint, "http://localhost:11434/v1")
-	case ProviderCustom:
-		if cfg.Endpoint == "" {
-			return nil, fmt.Errorf("llm: endpoint required for custom provider")
-		}
-		endpoint = cfg.Endpoint
-	default:
-		return nil, fmt.Errorf("llm: unknown provider %q", cfg.Provider)
+	endpoint, err := resolveEndpoint(&cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	base := &openAICompatClient{
@@ -233,7 +245,69 @@ func NewClient(cfg Config) (Client, error) {
 		resetTimeout:     cfg.CircuitBreaker.ResetTimeout,
 	}
 
+	// Wrap with fallback if configured.
+	if cfg.Fallback != nil {
+		return buildFallbackClient(&cfg, wrapped)
+	}
+
 	return wrapped, nil
+}
+
+// resolveEndpoint determines the API endpoint for the given provider.
+func resolveEndpoint(cfg *Config) (string, error) {
+	switch cfg.Provider {
+	case ProviderOpenRouter:
+		return defaultEndpoint(cfg.Endpoint, "https://openrouter.ai/api/v1"), nil
+	case ProviderOpenAI:
+		return defaultEndpoint(cfg.Endpoint, "https://api.openai.com/v1"), nil
+	case ProviderAnthropic:
+		return defaultEndpoint(cfg.Endpoint, "https://api.anthropic.com/v1"), nil
+	case ProviderAzure:
+		if cfg.Endpoint == "" {
+			return "", fmt.Errorf("llm: endpoint required for Azure OpenAI")
+		}
+		return cfg.Endpoint, nil
+	case ProviderOllama:
+		return defaultEndpoint(cfg.Endpoint, "http://localhost:11434/v1"), nil
+	case ProviderCustom:
+		if cfg.Endpoint == "" {
+			return "", fmt.Errorf("llm: endpoint required for custom provider")
+		}
+		return cfg.Endpoint, nil
+	default:
+		return "", fmt.Errorf("llm: unknown provider %q", cfg.Provider)
+	}
+}
+
+// buildFallbackClient constructs a FallbackClient from the given config and primary client.
+func buildFallbackClient(cfg *Config, primary Client) (Client, error) {
+	fb := cfg.Fallback
+	fallbackCfg := Config{
+		Provider:       fb.Provider,
+		Model:          fb.Model,
+		Endpoint:       fb.Endpoint,
+		APIKey:         fb.APIKey,
+		Temperature:    cfg.Temperature,
+		MaxTokens:      cfg.MaxTokens,
+		Timeout:        cfg.Timeout,
+		Retry:          cfg.Retry,
+		CircuitBreaker: cfg.CircuitBreaker,
+	}
+	// Apply fallback-specific overrides when provided.
+	if fb.Timeout > 0 {
+		fallbackCfg.Timeout = fb.Timeout
+	}
+	if fb.Retry != nil {
+		fallbackCfg.Retry = *fb.Retry
+	}
+	if fb.CircuitBreaker != nil {
+		fallbackCfg.CircuitBreaker = *fb.CircuitBreaker
+	}
+	fallbackClient, fbErr := NewClient(fallbackCfg)
+	if fbErr != nil {
+		return nil, fmt.Errorf("llm: creating fallback client: %w", fbErr)
+	}
+	return NewFallbackClient(primary, fallbackClient), nil
 }
 
 func defaultEndpoint(override, fallback string) string {

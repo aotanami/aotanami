@@ -6,10 +6,15 @@ package llm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 )
+
+// ErrCircuitBreakerOpen is returned when the circuit breaker is in the open
+// state and requests are being rejected. Use errors.Is to check for this.
+var ErrCircuitBreakerOpen = errors.New("llm: circuit breaker is open")
 
 // circuitState represents the state of the circuit breaker.
 type circuitState int
@@ -65,8 +70,8 @@ func (cb *circuitBreakerClient) allowRequest() error {
 		if remaining < 0 {
 			remaining = 0
 		}
-		return fmt.Errorf("llm: circuit breaker OPEN — provider %s has %d consecutive failures, retrying after %s",
-			cb.inner.Provider(), cb.consecutiveFails, remaining)
+		return fmt.Errorf("provider %s has %d consecutive failures, retrying after %s: %w",
+			cb.inner.Provider(), cb.consecutiveFails, remaining, ErrCircuitBreakerOpen)
 
 	case circuitHalfOpen:
 		if cb.halfOpenInFlight {

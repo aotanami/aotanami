@@ -10,14 +10,14 @@ metadata:
     cert-manager.io/inject-ca-from: {{ include "zelyo-operator.namespace" . }}/{{ include "zelyo-operator.webhookCertSecret" . }}
   {{- end }}
 webhooks:
-  - name: vsecuritypolicy.zelyo.ai
+  - name: vsecuritypolicy-v1alpha1.kb.io
     admissionReviewVersions:
       - v1
     clientConfig:
       service:
         name: {{ include "zelyo-operator.webhookServiceName" . }}
         namespace: {{ include "zelyo-operator.namespace" . }}
-        path: /validate-zelyo-operator-com-v1alpha1-securitypolicy
+        path: /validate-zelyo-operator-zelyo-ai-v1alpha1-securitypolicy
         port: 443
     failurePolicy: {{ .Values.webhook.failurePolicy }}
     timeoutSeconds: {{ .Values.webhook.timeoutSeconds }}
@@ -44,14 +44,14 @@ metadata:
     cert-manager.io/inject-ca-from: {{ include "zelyo-operator.namespace" . }}/{{ include "zelyo-operator.webhookCertSecret" . }}
   {{- end }}
 webhooks:
-  - name: msecuritypolicy.zelyo.ai
+  - name: msecuritypolicy-v1alpha1.kb.io
     admissionReviewVersions:
       - v1
     clientConfig:
       service:
         name: {{ include "zelyo-operator.webhookServiceName" . }}
         namespace: {{ include "zelyo-operator.namespace" . }}
-        path: /mutate-zelyo-operator-com-v1alpha1-securitypolicy
+        path: /mutate-zelyo-operator-zelyo-ai-v1alpha1-securitypolicy
         port: 443
     failurePolicy: {{ .Values.webhook.failurePolicy }}
     timeoutSeconds: {{ .Values.webhook.timeoutSeconds }}
