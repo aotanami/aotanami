@@ -145,7 +145,7 @@ func PRBody(scanner, resource, namespace, description, llmAnalysis string) strin
 - [ ] Check that security posture improves
 
 ---
-*This PR was automatically created by [Zelyo Operator](https://github.com/zelyo-ai/zelyo-operator) — your autonomous Kubernetes security operator.*
+*This PR was automatically created by [Zelyo Operator](https://github.com/zelyo-ai/zelyo) — your autonomous Kubernetes security operator.*
 `, scanner, namespace, resource, namespace, description, llmAnalysis)
 }
 

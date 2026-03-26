@@ -46,14 +46,15 @@ func TestDetector_AnomalyDetection(t *testing.T) {
 
 	// Massive spike should trigger anomaly.
 	result := d.Observe("restarts", 100.0)
-	if result == nil {
+	if result != nil {
+		if result.Severity == "" {
+			t.Error("Expected non-empty severity")
+		}
+		if result.DeviationSigma < 2.0 {
+			t.Errorf("Expected deviation >= 2.0σ, got %.2f", result.DeviationSigma)
+		}
+	} else {
 		t.Fatal("Expected anomaly for extreme value, got nil")
-	}
-	if result.Severity == "" {
-		t.Error("Expected non-empty severity")
-	}
-	if result.DeviationSigma < 2.0 {
-		t.Errorf("Expected deviation >= 2.0σ, got %.2f", result.DeviationSigma)
 	}
 }
 
@@ -71,11 +72,12 @@ func TestDetector_SeverityClassification(t *testing.T) {
 
 	// Test critical severity (> 2x sensitivity = > 4σ).
 	anom := d.Observe("metric", 1000.0) // Huge deviation.
-	if anom == nil {
+	if anom != nil {
+		if anom.Severity != "critical" {
+			t.Errorf("Expected critical severity for extreme deviation, got %q", anom.Severity)
+		}
+	} else {
 		t.Fatal("Expected anomaly")
-	}
-	if anom.Severity != "critical" {
-		t.Errorf("Expected critical severity for extreme deviation, got %q", anom.Severity)
 	}
 }
 
@@ -92,20 +94,21 @@ func TestDetector_GetBaseline(t *testing.T) {
 	d.Observe("test", 30.0)
 
 	b := d.GetBaseline("test")
-	if b == nil {
+	if b != nil {
+		if b.Count != 3 {
+			t.Errorf("Expected count 3, got %d", b.Count)
+		}
+		if b.Mean != 20.0 {
+			t.Errorf("Expected mean 20.0, got %.2f", b.Mean)
+		}
+		if b.Min != 10.0 {
+			t.Errorf("Expected min 10.0, got %.2f", b.Min)
+		}
+		if b.Max != 30.0 {
+			t.Errorf("Expected max 30.0, got %.2f", b.Max)
+		}
+	} else {
 		t.Fatal("Expected baseline for observed key")
-	}
-	if b.Count != 3 {
-		t.Errorf("Expected count 3, got %d", b.Count)
-	}
-	if b.Mean != 20.0 {
-		t.Errorf("Expected mean 20.0, got %.2f", b.Mean)
-	}
-	if b.Min != 10.0 {
-		t.Errorf("Expected min 10.0, got %.2f", b.Min)
-	}
-	if b.Max != 30.0 {
-		t.Errorf("Expected max 30.0, got %.2f", b.Max)
 	}
 }
 
@@ -122,15 +125,16 @@ func TestDetector_SlidingWindow(t *testing.T) {
 	}
 
 	b := d.GetBaseline("large")
-	if b == nil {
+	if b != nil {
+		if b.Count != 1100 {
+			t.Errorf("Expected count 1100, got %d", b.Count)
+		}
+		// Values should be pruned to last 1000.
+		if len(b.Values) > 1000 {
+			t.Errorf("Expected at most 1000 stored values, got %d", len(b.Values))
+		}
+	} else {
 		t.Fatal("Expected baseline")
-	}
-	if b.Count != 1100 {
-		t.Errorf("Expected count 1100, got %d", b.Count)
-	}
-	// Values should be pruned to last 1000.
-	if len(b.Values) > 1000 {
-		t.Errorf("Expected at most 1000 stored values, got %d", len(b.Values))
 	}
 }
 

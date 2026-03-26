@@ -31,8 +31,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
-	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo/internal/conditions"
+	"github.com/zelyo-ai/zelyo/internal/llm"
+	"github.com/zelyo-ai/zelyo/internal/remediation"
 )
 
 const (
@@ -45,8 +47,9 @@ const (
 // enforces singleton semantics, and manages the agent lifecycle phase.
 type ZelyoConfigReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme            *runtime.Scheme
+	Recorder          record.EventRecorder
+	RemediationEngine *remediation.Engine
 }
 
 // +kubebuilder:rbac:groups=zelyo.ai,resources=zelyoconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -76,80 +79,14 @@ func (r *ZelyoConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		zelyov1alpha1.ReasonProgressingMessage, "Reconciliation in progress", config.Generation)
 
 	// ── Step 1: Enforce singleton ──
-	// Only one ZelyoConfig should exist per cluster.
-	configList := &zelyov1alpha1.ZelyoConfigList{}
-	if err := r.List(ctx, configList); err != nil {
-		return ctrl.Result{}, fmt.Errorf("listing ZelyoConfigs: %w", err)
-	}
-	if len(configList.Items) > 1 {
-		r.Recorder.Event(config, corev1.EventTypeWarning, zelyov1alpha1.EventReasonSingletonConflict,
-			fmt.Sprintf("Multiple ZelyoConfig resources found (%d). Only one is allowed per cluster.", len(configList.Items)))
-		conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionReady,
-			zelyov1alpha1.ReasonSingletonViolation,
-			"Multiple ZelyoConfig resources exist — only one is allowed per cluster", config.Generation)
-		config.Status.Phase = zelyov1alpha1.PhaseError
-		config.Status.ObservedGeneration = config.Generation
-		if err := r.Status().Update(ctx, config); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
-		}
-		return ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
+	if result, err := r.reconcileSingleton(ctx, config); err != nil || !result.IsZero() {
+		return result, err
 	}
 
 	// ── Step 2: Validate LLM API key secret ──
-	llmSecretName := config.Spec.LLM.APIKeySecret
-	if llmSecretName == "" {
-		conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionLLMConfigured,
-			zelyov1alpha1.ReasonLLMNotConfigured, "LLM API key secret name is empty", config.Generation)
-		conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionReady,
-			zelyov1alpha1.ReasonLLMNotConfigured, "LLM configuration is incomplete", config.Generation)
-		config.Status.Phase = zelyov1alpha1.PhaseDegraded
-		config.Status.ObservedGeneration = config.Generation
-		if err := r.Status().Update(ctx, config); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
-		}
-		return ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
-	}
-
-	// Look up the secret in the operator's namespace (default to "zelyo-system").
-	operatorNamespace := "zelyo-system"
-	secret := &corev1.Secret{}
-	secretKey := types.NamespacedName{Name: llmSecretName, Namespace: operatorNamespace}
-	if err := r.Get(ctx, secretKey, secret); err != nil {
-		if errors.IsNotFound(err) {
-			r.Recorder.Event(config, corev1.EventTypeWarning, zelyov1alpha1.EventReasonSecretMissing,
-				fmt.Sprintf("LLM API key Secret %q not found in namespace %q", llmSecretName, operatorNamespace))
-			conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionSecretResolved,
-				zelyov1alpha1.ReasonSecretNotFound,
-				fmt.Sprintf("Secret %q not found in namespace %q", llmSecretName, operatorNamespace), config.Generation)
-			conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionLLMConfigured,
-				zelyov1alpha1.ReasonSecretNotFound, "LLM API key secret not found", config.Generation)
-			conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionReady,
-				zelyov1alpha1.ReasonSecretNotFound, "Required secret not available", config.Generation)
-			config.Status.Phase = zelyov1alpha1.PhaseDegraded
-			config.Status.ObservedGeneration = config.Generation
-			if err := r.Status().Update(ctx, config); err != nil {
-				return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
-			}
-			return ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
-		}
-		return ctrl.Result{}, fmt.Errorf("fetching LLM secret: %w", err)
-	}
-
-	// Verify the secret contains the "api-key" data key.
-	if _, ok := secret.Data["api-key"]; !ok {
-		r.Recorder.Event(config, corev1.EventTypeWarning, zelyov1alpha1.EventReasonSecretMissing,
-			fmt.Sprintf("Secret %q exists but is missing the \"api-key\" data key", llmSecretName))
-		conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionSecretResolved,
-			zelyov1alpha1.ReasonSecretKeyMissing,
-			fmt.Sprintf("Secret %q is missing the \"api-key\" key", llmSecretName), config.Generation)
-		conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionLLMConfigured,
-			zelyov1alpha1.ReasonSecretKeyMissing, "LLM API key not found in secret", config.Generation)
-		config.Status.Phase = zelyov1alpha1.PhaseDegraded
-		config.Status.ObservedGeneration = config.Generation
-		if err := r.Status().Update(ctx, config); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
-		}
-		return ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
+	secret, result, err := r.reconcileLLMSecret(ctx, config)
+	if err != nil || !result.IsZero() {
+		return result, err
 	}
 
 	// ── Step 3: All checks passed — mark as Active ──
@@ -158,6 +95,10 @@ func (r *ZelyoConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	conditions.MarkTrue(&config.Status.Conditions, zelyov1alpha1.ConditionLLMConfigured,
 		zelyov1alpha1.ReasonLLMReady,
 		fmt.Sprintf("LLM provider %q with model %q is configured", config.Spec.LLM.Provider, config.Spec.LLM.Model), config.Generation)
+
+	// ── Step 4: Inject LLM Client into Remediation Engine ──
+	r.reconcileRemediationEngine(ctx, config, secret)
+
 	conditions.MarkTrue(&config.Status.Conditions, zelyov1alpha1.ConditionReady,
 		zelyov1alpha1.ReasonReconcileSuccess, "Zelyo Operator agent is active and ready", config.Generation)
 
@@ -180,6 +121,130 @@ func (r *ZelyoConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		"provider", config.Spec.LLM.Provider)
 
 	return ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
+}
+
+// reconcileSingleton ensures only one ZelyoConfig exists in the cluster.
+func (r *ZelyoConfigReconciler) reconcileSingleton(ctx context.Context, config *zelyov1alpha1.ZelyoConfig) (ctrl.Result, error) {
+	configList := &zelyov1alpha1.ZelyoConfigList{}
+	if err := r.List(ctx, configList); err != nil {
+		return ctrl.Result{}, fmt.Errorf("listing ZelyoConfigs: %w", err)
+	}
+	if len(configList.Items) > 1 {
+		r.Recorder.Event(config, corev1.EventTypeWarning, zelyov1alpha1.EventReasonSingletonConflict,
+			fmt.Sprintf("Multiple ZelyoConfig resources found (%d). Only one is allowed per cluster.", len(configList.Items)))
+		conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionReady,
+			zelyov1alpha1.ReasonSingletonViolation,
+			"Multiple ZelyoConfig resources exist — only one is allowed per cluster", config.Generation)
+		config.Status.Phase = zelyov1alpha1.PhaseError
+		config.Status.ObservedGeneration = config.Generation
+		if err := r.Status().Update(ctx, config); err != nil {
+			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		}
+		return ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
+	}
+	return ctrl.Result{}, nil
+}
+
+// reconcileLLMSecret validates the presence and content of the LLM API key secret.
+func (r *ZelyoConfigReconciler) reconcileLLMSecret(ctx context.Context, config *zelyov1alpha1.ZelyoConfig) (*corev1.Secret, ctrl.Result, error) {
+	llmSecretName := config.Spec.LLM.APIKeySecret
+	if llmSecretName == "" {
+		conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionLLMConfigured,
+			zelyov1alpha1.ReasonLLMNotConfigured, "LLM API key secret name is empty", config.Generation)
+		conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionReady,
+			zelyov1alpha1.ReasonLLMNotConfigured, "LLM configuration is incomplete", config.Generation)
+		config.Status.Phase = zelyov1alpha1.PhaseDegraded
+		config.Status.ObservedGeneration = config.Generation
+		if err := r.Status().Update(ctx, config); err != nil {
+			return nil, ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		}
+		return nil, ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
+	}
+
+	// Look up the secret in the operator's namespace (default to "zelyo-system").
+	operatorNamespace := "zelyo-system"
+	secret := &corev1.Secret{}
+	secretKey := types.NamespacedName{Name: llmSecretName, Namespace: operatorNamespace}
+	if err := r.Get(ctx, secretKey, secret); err != nil {
+		if errors.IsNotFound(err) {
+			r.Recorder.Event(config, corev1.EventTypeWarning, zelyov1alpha1.EventReasonSecretMissing,
+				fmt.Sprintf("LLM API key Secret %q not found in namespace %q", llmSecretName, operatorNamespace))
+			conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionSecretResolved,
+				zelyov1alpha1.ReasonSecretNotFound,
+				fmt.Sprintf("Secret %q not found in namespace %q", llmSecretName, operatorNamespace), config.Generation)
+			conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionLLMConfigured,
+				zelyov1alpha1.ReasonSecretNotFound, "LLM API key secret not found", config.Generation)
+			conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionReady,
+				zelyov1alpha1.ReasonSecretNotFound, "Required secret not available", config.Generation)
+			config.Status.Phase = zelyov1alpha1.PhaseDegraded
+			config.Status.ObservedGeneration = config.Generation
+			if err := r.Status().Update(ctx, config); err != nil {
+				return nil, ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+			}
+			return nil, ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
+		}
+		return nil, ctrl.Result{}, fmt.Errorf("fetching LLM secret: %w", err)
+	}
+
+	// Verify the secret contains the "api-key" data key.
+	if _, ok := secret.Data["api-key"]; !ok {
+		r.Recorder.Event(config, corev1.EventTypeWarning, zelyov1alpha1.EventReasonSecretMissing,
+			fmt.Sprintf("Secret %q exists but is missing the \"api-key\" data key", llmSecretName))
+		conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionSecretResolved,
+			zelyov1alpha1.ReasonSecretKeyMissing,
+			fmt.Sprintf("Secret %q is missing the \"api-key\" key", llmSecretName), config.Generation)
+		conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionLLMConfigured,
+			zelyov1alpha1.ReasonSecretKeyMissing, "LLM API key not found in secret", config.Generation)
+		config.Status.Phase = zelyov1alpha1.PhaseDegraded
+		config.Status.ObservedGeneration = config.Generation
+		if err := r.Status().Update(ctx, config); err != nil {
+			return nil, ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		}
+		return nil, ctrl.Result{RequeueAfter: requeueIntervalConfig}, nil
+	}
+
+	return secret, ctrl.Result{}, nil
+}
+
+// reconcileRemediationEngine initializes and injects the LLM client into the remediation engine.
+func (r *ZelyoConfigReconciler) reconcileRemediationEngine(ctx context.Context, config *zelyov1alpha1.ZelyoConfig, secret *corev1.Secret) {
+	log := logf.FromContext(ctx)
+
+	if r.RemediationEngine != nil {
+		llmCfg := llm.DefaultConfig()
+		llmCfg.Provider = llm.Provider(config.Spec.LLM.Provider)
+		llmCfg.Model = config.Spec.LLM.Model
+		llmCfg.APIKey = string(secret.Data["api-key"])
+		if config.Spec.LLM.Endpoint != "" {
+			llmCfg.Endpoint = config.Spec.LLM.Endpoint
+		}
+		if config.Spec.LLM.Temperature != nil {
+			llmCfg.Temperature = *config.Spec.LLM.Temperature
+		}
+		if config.Spec.LLM.MaxTokensPerRequest > 0 {
+			llmCfg.MaxTokens = int(config.Spec.LLM.MaxTokensPerRequest)
+		}
+
+		llmClient, err := llm.NewClient(llmCfg)
+		if err != nil {
+			log.Error(err, "Failed to initialize LLM client from ZelyoConfig")
+			r.Recorder.Event(config, corev1.EventTypeWarning, "LLMInitializationFailed",
+				fmt.Sprintf("Failed to initialize LLM client: %v", err))
+		} else {
+			r.RemediationEngine.SetLLMClient(llmClient)
+			log.Info("Successfully injected LLM client into remediation engine",
+				"provider", llmCfg.Provider, "model", llmCfg.Model)
+
+			// Also update engine strategy based on config mode.
+			strategy := remediation.StrategyDryRun
+			if config.Spec.Mode == "protect" {
+				strategy = remediation.StrategyGitOpsPR
+			}
+			r.RemediationEngine.SetConfig(remediation.EngineConfig{
+				Strategy: strategy,
+			})
+		}
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.

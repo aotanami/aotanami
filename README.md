@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Zelyo Operator" width="200" />
+  <img src="assets/logo.png" alt="Zelyo" width="200" />
 </p>
 
-<h1 align="center">Zelyo Operator</h1>
+<h1 align="center">Zelyo</h1>
 
 <p align="center">
   <strong>Your Digital SRE &amp; Security Engineer for Kubernetes</strong>
@@ -11,11 +11,11 @@
   <em>An agentic AI operator that observes, reasons, and acts on your cluster — 24/7, just like a human engineer would.</em>
 </p>
 <p align="center">
-  <a href="https://github.com/zelyo-ai/zelyo-operator/actions/workflows/ci.yml"><img src="https://github.com/zelyo-ai/zelyo-operator/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/zelyo-ai/zelyo-operator/releases"><img src="https://img.shields.io/github/v/release/zelyo-ai/zelyo-operator?style=flat-square" alt="Release" /></a>
-  <a href="https://goreportcard.com/report/github.com/zelyo-ai/zelyo-operator"><img src="https://goreportcard.com/badge/github.com/zelyo-ai/zelyo-operator" alt="Go Report Card" /></a>
+  <a href="https://github.com/zelyo-ai/zelyo/actions/workflows/ci.yml"><img src="https://github.com/zelyo-ai/zelyo/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/zelyo-ai/zelyo/releases"><img src="https://img.shields.io/github/v/release/zelyo-ai/zelyo?style=flat-square" alt="Release" /></a>
+  <a href="https://goreportcard.com/report/github.com/zelyo-ai/zelyo"><img src="https://goreportcard.com/badge/github.com/zelyo-ai/zelyo" alt="Go Report Card" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License" /></a>
-  <a href="https://artifacthub.io/packages/helm/zelyo-ai/zelyo-operator"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/zelyo-operator&style=flat-square" alt="Artifact Hub" /></a>
+  <a href="https://artifacthub.io/packages/helm/zelyo-ai/zelyo"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/zelyo&style=flat-square" alt="Artifact Hub" /></a>
 </p>
 
 ---
@@ -23,8 +23,6 @@
 ## What is Zelyo?
 
 **Zelyo** is your **Digital SRE and Security Engineer** powered by **Agentic AI** that does the job of a full-time site reliability and security engineer. It doesn't just alert — it **observes**, **reasons**, and **acts**, continuously protecting your production clusters while you sleep.
-
-The **Zelyo Operator** is a self-hosted Kubernetes Operator that allows you to manage and automate the lifecycle of Zelyo within your cluster.
 
 Think of a seasoned SRE who:
 - 👁️ **Watches** every pod restart, OOMKill, security misconfiguration, and RBAC drift
@@ -150,13 +148,24 @@ kubectl create secret generic zelyo-llm \
   --namespace zelyo-system \
   --from-literal=api-key=<YOUR_OPENROUTER_API_KEY>
 
+# Install cert-manager (takes ~1m)
+helm install cert-manager oci://quay.io/jetstack/charts/cert-manager \
+  --version v1.20.0 \
+  --namespace cert-manager \
+  --create-namespace \
+  --set crds.enabled=true
+
+# Wait for cert-manager to be ready before installing the operator
+kubectl wait --for=condition=Ready pods --all -n cert-manager --timeout=120s
+
 # Install Zelyo Operator from OCI registry
 helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
   --namespace zelyo-system \
   --create-namespace \
   --set config.llm.provider=openrouter \
   --set config.llm.model=anthropic/claude-sonnet-4-20250514 \
-  --set config.llm.apiKeySecret=zelyo-llm
+  --set config.llm.apiKeySecret=zelyo-llm \
+  --set webhook.certManager.enabled=true
 
 # Verify the installation
 kubectl get pods -n zelyo-system
@@ -222,9 +231,9 @@ spec:
   maxConcurrentPRs: 3         # Limit blast radius
   autoMerge: false            # Require human approval
   prTemplate:
-    titlePrefix: "[Zelyo Operator]"
-    labels: ["zelyo-operator", "auto-remediation"]
-    branchPrefix: "zelyo-operator/fix-"
+    titlePrefix: "[Zelyo]"
+    labels: ["zelyo", "auto-remediation"]
+    branchPrefix: "zelyo/fix-"
 ```
 
 ---
@@ -283,8 +292,8 @@ See [CRD Reference](docs/crd-reference.md) for complete field documentation.
 
 ```bash
 # Clone the repository
-git clone https://github.com/zelyo-ai/zelyo-operator.git
-cd zelyo-operator
+git clone https://github.com/zelyo-ai/zelyo.git
+cd zelyo
 
 # Install dependencies
 make install
@@ -321,7 +330,7 @@ make docker-push IMG=ghcr.io/zelyo-ai/zelyo-operator:dev
 
 | Document | Description |
 |---|---|
-| [Getting Started](docs/getting-started.md) | Step-by-step setup: clone, cluster, first policy, first scan |
+| [Getting Started](docs/quickstart.md) | Step-by-step setup: clone, cluster, first policy, first scan |
 | [Quick Start Recipes](docs/quickstart.md) | Copy-paste YAML recipes for common use cases |
 | [Architecture](docs/architecture.md) | System design, controllers, scanner engine, data flow |
 | [Security Scanners](docs/scanners.md) | All 8 scanners: what they check, severity levels, example policies |
@@ -354,5 +363,5 @@ Zelyo Operator is licensed under the [Apache License 2.0](LICENSE).
 ---
 
 <p align="center">
-  An Zelyo AI project. Originally created with ❤️ by <a href="https://zelyo.ai">Zelyo AI</a>
+Created with ❤️ by <a href="https://zelyo.ai">Zelyo AI</a>
 </p>

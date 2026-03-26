@@ -28,7 +28,7 @@ import (
 
 	"github.com/go-logr/logr"
 
-	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
+	"github.com/zelyo-ai/zelyo/internal/gitops"
 )
 
 // GitHubEngine implements gitops.Engine using the GitHub REST API.

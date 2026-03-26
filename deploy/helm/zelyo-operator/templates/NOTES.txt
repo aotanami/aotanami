@@ -77,5 +77,5 @@
 
 ── Documentation ────────────────────────────────────────────────
 
-  📚 Full docs: https://github.com/zelyo-ai/zelyo-operator/tree/main/docs
-  🐛 Issues:    https://github.com/zelyo-ai/zelyo-operator/issues
+  📚 Full docs: https://github.com/zelyo-ai/zelyo/tree/main/docs
+  🐛 Issues:    https://github.com/zelyo-ai/zelyo/issues

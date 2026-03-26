@@ -13,15 +13,15 @@ hide:
 <p class="hero-subtitle">Your Digital SRE &amp; Security Engineer for Kubernetes</p>
 
 <div class="badges">
-  <a href="https://github.com/zelyo-ai/zelyo-operator/actions/workflows/ci.yml"><img src="https://github.com/zelyo-ai/zelyo-operator/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/zelyo-ai/zelyo-operator/releases"><img src="https://img.shields.io/github/v/release/zelyo-ai/zelyo-operator?style=flat-square" alt="Release"></a>
-  <a href="https://goreportcard.com/report/github.com/zelyo-ai/zelyo-operator"><img src="https://goreportcard.com/badge/github.com/zelyo-ai/zelyo-operator" alt="Go Report Card"></a>
-  <a href="https://github.com/zelyo-ai/zelyo-operator/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
+  <a href="https://github.com/zelyo-ai/zelyo/actions/workflows/ci.yml"><img src="https://github.com/zelyo-ai/zelyo/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/zelyo-ai/zelyo/releases"><img src="https://img.shields.io/github/v/release/zelyo-ai/zelyo?style=flat-square" alt="Release"></a>
+  <a href="https://goreportcard.com/report/github.com/zelyo-ai/zelyo"><img src="https://goreportcard.com/badge/github.com/zelyo-ai/zelyo" alt="Go Report Card"></a>
+  <a href="https://github.com/zelyo-ai/zelyo/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
 </div>
 
 <div class="hero-actions">
   <a href="getting-started/" class="primary-btn">🚀 Get Started</a>
-  <a href="https://github.com/zelyo-ai/zelyo-operator" class="secondary-btn">⭐ View on GitHub</a>
+  <a href="https://github.com/zelyo-ai/zelyo" class="secondary-btn">⭐ View on GitHub</a>
 </div>
 
 </div>
@@ -193,10 +193,9 @@ graph TB
 === "Kustomize"
 
     ```bash
-    kubectl apply -k https://github.com/zelyo-ai/zelyo-operator/config/default
+    kubectl apply -k https://github.com/zelyo-ai/zelyo/config/default
     ```
 
-[Full installation guide :material-arrow-right:](getting-started.md){ .md-button }
 
 ---
 

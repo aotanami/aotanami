@@ -25,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
-	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo/api/v1alpha1"
 )
 
 // ─── ContainerSecurityContextScanner Tests ───

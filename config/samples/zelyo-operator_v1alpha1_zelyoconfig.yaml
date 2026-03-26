@@ -6,12 +6,12 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: default
 spec:
-  mode: audit
+  mode: protect  # 'audit' for recommendations, 'protect' for auto-PRs
   llm:
     provider: openrouter
-    model: "anthropic/claude-sonnet-4-20250514"
+    model: "nvidia/nemotron-3-super-120b-a12b:free"
     apiKeySecret: zelyo-llm
-    temperature: "0.1"
+    temperature: 0.1
     maxTokensPerRequest: 4096
   tokenBudget:
     hourlyTokenLimit: 50000

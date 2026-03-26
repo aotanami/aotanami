@@ -12,6 +12,8 @@ import (
 	"io"
 	"math/rand/v2"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -108,11 +110,20 @@ func (c *openAICompatClient) executeWithRetry(ctx context.Context, body openAICh
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			jitter := time.Duration(float64(backoff) * (0.75 + rand.Float64()*0.5)) //nolint:gosec // Not security-sensitive
+			var wait time.Duration
+
+			// If the previous error was a 429 with Retry-After, use that instead of backoff.
+			if apiErr, ok := lastErr.(*APIError); ok && apiErr.RetryAfter > 0 {
+				wait = apiErr.RetryAfter
+			} else {
+				// Apply jitter to the standard backoff.
+				wait = time.Duration(float64(backoff) * (0.75 + rand.Float64()*0.5)) //nolint:gosec // Not security-sensitive
+			}
+
 			select {
 			case <-ctx.Done():
 				return nil, fmt.Errorf("llm: context canceled during retry: %w", ctx.Err())
-			case <-time.After(jitter):
+			case <-time.After(wait):
 			}
 
 			backoff = c.nextBackoff(backoff)
@@ -174,7 +185,7 @@ func (c *openAICompatClient) doRequest(ctx context.Context, body openAIChatReque
 
 	// Set extra headers for OpenRouter.
 	if c.cfg.Provider == ProviderOpenRouter {
-		httpReq.Header.Set("HTTP-Referer", "https://github.com/zelyo-ai/zelyo-operator")
+		httpReq.Header.Set("HTTP-Referer", "https://github.com/zelyo-ai/zelyo")
 		httpReq.Header.Set("X-Title", "Zelyo Operator")
 	}
 
@@ -197,10 +208,15 @@ func (c *openAICompatClient) doRequest(ctx context.Context, body openAIChatReque
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		return nil, &APIError{
+		apiErr := &APIError{
 			StatusCode: httpResp.StatusCode,
 			Body:       string(respBody),
 		}
+		// Parse Retry-After header for 429 responses.
+		if httpResp.StatusCode == http.StatusTooManyRequests {
+			apiErr.RetryAfter = parseRetryAfter(httpResp.Header.Get("Retry-After"))
+		}
+		return nil, apiErr
 	}
 
 	var chatResp openAIChatResponse
@@ -242,10 +258,35 @@ func (c *openAICompatClient) Close() error { return nil }
 type APIError struct {
 	StatusCode int
 	Body       string
+	RetryAfter time.Duration // Parsed from Retry-After header on 429 responses.
 }
 
 func (e *APIError) Error() string {
+	if e.RetryAfter > 0 {
+		return fmt.Sprintf("llm: API error %d (retry after %s): %s", e.StatusCode, e.RetryAfter, e.Body)
+	}
 	return fmt.Sprintf("llm: API error %d: %s", e.StatusCode, e.Body)
+}
+
+// parseRetryAfter parses a Retry-After header value.
+// It supports both seconds (integer) and HTTP-date formats.
+func parseRetryAfter(val string) time.Duration {
+	val = strings.TrimSpace(val)
+	if val == "" {
+		return 0
+	}
+	// Try integer seconds first (most common for LLM APIs).
+	if seconds, err := strconv.Atoi(val); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	// Try HTTP-date format.
+	if t, err := http.ParseTime(val); err == nil {
+		d := time.Until(t)
+		if d > 0 {
+			return d
+		}
+	}
+	return 0
 }
 
 // isNonRetryable returns true for errors that should not be retried.

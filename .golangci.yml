@@ -113,7 +113,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/zelyo-ai/zelyo-operator
+        - github.com/zelyo-ai/zelyo
 
 issues:
   max-issues-per-linter: 0

@@ -10,7 +10,7 @@ By participating in this project, you agree to abide by our [Code of Conduct](CO
 
 ### Reporting Issues
 
-- Use [GitHub Issues](https://github.com/zelyo-ai/zelyo-operator/issues) for bug reports and feature requests
+- Use [GitHub Issues](https://github.com/zelyo-ai/zelyo/issues) for bug reports and feature requests
 - **Security vulnerabilities**: Please see [SECURITY.md](SECURITY.md) — do not use public issues
 - Include reproduction steps, expected behavior, and actual behavior
 - Include your Kubernetes version, Zelyo Operator version, and cloud provider
@@ -66,7 +66,7 @@ git clone https://github.com/<your-username>/zelyo-operator.git
 cd zelyo-operator
 
 # Add upstream remote
-git remote add upstream https://github.com/zelyo-ai/zelyo-operator.git
+git remote add upstream https://github.com/zelyo-ai/zelyo.git
 
 # Install dependencies
 make install
@@ -138,7 +138,7 @@ go test ./internal/scanner/... -v
 
 ## Questions?
 
-Open a [Discussion](https://github.com/zelyo-ai/zelyo-operator/discussions) for questions about the project.
+Open a [Discussion](https://github.com/zelyo-ai/zelyo/discussions) for questions about the project.
 
 ---
 

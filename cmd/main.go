@@ -36,17 +36,17 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
-	"github.com/zelyo-ai/zelyo-operator/internal/anomaly"
-	"github.com/zelyo-ai/zelyo-operator/internal/controller"
-	"github.com/zelyo-ai/zelyo-operator/internal/correlator"
-	gitopscontroller "github.com/zelyo-ai/zelyo-operator/internal/gitops/controller"
-	"github.com/zelyo-ai/zelyo-operator/internal/gitops/source"
-	_ "github.com/zelyo-ai/zelyo-operator/internal/metrics" // Auto-register custom Prometheus metrics.
-	"github.com/zelyo-ai/zelyo-operator/internal/remediation"
-	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
-	"github.com/zelyo-ai/zelyo-operator/internal/version"
-	webhookv1alpha1 "github.com/zelyo-ai/zelyo-operator/internal/webhook/v1alpha1"
+	zelyov1alpha1 "github.com/zelyo-ai/zelyo/api/v1alpha1"
+	"github.com/zelyo-ai/zelyo/internal/anomaly"
+	"github.com/zelyo-ai/zelyo/internal/controller"
+	"github.com/zelyo-ai/zelyo/internal/correlator"
+	gitopscontroller "github.com/zelyo-ai/zelyo/internal/gitops/controller"
+	"github.com/zelyo-ai/zelyo/internal/gitops/source"
+	_ "github.com/zelyo-ai/zelyo/internal/metrics" // Auto-register custom Prometheus metrics.
+	"github.com/zelyo-ai/zelyo/internal/remediation"
+	"github.com/zelyo-ai/zelyo/internal/scanner"
+	"github.com/zelyo-ai/zelyo/internal/version"
+	webhookv1alpha1 "github.com/zelyo-ai/zelyo/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
