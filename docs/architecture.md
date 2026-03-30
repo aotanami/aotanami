@@ -1,3 +1,8 @@
+---
+title: "Architecture - Kubernetes Incident Response & DevOps Observability"
+description: "Deep dive into the architecture of Zelyo Operator, the autonomous AI operator for K8s alert automation and DevSecOps."
+---
+
 # Architecture
 
 ## Overview

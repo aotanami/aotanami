@@ -1,4 +1,6 @@
 ---
+title: "Zelyo Operator - K8s Alert Automation & Incident Response"
+description: "Autonomous AI operator for Kubernetes incident response and DevSecOps remediation. Reduce MTTR and automate SRE runbooks with Zelyo."
 hide:
   - navigation
   - toc

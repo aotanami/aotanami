@@ -1,3 +1,5 @@
+**Zelyo is an autonomous AI operator for Kubernetes incident response and DevSecOps remediation.**
+
 <p align="center">
   <img src="assets/logo.png" alt="Zelyo" width="180" />
 </p>
@@ -18,6 +20,13 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/zelyo-ai/zelyo/actions/workflows/ci.yml"><img src="https://github.com/zelyo-ai/zelyo/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+  <a href="https://codecov.io/gh/zelyo-ai/zelyo"><img src="https://img.shields.io/codecov/c/github/zelyo-ai/zelyo?style=flat-square" alt="Coverage" /></a>
+  <a href="https://github.com/zelyo-ai/zelyo/stargazers"><img src="https://img.shields.io/github/stars/zelyo-ai/zelyo?style=flat-square" alt="Stars" /></a>
+  <a href="https://github.com/zelyo-ai/zelyo/releases"><img src="https://img.shields.io/github/v/release/zelyo-ai/zelyo?style=flat-square" alt="Release" /></a>
+  <a href="https://goreportcard.com/report/github.com/zelyo-ai/zelyo"><img src="https://goreportcard.com/badge/github.com/zelyo-ai/zelyo" alt="Go Report Card" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License" /></a>
+  <a href="https://artifacthub.io/packages/helm/zelyo-ai/zelyo"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/zelyo&style=flat-square" alt="Artifact Hub" /></a>
   <a href="https://zelyo-ai.github.io/zelyo-operator/quickstart/">📖 Quick Start</a> &nbsp;·&nbsp;
   <a href="https://zelyo-ai.github.io/zelyo-operator/">📚 Documentation</a> &nbsp;·&nbsp;
   <a href="https://github.com/zelyo-ai/zelyo-operator/issues/new?template=bug_report.md">🐛 Report Bug</a> &nbsp;·&nbsp;
@@ -28,19 +37,21 @@
 
 ## 🧠 What is Zelyo?
 
-**Zelyo** is your **Digital SRE and Security Engineer** powered by **Agentic AI**. It doesn't just alert — it **observes**, **reasons**, and **acts**, continuously protecting your production clusters while you sleep.
+**Zelyo** is an **autonomous AI operator for Kubernetes incident response and DevSecOps remediation**. It doesn't just alert — it **observes**, **reasons**, and **acts**, continuously protecting your production clusters while you sleep.
 
-> **Bring your own LLM API keys** (OpenRouter, OpenAI, Anthropic, Azure OpenAI, Ollama) — Zelyo is heavily optimized to minimize token usage.
+### Key Features
+- 👁️ **Continuous Observability**: Watches every pod restart, OOMKill, security misconfiguration, and RBAC drift.
+- 🧠 **Contextual Incident Correlation**: Synthesizes scattered signals into unified incidents (e.g., restart spike + CVE + privilege escalation).
+- 🔬 **LLM-Powered Diagnostics**: Diagnoses root causes safely via read-only K8s alert automation techniques.
+- 🔧 **GitOps-native Auto-Remediation**: Generates production-ready YAML patches and opens PRs without breaking your flow.
+- 📋 **Automated Compliance**: Reports posture against CIS Benchmarks, NIST 800-53, SOC 2, and PCI-DSS instantly.
 
-Think of a seasoned SRE who:
+## Use Cases
 
-| &nbsp; | Capability | What Zelyo Does |
-|:---:|---|---|
-| 👁️ | **Watches** | Every pod restart, OOMKill, security misconfiguration, and RBAC drift |
-| 🧠 | **Correlates** | Scattered signals into unified incidents — a restart spike + a CVE + a privilege escalation = one root cause |
-| 🔬 | **Diagnoses** | Issues using LLM reasoning with full cluster context |
-| 🔧 | **Fixes** | Generates production-ready YAML patches and opens GitOps PRs |
-| 📋 | **Reports** | Compliance posture against CIS Benchmarks, NIST 800-53, SOC 2, and PCI-DSS |
+- ⏱️ **Reduce MTTR for Kubernetes incidents**: From hours of debugging to minutes of automated root cause analysis.
+- 🤖 **Automate SRE runbooks**: Let Zelyo execute your standard operating procedures for robust DevOps observability.
+- 🔧 **GitOps-native remediation**: Generates production-ready YAML patches and opens PRs without breaking your flow.
+- 🛡️ **Continuous DevOps observability & Security**: Never let a drifted permission or vulnerable image go unaddressed.
 
 That's Zelyo. All automated, all autonomous, all with **read-only cluster access**.
 
@@ -91,6 +102,8 @@ Unlike traditional scanning tools that dump findings and walk away, Zelyo operat
 
 ```mermaid
 graph LR
+    accTitle: Kubernetes incident response operator reconciliation loop diagram
+    accDescr: The agentic pipeline showing how Zelyo observes, reasons, and acts autonomously
     SP["SecurityPolicy<br/>Scanner"] -->|findings| C["Correlator<br/>Engine"]
     MP["MonitoringPolicy<br/>Observer"] -->|pod metrics| AD["Anomaly<br/>Detector"]
     AD -->|σ-deviations| C
@@ -125,6 +138,8 @@ graph LR
 
 ```mermaid
 graph TB
+    accTitle: Kubernetes incident response operator architecture diagram
+    accDescr: High-level system architecture of Zelyo Operator
     subgraph "Kubernetes Cluster — Read-Only Access"
         Events[K8s Events]
         Logs[Pod Logs]
@@ -176,7 +191,9 @@ graph TB
 
 ---
 
-## 🚀 Quick Start
+## Installation
+
+*Dive right in using these exact copy-paste install commands.*
 
 ### Install via Helm (OCI)
 
@@ -208,6 +225,8 @@ helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
 # Verify the installation
 kubectl get pods -n zelyo-system
 ```
+
+## Quickstart
 
 ### Verify Image Signature
 
@@ -395,7 +414,7 @@ make docker-push IMG=ghcr.io/zelyo-ai/zelyo-operator:dev
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on local setup, managing the PR lifecycle, and DCO sign-offs.
 
 ## 🔐 Security
 

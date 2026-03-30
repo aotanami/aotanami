@@ -1,12 +1,16 @@
 ---
-title: Quick Start Guide
+title: "Quickstart Guide - Automate SRE Runbooks in 5 Minutes"
+description: "Learn how to deploy Zelyo Operator and automate your Kubernetes incident response. Setup DevOps observability and automated GitOps remediation."
 ---
+
+# Quickstart Guide
 
 # Quick Start Guide
 
-!!! note "Who is this guide for?"
-    This is a complete, self-sufficient guide to setting up and using Zelyo Operator — from a blank laptop to running AI-powered security scans. No prior Kubernetes operator experience required.
-
+> [!NOTE]
+> **Who is this guide for?**
+> This is a complete, self-sufficient guide to setting up and using Zelyo Operator — from a blank laptop to running AI-powered security scans. No prior Kubernetes operator experience required.
+>
 ## What Is Zelyo Operator?
 
 Zelyo Operator is an **Autonomous AI Security Agent** for Kubernetes. It watches your cluster in real time, detects security misconfigurations, and can automatically create pull requests to fix them — powered by your choice of LLM (Claude, GPT-4, Ollama, etc.).
@@ -32,11 +36,12 @@ Before starting, install these tools:
 | [kubectl](https://kubernetes.io/docs/tasks/tools/) | Latest | Comes with Docker Desktop or install standalone |
 | [Helm](https://helm.sh/docs/intro/install/) | 3.x | `brew install helm` or [helm.sh](https://helm.sh/) |
 
-!!! tip "Verify your tools are ready"
-    ```bash
-    docker --version && k3d --version && kubectl version --client && helm version
-    ```
-
+> [!TIP]
+> **Verify your tools are ready**
+> ```bash
+> docker --version && k3d --version && kubectl version --client && helm version
+> ```
+>
 ## Part 1 — Environment Setup
 
 ### Step 0: Clean the Slate
@@ -59,9 +64,10 @@ k3d cluster create zelyo
 
 This creates a single-node Kubernetes cluster running inside Docker. It takes about 30 seconds.
 
-!!! info "What's happening here?"
-    k3d runs Kubernetes inside Docker containers — much faster than spinning up real VMs. Your `kubectl` context is automatically switched to `k3d-zelyo`.
-
+> [!NOTE]
+> **What's happening here?**
+> k3d runs Kubernetes inside Docker containers — much faster than spinning up real VMs. Your `kubectl` context is automatically switched to `k3d-zelyo`.
+>
 Verify the cluster is running:
 
 ```bash
@@ -72,9 +78,10 @@ kubectl get nodes
 
 ### Step 1.5: Prepare Local Developer Build
 
-!!! tip "Recommended for Demos"
-    For modern features like Slack notifications and enhanced GitOps logic (which are currently being finalized in this dev-build), you should build and deploy the operator locally.
-
+> [!TIP]
+> **Recommended for Demos**
+> For modern features like Slack notifications and enhanced GitOps logic (which are currently being finalized in this dev-build), you should build and deploy the operator locally.
+>
 ```bash
 # 1. Build the local development image
 make docker-build IMG=zelyo-operator:local
@@ -125,16 +132,18 @@ helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
   --set webhook.certManager.enabled=true
 ```
 
-!!! tip "Verify the operator is running"
-    ```bash
-    kubectl get pods -n zelyo-system
-    # NAME                              READY   STATUS    RESTARTS   AGE
-    # zelyo-operator-669577fb4b-7kpg2   1/1     Running   0          30s
-    ```
-
-!!! warning "Webhook Error?"
-    If you see `failed calling webhook "msecuritypolicy.zelyo.ai"` when applying resources, run the **[Webhook Patch](troubleshooting.md#webhooks)** commands. This is a known path mismatch in OCI chart `v0.0.1`.
-
+> [!TIP]
+> **Verify the operator is running**
+> ```bash
+> kubectl get pods -n zelyo-system
+> # NAME                              READY   STATUS    RESTARTS   AGE
+> # zelyo-operator-669577fb4b-7kpg2   1/1     Running   0          30s
+> ```
+>
+> [!WARNING]
+> **Webhook Error?**
+> If you see `failed calling webhook "msecuritypolicy.zelyo.ai"` when applying resources, run the **[Webhook Patch](troubleshooting.md#webhooks)** commands. This is a known path mismatch in OCI chart `v0.0.1`.
+>
 ### Step 4: Add Your LLM API Key
 
 Now that the `zelyo-system` namespace exists, create the secret the operator will use to call the LLM.
@@ -150,13 +159,14 @@ OpenRouter is a gateway that gives you access to Claude, GPT-4, Nvidia, and 100+
 3. Copy your key (starts with `sk-or-v1-...`)
 4. Add credit at **Credits** (minimum $1) — models like Claude Haiku cost fractions of a cent per scan
 
-!!! tip "Model Recommendations"
-    | Tier | Model | Cost |
-    |---|---|---|
-    | **Free tier** | `nvidia/nemotron-3-super-120b-a12b:free` | No cost, great for initial testing |
-    | **Best for testing** | `anthropic/claude-haiku` | Fast and cheap (~$0.001 per scan) |
-    | **Best for production** | `anthropic/claude-sonnet-4-20250514` | Highest reasoning quality |
-
+> [!TIP]
+> **Model Recommendations**
+> | Tier | Model | Cost |
+> |---|---|---|
+> | **Free tier** | `nvidia/nemotron-3-super-120b-a12b:free` | No cost, great for initial testing |
+> | **Best for testing** | `anthropic/claude-haiku` | Fast and cheap (~$0.001 per scan) |
+> | **Best for production** | `anthropic/claude-sonnet-4-20250514` | Highest reasoning quality |
+>
 #### Other Supported Providers
 
 | Provider | Where to Get a Key | Config Value |
@@ -174,9 +184,10 @@ kubectl create secret generic zelyo-llm \
   --from-literal=api-key=<YOUR_API_KEY>
 ```
 
-!!! danger "Never commit API keys to git."
-    Use `kubectl create secret` or a secrets manager — never paste them into YAML files.
-
+> [!CAUTION]
+> **Never commit API keys to git.**
+> Use `kubectl create secret` or a secrets manager — never paste them into YAML files.
+>
 ### Step 5: Activate the AI Agent
 
 The last piece of the setup is the `ZelyoConfig`. This is a cluster-wide resource that tells the operator which LLM model to use and connects it to the secret you just created.
@@ -196,9 +207,10 @@ spec:
 EOF
 ```
 
-!!! info "What's happening here?"
-    Once applied, the operator reconciles this config, initializes a secure LLM client using your secret, and injects it into the remediation engine. You'll see `ZelyoConfig reconciled successfully` in the logs.
-
+> [!NOTE]
+> **What's happening here?**
+> Once applied, the operator reconciles this config, initializes a secure LLM client using your secret, and injects it into the remediation engine. You'll see `ZelyoConfig reconciled successfully` in the logs.
+>
 ## Part 2 — The 8 Security Scanners
 
 Zelyo Operator ships with 8 built-in scanners. Every scanner runs automatically when triggered by a `SecurityPolicy` or `ClusterScan`. Understanding what each one checks helps you write better policies.
@@ -278,9 +290,10 @@ Zelyo Operator ships with 8 built-in scanners. Every scanner runs automatically 
     | Service account token auto-mounted | Medium |
     | Root group (GID 0) | Medium |
 
-    !!! tip "Quick win"
-        Add `automountServiceAccountToken: false` to every pod that doesn't need Kubernetes API access. Eliminates the most common privilege escalation vector with one line.
-
+    > [!TIP]
+    > **Quick win**
+    > Add `automountServiceAccountToken: false` to every pod that doesn't need Kubernetes API access. Eliminates the most common privilege escalation vector with one line.
+    >
 === "Secrets Exposure"
 
     **Rule type:** `secrets-exposure`
@@ -390,12 +403,15 @@ production-security-baseline   medium     Active   8            30s
 
 Look at the `Status > Conditions` section in the describe output — you'll see `ScanCompleted=True` and the full reasoning from the LLM.
 
-??? abstract "Cleanup"
-    ```bash
-    kubectl delete pod insecure-nginx -n default
-    kubectl delete securitypolicy production-security-baseline -n zelyo-system
-    ```
+<details>
+<summary><strong>Cleanup</strong></summary>
 
+```bash
+kubectl delete pod insecure-nginx -n default
+kubectl delete securitypolicy production-security-baseline -n zelyo-system
+```
+
+</details>
 ### Recipe 2: Critical-Only Alerting
 
 **Goal:** Filter out noise — only surface high and critical severity findings.
@@ -439,12 +455,15 @@ kubectl describe securitypolicy critical-only -n zelyo-system
 
 **Expected:** Fewer violations compared to Recipe 1 — only high-severity issues appear.
 
-??? abstract "Cleanup"
-    ```bash
-    kubectl delete pod insecure-nginx -n default
-    kubectl delete securitypolicy critical-only -n zelyo-system
-    ```
+<details>
+<summary><strong>Cleanup</strong></summary>
 
+```bash
+kubectl delete pod insecure-nginx -n default
+kubectl delete securitypolicy critical-only -n zelyo-system
+```
+
+</details>
 ### Recipe 3: Nightly Full-Cluster Scan
 
 **Goal:** Run all 8 scanners on a schedule and maintain a 30-day history of reports.
@@ -477,9 +496,10 @@ spec:
 EOF
 ```
 
-!!! tip "Test immediately without waiting until 2 AM"
-    Change `schedule: "0 2 * * *"` to `schedule: "* * * * *"` to trigger a scan every minute.
-
+> [!TIP]
+> **Test immediately without waiting until 2 AM**
+> Change `schedule: "0 2 * * *"` to `schedule: "* * * * *"` to trigger a scan every minute.
+>
 #### Watch for Reports
 
 ```bash
@@ -498,12 +518,15 @@ NAME                           SCAN                FINDINGS   CRITICAL   HIGH   
 nightly-full-scan-1773826310   nightly-full-scan   20                    6      29s
 ```
 
-??? abstract "Cleanup"
-    ```bash
-    kubectl delete clusterscan nightly-full-scan -n zelyo-system
-    kubectl delete scanreports --all -n zelyo-system
-    ```
+<details>
+<summary><strong>Cleanup</strong></summary>
 
+```bash
+kubectl delete clusterscan nightly-full-scan -n zelyo-system
+kubectl delete scanreports --all -n zelyo-system
+```
+
+</details>
 ### Recipe 4: Cost Optimization
 
 **Goal:** Find idle or oversized pods and get AI-powered rightsizing recommendations.
@@ -534,25 +557,29 @@ kubectl get costpolicy optimize-default -n zelyo-system -o wide
 kubectl describe costpolicy optimize-default -n zelyo-system
 ```
 
-??? abstract "Cleanup"
-    ```bash
-    kubectl delete costpolicy optimize-default -n zelyo-system
-    ```
+<details>
+<summary><strong>Cleanup</strong></summary>
 
+```bash
+kubectl delete costpolicy optimize-default -n zelyo-system
+```
+
+</details>
 ### Recipe 5: Slack Alerts
 
 **Goal:** Send security alerts directly to a Slack channel when violations are found.
 
 #### Step 1: Get a Slack Webhook URL
 
-!!! tip "How to get a Slack Webhook URL"
-    1. Go to [api.slack.com/apps](https://api.slack.com/apps)
-    2. Click **Create New App** → **From scratch**
-    3. Choose a name (e.g., "Zelyo Operator") and your workspace
-    4. Go to **Incoming Webhooks** → toggle **Activate Incoming Webhooks** to On
-    5. Click **Add New Webhook to Workspace** → choose your channel → **Allow**
-    6. Copy the Webhook URL (starts with `https://hooks.slack.com/services/...`)
-
+> [!TIP]
+> **How to get a Slack Webhook URL**
+> 1. Go to [api.slack.com/apps](https://api.slack.com/apps)
+> 2. Click **Create New App** → **From scratch**
+> 3. Choose a name (e.g., "Zelyo Operator") and your workspace
+> 4. Go to **Incoming Webhooks** → toggle **Activate Incoming Webhooks** to On
+> 5. Click **Add New Webhook to Workspace** → choose your channel → **Allow**
+> 6. Copy the Webhook URL (starts with `https://hooks.slack.com/services/...`)
+>
 #### Step 2: Create the Secret
 
 ```bash
@@ -607,13 +634,16 @@ kubectl get notificationchannel slack-security -n zelyo-system
 kubectl get monitoringpolicy production-monitoring -n zelyo-system
 ```
 
-??? abstract "Cleanup"
-    ```bash
-    kubectl delete monitoringpolicy production-monitoring -n zelyo-system
-    kubectl delete notificationchannel slack-security -n zelyo-system
-    kubectl delete secret slack-token -n zelyo-system
-    ```
+<details>
+<summary><strong>Cleanup</strong></summary>
 
+```bash
+kubectl delete monitoringpolicy production-monitoring -n zelyo-system
+kubectl delete notificationchannel slack-security -n zelyo-system
+kubectl delete secret slack-token -n zelyo-system
+```
+
+</details>
 ### Recipe 6: GitOps Automated Remediation
 
 **Goal:** Have Zelyo Operator automatically open GitHub PRs to fix detected security issues — no manual intervention required.
@@ -625,9 +655,10 @@ kubectl get monitoringpolicy production-monitoring -n zelyo-system
 3. Select scopes: `repo` (full control of private repos)
 4. Click **Generate token** and copy it (starts with `ghp_...`)
 
-!!! danger "Store your token securely."
-    GitHub only shows it once. If lost, you must regenerate it.
-
+> [!CAUTION]
+> **Store your token securely.**
+> GitHub only shows it once. If lost, you must regenerate it.
+>
 #### Step 2: Create the Kubernetes Secret
 
 ```bash
@@ -691,16 +722,20 @@ spec:
 EOF
 ```
 
-!!! info "`dryRun: true` for testing"
-    Set this while testing to see what PRs would be created without actually opening them. Switch to `false` when ready to go live.
+> [!NOTE]
+> **`dryRun: true` for testing**
+> Set this while testing to see what PRs would be created without actually opening them. Switch to `false` when ready to go live.
+>
+<details>
+<summary><strong>Cleanup</strong></summary>
 
-??? abstract "Cleanup"
-    ```bash
-    kubectl delete remediationpolicy auto-fix-security -n zelyo-system
-    kubectl delete gitopsrepository infra-repo -n zelyo-system
-    kubectl delete secret github-creds -n zelyo-system
-    ```
+```bash
+kubectl delete remediationpolicy auto-fix-security -n zelyo-system
+kubectl delete gitopsrepository infra-repo -n zelyo-system
+kubectl delete secret github-creds -n zelyo-system
+```
 
+</details>
 ## Part 4 — Advanced Configuration
 
 ### LLM Configuration via ZelyoConfig
@@ -796,9 +831,10 @@ After applying your policies, monitor the operator logs to ensure that notificat
 
 For specific commands to verify Slack alerts, AI reasoning (LLM) status, and GitOps PR creation, see the **[Troubleshooting Guide](troubleshooting.md)**.
 
-!!! warning "Webhook Error?"
-    If you see `failed calling webhook "msecuritypolicy.zelyo.ai"` while applying any resource, run the [Webhook Patch](troubleshooting.md#webhooks) commands. This is a known issue with OCI chart `v0.0.1`.
-
+> [!WARNING]
+> **Webhook Error?**
+> If you see `failed calling webhook "msecuritypolicy.zelyo.ai"` while applying any resource, run the [Webhook Patch](troubleshooting.md#webhooks) commands. This is a known issue with OCI chart `v0.0.1`.
+>
 ## Part 7 — Full Environment Teardown
 
 When you're done testing, remove everything cleanly:

@@ -20,15 +20,23 @@ Thank you for your interest in contributing to Zelyo Operator! Whether you're fi
 
 ---
 
-## 💻 Pull Request Workflow
+### Pull Requests & Lifecycle
 
-```
-1. Fork the repo
-2. Create a feature branch from `main`
-3. Write tests for new functionality
-4. Ensure CI passes  →  make lint test
-5. Update docs if needed
-6. Submit PR against `main`
+1. **Fork** the repository and create a feature branch from `main`
+2. **Follow** the commit conventions below
+3. **Write tests** for new functionality
+4. **Ensure** all CI checks pass (`make lint test`)
+5. **Update** documentation if your change affects user-facing behavior
+6. **Submit** a PR against `main`
+7. **Review**: A maintainer will review your PR. Address any feedback by pushing new commits to your branch.
+8. **Merge**: Once approved and CI passes, a maintainer will merge your PR (typically via squash-merge).
+
+### Developer Certificate of Origin (DCO)
+
+All contributions must be signed off to adhere to the Developer Certificate of Origin (DCO). This certifies that you have the right to submit the code.
+Sign your commits by adding the `-s` or `--signoff` flag:
+```bash
+git commit -s -m "feat(scanner): add RBAC over-permission detection"
 ```
 
 ### Commit Conventions
