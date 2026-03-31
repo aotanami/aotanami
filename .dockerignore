@@ -1,24 +1,15 @@
-# Binaries and build artifacts
-bin/
-manager
-main
-cover.out
-*.out
-*.test
+# Ignore everything by default and re-include only what's needed for the build.
+*
 
-# Git
-.git/
-.github/
+# Whitelist Go modules files
+!go.mod
+!go.sum
 
-# IDE and local configs
-.idea/
-.vscode/
-.env
+# Whitelist source directories
+!cmd/
+!internal/
+!api/
 
-# Build caching and scripts
-testbin/
-hack/
-test/
+# Re-ignore test files explicitly within the whitelisted directories
+**/*_test.go
 
-# Chart and CI
-deploy/

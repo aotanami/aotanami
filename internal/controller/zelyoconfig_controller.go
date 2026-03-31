@@ -250,9 +250,13 @@ func (r *ZelyoConfigReconciler) reconcileRemediationEngine(ctx context.Context, 
 			})
 			if probeErr != nil {
 				log.Error(probeErr, "LLM key verification probe failed")
+				ns := os.Getenv("ZELYO_OPERATOR_NAMESPACE")
+				if ns == "" {
+					ns = "zelyo-system"
+				}
 				r.Recorder.Event(config, corev1.EventTypeWarning, "LLMKeyVerificationFailed",
 					fmt.Sprintf("LLM API key verification failed: %v. Verify your key with: kubectl get secret %s -n %s -o jsonpath='{.data.api-key}' | base64 -d",
-						probeErr, config.Spec.LLM.APIKeySecret, os.Getenv("ZELYO_OPERATOR_NAMESPACE")))
+						probeErr, config.Spec.LLM.APIKeySecret, ns))
 				config.Status.LLMKeyStatus = "Invalid"
 				conditions.MarkFalse(&config.Status.Conditions, zelyov1alpha1.ConditionLLMKeyVerified,
 					zelyov1alpha1.ReasonLLMKeyInvalid,

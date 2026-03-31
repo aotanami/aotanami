@@ -11,11 +11,9 @@ WORKDIR /workspace
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
-# Cache deps before building and copying source so that we don't need to re-download
-RUN go mod download
-
-# Install ca-certificates for TLS
-RUN apk add --no-cache ca-certificates
+# Cache deps and install ca-certificates for TLS
+RUN go mod download && \
+    apk add --no-cache ca-certificates
 
 # Copy the Go source (relies on .dockerignore to filter)
 COPY . .

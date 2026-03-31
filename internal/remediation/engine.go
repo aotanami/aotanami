@@ -142,6 +142,8 @@ func (e *Engine) SetGitOpsEngine(ge gitops.Engine) {
 
 // SetConfig updates the engine configuration.
 func (e *Engine) SetConfig(cfg EngineConfig) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.strategy = cfg.Strategy
 	if cfg.MaxBlastRadius > 0 {
 		e.maxBlastRadius = cfg.MaxBlastRadius
@@ -152,7 +154,15 @@ func (e *Engine) SetConfig(cfg EngineConfig) {
 func (e *Engine) GeneratePlan(ctx context.Context, finding *scanner.Finding) (*Plan, error) {
 	prompt := buildRemediationPrompt(finding)
 
-	resp, err := e.llmClient.Complete(ctx, llm.Request{
+	e.mu.RLock()
+	client := e.llmClient
+	e.mu.RUnlock()
+
+	if client == nil {
+		return nil, fmt.Errorf("remediation: LLM client not configured")
+	}
+
+	resp, err := client.Complete(ctx, llm.Request{
 		Messages: []llm.Message{
 			{
 				Role:    llm.RoleSystem,
@@ -190,7 +200,11 @@ func (e *Engine) GeneratePlan(ctx context.Context, finding *scanner.Finding) (*P
 
 // ApplyPlan executes a remediation plan according to the configured strategy.
 func (e *Engine) ApplyPlan(ctx context.Context, plan *Plan, repoOwner, repoName string) (*gitops.PullRequestResult, error) {
-	switch e.strategy {
+	e.mu.RLock()
+	strategy := e.strategy
+	e.mu.RUnlock()
+
+	switch strategy {
 	case StrategyDryRun:
 		e.log.Info("Dry-run: would apply remediation",
 			"finding", plan.Finding.Title,
@@ -208,7 +222,7 @@ func (e *Engine) ApplyPlan(ctx context.Context, plan *Plan, repoOwner, repoName 
 		return e.createPR(ctx, plan, repoOwner, repoName)
 
 	default:
-		return nil, fmt.Errorf("remediation: unknown strategy %q", e.strategy)
+		return nil, fmt.Errorf("remediation: unknown strategy %q", strategy)
 	}
 }
 
