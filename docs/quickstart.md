@@ -3,7 +3,7 @@ title: "Quickstart Guide - Automate SRE Runbooks in 5 Minutes"
 description: "Learn how to deploy Zelyo Operator and automate your Kubernetes incident response. Setup DevOps observability and automated GitOps remediation."
 ---
 
-# Quick Start Guide
+# Quickstart Guide
 
 > [!NOTE]
 > **Who is this guide for?**
