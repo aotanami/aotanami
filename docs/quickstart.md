@@ -5,6 +5,8 @@ description: "Learn how to deploy Zelyo Operator and automate your Kubernetes in
 
 # Quickstart Guide
 
+# Quick Start Guide
+
 > [!NOTE]
 > **Who is this guide for?**
 > This is a complete, self-sufficient guide to setting up and using Zelyo Operator — from a blank laptop to running AI-powered security scans. No prior Kubernetes operator experience required.

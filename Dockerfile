@@ -35,11 +35,11 @@ FROM scratch
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md
 LABEL org.opencontainers.image.title="Zelyo Operator"
 LABEL org.opencontainers.image.description="Autonomous Kubernetes Protection — Powered by Agentic AI"
-LABEL org.opencontainers.image.url="https://github.com/zelyo-ai/zelyo"
-LABEL org.opencontainers.image.source="https://github.com/zelyo-ai/zelyo"
+LABEL org.opencontainers.image.url="https://github.com/zelyo-ai/zelyo-operator"
+LABEL org.opencontainers.image.source="https://github.com/zelyo-ai/zelyo-operator"
 LABEL org.opencontainers.image.vendor="Zelyo AI"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.documentation="https://github.com/zelyo-ai/zelyo/tree/main/docs"
+LABEL org.opencontainers.image.documentation="https://github.com/zelyo-ai/zelyo-operator/tree/main/docs"
 
 # Copy CA certificates for TLS (Zelyo Operator makes HTTPS calls to LLM APIs)
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
