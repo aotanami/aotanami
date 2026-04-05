@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
 )
@@ -82,15 +83,36 @@ func UninstallCertManager() {
 }
 
 // InstallCertManager installs the cert manager bundle.
+// Retries the kubectl apply with exponential backoff to handle transient
+// network errors (e.g. GitHub 502 Bad Gateway in CI).
 func InstallCertManager() error {
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.Command("kubectl", "apply", "-f", url)
-	if _, err := Run(cmd); err != nil {
-		return err
+
+	const maxRetries = 5
+	backoff := 10 * time.Second
+
+	var lastErr error
+	for i := 0; i < maxRetries; i++ {
+		cmd := exec.Command("kubectl", "apply", "-f", url)
+		if _, err := Run(cmd); err != nil {
+			lastErr = err
+			_, _ = fmt.Fprintf(GinkgoWriter,
+				"cert-manager install attempt %d/%d failed: %v — retrying in %v\n",
+				i+1, maxRetries, err, backoff)
+			time.Sleep(backoff)
+			backoff *= 2
+			continue
+		}
+		lastErr = nil
+		break
 	}
+	if lastErr != nil {
+		return fmt.Errorf("failed to install cert-manager after %d attempts: %w", maxRetries, lastErr)
+	}
+
 	// Wait for cert-manager-webhook to be ready, which can take time if cert-manager
 	// was re-installed after uninstalling on a cluster.
-	cmd = exec.Command("kubectl", "wait", "deployment.apps/cert-manager-webhook",
+	cmd := exec.Command("kubectl", "wait", "deployment.apps/cert-manager-webhook",
 		"--for", "condition=Available",
 		"--namespace", "cert-manager",
 		"--timeout", "5m",
