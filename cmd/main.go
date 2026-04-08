@@ -198,7 +198,7 @@ func main() {
 	// ── Initialize the Agentic Pipeline (shared brain instances) ──
 	//
 	// These are the core intelligence components that connect
-	// Observe (SecurityPolicy/MonitoringPolicy) → Reason (Correlator/LLM) → Act (Remediation)
+	// Detect (SecurityPolicy/MonitoringPolicy) → Correlate (Correlator/LLM) → Fix (Remediation)
 	correlatorEngine := correlator.NewEngine(&correlator.Config{
 		CorrelationWindow: 5 * time.Minute,
 	})

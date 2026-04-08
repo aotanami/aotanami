@@ -1,6 +1,6 @@
 ---
-title: "Zelyo Operator - K8s Alert Automation & Incident Response"
-description: "Autonomous AI operator for Kubernetes incident response and DevSecOps remediation. Reduce MTTR and automate SRE runbooks with Zelyo."
+title: "Zelyo Operator - Autonomous AI Security Agent for Kubernetes"
+description: "Autonomous AI security agent for Kubernetes. Detects misconfigurations, correlates signals with AI, and auto-generates confidence-scored GitOps PRs."
 hide:
   - navigation
   - toc
@@ -12,7 +12,7 @@ hide:
 
 # Zelyo
 
-<p class="hero-subtitle">Your Digital SRE &amp; Security Engineer for Kubernetes</p>
+<p class="hero-subtitle">Autonomous AI Security Agent for Kubernetes</p>
 
 <div class="badges">
   <a href="https://github.com/zelyo-ai/zelyo-operator/actions/workflows/ci.yml"><img src="https://github.com/zelyo-ai/zelyo-operator/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -32,7 +32,7 @@ hide:
 
 ## What is Zelyo?
 
-**Zelyo** is your **Digital SRE and Security Engineer** powered by **Agentic AI** that does the job of a full-time site reliability and security engineer. It autonomously **observes** your cluster, **reasons** about security findings and anomalies using LLMs, and **acts** by opening GitOps PRs with production-ready fixes — all with **read-only cluster access**.
+**Zelyo** is your **AI Security Agent** powered by **Agentic AI** that does the job of a full-time site reliability and security engineer. It autonomously **detects** security misconfigurations, **correlates** signals with AI, and **fixes** by opening GitOps PRs with production-ready fixes — all with **read-only cluster access**.
 
 The **Zelyo Operator** is a self-hosted Kubernetes Operator that allows you to manage and automate the lifecycle of Zelyo within your cluster.
 
@@ -132,7 +132,7 @@ graph TB
         Metrics[Resource Metrics]
     end
 
-    subgraph "Zelyo — The Digital SRE"
+    subgraph "Zelyo — AI Security Agent"
         subgraph "Observe"
             Watcher[Real-Time Watcher]
             Scanner[Security Scanner]

@@ -1,6 +1,6 @@
 ---
-title: "Quickstart Guide - Automate SRE Runbooks in 5 Minutes"
-description: "Learn how to deploy Zelyo Operator and automate your Kubernetes incident response. Setup DevOps observability and automated GitOps remediation."
+title: "Quickstart Guide - Secure Your Kubernetes Cluster in 5 Minutes"
+description: "Learn how to deploy Zelyo Operator and automate your Kubernetes incident response. Setup continuous security posture management and AI-powered GitOps remediation."
 ---
 
 # Quickstart Guide
@@ -16,7 +16,7 @@ Zelyo Operator is an **Autonomous AI Security Agent** for Kubernetes. It watches
 **The three-phase loop:**
 
 ```
-Observe → Reason → Act
+Detect → Correlate → Fix
 ```
 
 - **Observe**: Scans pods for 8 categories of security issues

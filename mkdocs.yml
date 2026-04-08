@@ -1,6 +1,6 @@
 site_name: Zelyo
 site_url: https://zelyo-ai.github.io/zelyo
-site_description: Autonomous AI operator for Kubernetes incident response and DevSecOps remediation. Automate SRE runbooks with DevOps observability.
+site_description: Autonomous AI security agent for Kubernetes. Detects misconfigurations, correlates signals with AI, and auto-generates confidence-scored GitOps PRs.
 site_author: Zelyo AI
 copyright: Copyright &copy; 2026 Zelyo AI — Apache 2.0 License
 

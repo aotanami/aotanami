@@ -1,10 +1,10 @@
-# Zelyo Operator — Digital SRE & Security Engineer
+# Zelyo Operator — AI Security Agent
 
-Welcome to the **Zelyo Operator Brain** documentation. While Zelyo Operator is technically a Kubernetes Operator, its identity is that of a **Digital SRE and Security Engineer** — an agentic AI system that does the job of a full-time site reliability and security engineer, autonomously observing, reasoning, and acting on your clusters 24/7.
+Welcome to the **Zelyo Operator Brain** documentation. While Zelyo Operator is technically a Kubernetes Operator, its identity is that of an **AI Security Agent** — an agentic AI system that does the job of a full-time site reliability and security engineer, autonomously detecting, correlating, and fixing issues in your clusters 24/7.
 
 This document details the internal intelligence architecture.
 
-## The Agentic Pipeline: Observe → Reason → Act
+## The Agentic Pipeline: Detect → Correlate → Fix
 
 ```mermaid
 graph TB
@@ -57,11 +57,11 @@ The anomaly engine replaces static alert thresholds with **dynamic statistical b
 | **Sliding Windows** | Maintains the last 1000 data points per metric key, pruning older values |
 | **Severity Classification** | `medium` (≥ sensitivity σ), `high` (≥ 1.5× sensitivity σ), `critical` (≥ 2× sensitivity σ) |
 
-**How the Digital SRE uses it:** The MonitoringPolicy controller feeds pod restart counts into the anomaly detector. When a restart spike deviates beyond 3σ from the baseline, it's ingested into the correlator as an `EventAnomaly`.
+**How the AI Security Agent uses it:** The MonitoringPolicy controller feeds pod restart counts into the anomaly detector. When a restart spike deviates beyond 3σ from the baseline, it's ingested into the correlator as an `EventAnomaly`.
 
 ### 2. Incident Correlation (`internal/correlator`)
 
-Security alerts in isolation are noise. The correlator **groups related signals into unified incidents**, just like a human SRE triaging a page.
+Security alerts in isolation are noise. The correlator **groups related signals into unified incidents**, just like a human security engineer triaging an alert.
 
 | Feature | Implementation |
 |---|---|
@@ -70,7 +70,7 @@ Security alerts in isolation are noise. The correlator **groups related signals 
 | **Incident Lifecycle** | Each incident gets a unique ID (`INC-000001`), tracks open/resolved state |
 | **Event Types** | `security_violation`, `anomaly`, `pod_crash`, `resource_exhaustion`, `config_drift` |
 
-**How the Digital SRE uses it:** The SecurityPolicy controller and anomaly detector both feed events into the correlator. The RemediationPolicy controller queries open incidents for LLM diagnosis.
+**How the AI Security Agent uses it:** The SecurityPolicy controller and anomaly detector both feed events into the correlator. The RemediationPolicy controller queries open incidents for LLM diagnosis.
 
 ### 3. Remediation Engine (`internal/remediation`)
 
@@ -147,9 +147,9 @@ The reasoning core. Built for resilient, cost-effective, 24/7 autonomous operati
 
 ## Controller Orchestration
 
-The Digital SRE's autonomy lives in the **7 Kubernetes controllers** that wire the pipeline together:
+The AI Security Agent's autonomy lives in the **7 Kubernetes controllers** that wire the pipeline together:
 
-| Controller | Observe | Reason | Act |
+| Controller | Detect | Correlate | Fix |
 |---|---|---|---|
 | `SecurityPolicy` | Scans pods for violations | Feeds findings into correlator | — |
 | `MonitoringPolicy` | Watches pod restart counts | Feeds into anomaly detector → correlator | — |
@@ -164,7 +164,7 @@ The Digital SRE's autonomy lives in the **7 Kubernetes controllers** that wire t
 ## Operating Modes
 
 ### 🔍 Audit Mode (Default)
-In this mode, the Digital SRE observes and reasons, but **does not act** on the cluster.
+In this mode, the AI Security Agent detects and correlates, but **does not fix** the cluster.
 1. SecurityPolicy identifies vulnerabilities, MonitoringPolicy detects anomalies
 2. Correlator groups related events into incidents
 3. LLM generates root-cause analysis and suggested fix
@@ -172,7 +172,7 @@ In this mode, the Digital SRE observes and reasons, but **does not act** on the 
 5. **No repository modifications or PRs are created.**
 
 ### 🛡️ Protect Mode
-When a `GitOpsRepository` CRD is configured, the Digital SRE gains autonomy.
+When a `GitOpsRepository` CRD is configured, the AI Security Agent gains autonomy.
 1. Correlator emits an incident
 2. RemediationPolicy queries the LLM for a structured JSON fix plan
 3. Remediation engine validates the plan and scores the risk
@@ -184,7 +184,7 @@ When a `GitOpsRepository` CRD is configured, the Digital SRE gains autonomy.
 
 ## Development Guidelines
 
-When contributing to the Digital SRE's intelligence, follow these principles:
+When contributing to the AI Security Agent's intelligence, follow these principles:
 
 1. **Safety First:** We operate in production clusters. Always prefer the least disruptive fix. The remediation engine defaults to `dry-run` mode.
 2. **Handle Transients:** Network flakes and API limits happen. Use exponential backoff and respect circuit breaker states.
