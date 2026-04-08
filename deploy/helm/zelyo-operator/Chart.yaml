@@ -1,6 +1,6 @@
 apiVersion: v2
 name: zelyo-operator
-description: Zelyo Operator — Autonomous Kubernetes Protection powered by Agentic AI
+description: Zelyo Operator — Autonomous AI Security Agent for Kubernetes — Detect, Correlate, Fix
 type: application
 version: 0.0.3
 appVersion: "0.0.3"
@@ -24,9 +24,13 @@ keywords:
   - devsecops
   - cost-optimization
   - autonomous
+  - cnapp
+  - cloud-security
+  - cspm
+  - kspm
 annotations:
   org.opencontainers.image.source: https://github.com/zelyo-ai/zelyo-operator
-  org.opencontainers.image.description: "Zelyo Operator — Autonomous Kubernetes Protection"
+  org.opencontainers.image.description: "Zelyo Operator — Autonomous AI Security Agent for Kubernetes — Detect, Correlate, Fix"
   org.opencontainers.image.licenses: Apache-2.0
   artifacthub.io/license: Apache-2.0
   artifacthub.io/operator: "true"

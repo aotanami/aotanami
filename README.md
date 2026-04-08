@@ -1,4 +1,4 @@
-**Zelyo is an autonomous AI operator for Kubernetes incident response and DevSecOps remediation.**
+**Zelyo is an autonomous AI security agent for Kubernetes that detects, correlates, and fixes misconfigurations — so your team doesn't have to.**
 
 <p align="center">
   <img src="assets/logo.png" alt="Zelyo" width="180" />
@@ -7,8 +7,8 @@
 <h1 align="center">Zelyo Operator</h1>
 
 <p align="center">
-  <strong>Your Digital SRE &amp; Security Engineer for Kubernetes</strong><br/>
-  <sub>An agentic AI operator that observes, reasons, and acts on your cluster — 24/7, just like a human engineer would.</sub>
+  <strong>Autonomous AI Security Agent for Kubernetes</strong><br/>
+  <sub>Others detect. Zelyo detects AND fixes. Scans misconfigurations across 7 security layers, correlates signals with AI, and auto-generates confidence-scored GitOps PRs.</sub>
 </p>
 
 <p align="center">
@@ -37,23 +37,23 @@
 
 ## 🧠 What is Zelyo?
 
-**Zelyo** is an **autonomous AI operator for Kubernetes incident response and DevSecOps remediation**. It doesn't just alert — it **observes**, **reasons**, and **acts**, continuously protecting your production clusters while you sleep.
+**Zelyo** is an **autonomous AI security agent for Kubernetes**. It doesn't just alert — it **detects**, **correlates**, and **fixes**, continuously protecting your production clusters while you sleep. Non-destructive by design. Production-safe by default. Every decision logged and auditable.
 
 ### Key Features
-- 👁️ **Continuous Observability**: Watches every pod restart, OOMKill, security misconfiguration, and RBAC drift.
-- 🧠 **Contextual Incident Correlation**: Synthesizes scattered signals into unified incidents (e.g., restart spike + CVE + privilege escalation).
-- 🔬 **LLM-Powered Diagnostics**: Diagnoses root causes safely via read-only K8s alert automation techniques.
-- 🔧 **GitOps-native Auto-Remediation**: Generates production-ready YAML patches and opens PRs without breaking your flow.
-- 📋 **Automated Compliance**: Reports posture against CIS Benchmarks, NIST 800-53, SOC 2, and PCI-DSS instantly.
+- 🔒 **Continuous Security Scanning**: 8 scanners across Identity, Posture, Runtime, Network, Workload, Data, and Compliance layers.
+- 🧠 **AI-Powered Threat Correlation**: Connects signals across layers — overprivileged role + exposed service = attack chain.
+- 🔧 **Automated Remediation**: Auto-generates code fixes as GitOps PRs with confidence scores. Every fix is a PR. Every decision is logged.
+- 📋 **Compliance-Grade Evidence**: Maps findings to SOC 2, PCI-DSS, HIPAA, NIST 800-53, and CIS Benchmarks with audit trail.
+- 🛡️ **Production-Safe by Default**: Read-only cluster access. Non-destructive by design.
 
 ## Use Cases
 
-- ⏱️ **Reduce MTTR for Kubernetes incidents**: From hours of debugging to minutes of automated root cause analysis.
-- 🤖 **Automate SRE runbooks**: Let Zelyo execute your standard operating procedures for robust DevOps observability.
-- 🔧 **GitOps-native remediation**: Generates production-ready YAML patches and opens PRs without breaking your flow.
-- 🛡️ **Continuous DevOps observability & Security**: Never let a drifted permission or vulnerable image go unaddressed.
+- 🔒 **Reduce alert-to-fix time**: From hours of SOC triage to minutes of automated detection, correlation, and remediation.
+- 🤖 **Automate Tier-1 SOC triage**: Let Zelyo handle security posture violations so your team focuses on real threats.
+- 🔧 **GitOps-native remediation**: Auto-generates production-ready YAML patches and opens PRs — no live-system changes.
+- 🛡️ **Continuous compliance**: Never let a drifted permission, exposed secret, or vulnerable image go unaddressed.
 
-That's Zelyo. All automated, all autonomous, all with **read-only cluster access**.
+That's Zelyo. All automated, all autonomous, all with **read-only cluster access**. Production-safe by default.
 
 ---
 
@@ -96,14 +96,14 @@ Routes alerts to Slack, Teams, PagerDuty, Telegram, WhatsApp, and webhooks with 
 
 ---
 
-## 🔁 The Agentic Pipeline: Observe → Reason → Act
+## 🔁 The Agentic Pipeline: Detect → Correlate → Fix
 
-Unlike traditional scanning tools that dump findings and walk away, Zelyo operates as a **closed-loop autonomous agent**:
+Unlike traditional scanning tools that dump findings and walk away, Zelyo operates as a **closed-loop autonomous security agent**:
 
 ```mermaid
 graph LR
-    accTitle: Kubernetes incident response operator reconciliation loop diagram
-    accDescr: The agentic pipeline showing how Zelyo observes, reasons, and acts autonomously
+    accTitle: Kubernetes security agent reconciliation loop diagram
+    accDescr: The agentic pipeline showing how Zelyo detects, correlates, and fixes autonomously
     SP["SecurityPolicy<br/>Scanner"] -->|findings| C["Correlator<br/>Engine"]
     MP["MonitoringPolicy<br/>Observer"] -->|pod metrics| AD["Anomaly<br/>Detector"]
     AD -->|σ-deviations| C
@@ -117,11 +117,11 @@ graph LR
     ARGO -->|applied| K8S["Cluster"]
 ```
 
-1. **Observe** — SecurityPolicy scans pods, MonitoringPolicy observes restart counts, ClusterScan evaluates compliance
-2. **Correlate** — The correlator engine groups related events within a 5-minute window into unified incidents
-3. **Reason** — The LLM analyzes the incident with full context and generates a structured JSON fix plan with risk score
-4. **Act** — The remediation engine validates the plan, and the GitHub engine opens a PR with the fix
-5. **Report** — Compliance reports, Kubernetes events, and Prometheus metrics flow to your dashboards
+1. **Detect** — SecurityPolicy scans pods across 7 security layers, MonitoringPolicy watches for anomalies, ClusterScan evaluates compliance
+2. **Correlate** — The correlator engine groups related signals within a 5-minute window into unified security findings (e.g., overprivileged role + exposed pod = lateral movement risk)
+3. **Reason** — The LLM analyzes the finding with full context and generates a confidence-scored JSON fix plan
+4. **Fix** — The remediation engine validates the plan, and the GitHub engine opens a production-safe PR with the fix
+5. **Report** — Compliance-grade evidence, Kubernetes events, and Prometheus metrics flow to your dashboards
 
 ---
 
@@ -129,8 +129,8 @@ graph LR
 
 | Mode | When | Behavior |
 |:---:|---|---|
-| 🔍 **Audit Mode** *(default)* | No GitOps repo onboarded | Observes, diagnoses, and alerts — your Digital Security Analyst |
-| 🛡️ **Protect Mode** | GitOps repo onboarded | Full autonomous remediation — your Digital SRE on autopilot |
+| 🔍 **Audit Mode** *(default)* | No GitOps repo onboarded | Detects, correlates, and alerts — your always-on security scanner |
+| 🛡️ **Protect Mode** | GitOps repo onboarded | Full autonomous remediation — your autonomous remediation agent |
 
 ---
 
@@ -138,8 +138,8 @@ graph LR
 
 ```mermaid
 graph TB
-    accTitle: Kubernetes incident response operator architecture diagram
-    accDescr: High-level system architecture of Zelyo Operator
+    accTitle: Kubernetes security agent architecture diagram
+    accDescr: High-level system architecture of the Zelyo AI Security Agent
     subgraph "Kubernetes Cluster — Read-Only Access"
         Events[K8s Events]
         Logs[Pod Logs]
@@ -148,7 +148,7 @@ graph TB
         Metrics[Resource Metrics]
     end
 
-    subgraph "Zelyo — The Digital SRE"
+    subgraph "Zelyo — AI Security Agent"
         subgraph "Observe"
             Watcher[Real-Time Watcher]
             Scanner[Security Scanner]
@@ -303,7 +303,7 @@ spec:
 
 ## 📦 CRD Reference
 
-Zelyo Operator uses **9 Custom Resource Definitions** to declaratively configure every aspect of the Digital SRE:
+Zelyo Operator uses **9 Custom Resource Definitions** to declaratively configure every aspect of the AI Security Agent:
 
 | CRD | Purpose |
 |---|---|
@@ -326,7 +326,7 @@ Zelyo Operator uses **9 Custom Resource Definitions** to declaratively configure
 <details>
 <summary><strong>Click to expand internal package map</strong></summary>
 
-| Package | Role in the Digital SRE |
+| Package | Role in the Security Pipeline |
 |---|---|
 | `internal/scanner` | 8 security scanners (RBAC, images, PodSecurity, secrets, network, supply chain) |
 | `internal/anomaly` | Statistical baseline engine — σ-deviation anomaly detection with sliding windows |
@@ -339,7 +339,7 @@ Zelyo Operator uses **9 Custom Resource Definitions** to declaratively configure
 | `internal/gitops` | GitOps engine interface + ArgoCD/Flux/Kustomize/Helm source discovery |
 | `internal/notifier` | Multi-channel notifications with severity filtering, dedup, and rate limiting |
 | `internal/monitor` | Real-time Kubernetes resource watcher with event dispatch |
-| `internal/controller` | 7 Kubernetes controllers orchestrating the Observe → Reason → Act pipeline |
+| `internal/controller` | 7 Kubernetes controllers orchestrating the Detect → Correlate → Fix pipeline |
 
 </details>
 
@@ -428,5 +428,5 @@ Zelyo Operator is licensed under the [Apache License 2.0](LICENSE).
 
 <p align="center">
   <sub>Created with ❤️ by <a href="https://zelyo.ai">Zelyo AI</a></sub><br/>
-  <sub>⭐ If Zelyo saves you an on-call page, consider giving us a star!</sub>
+  <sub>⭐ If Zelyo catches a misconfiguration before it reaches production, consider giving us a star!</sub>
 </p>

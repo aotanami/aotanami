@@ -1,26 +1,26 @@
 ---
-title: "Architecture - Kubernetes Incident Response & DevOps Observability"
-description: "Deep dive into the architecture of Zelyo Operator, the autonomous AI operator for K8s alert automation and DevSecOps."
+title: "Architecture - Kubernetes Security Scanning & Automated Remediation"
+description: "Deep dive into the architecture of Zelyo Operator, the autonomous AI security agent for Kubernetes posture management and GitOps remediation."
 ---
 
 # Architecture
 
 ## Overview
 
-Zelyo Operator is your **Digital SRE and Security Engineer** — a Kubernetes Operator built with [Kubebuilder](https://kubebuilder.io/) that autonomously **observes**, **reasons about**, and **acts on** security and reliability issues in your production clusters. It runs as a single deployment, continuously protecting your workloads while you focus on building features.
+Zelyo Operator is your **AI Security Agent** — a Kubernetes Operator built with [Kubebuilder](https://kubebuilder.io/) that autonomously **detects**, **correlates**, and **fixes** security misconfigurations in your production clusters. Non-destructive by design. Production-safe by default. Every decision logged and auditable.
 
-## How It Works: Observe → Reason → Act
+## How It Works: Detect → Correlate → Fix
 
 ```
-SecurityPolicy scans pods  →  Correlator groups signals  →  LLM diagnoses root cause  →  GitHub PR with fix
-MonitoringPolicy watches  →  Anomaly detector fires     →  into a unified incident   →  or Slack/PagerDuty alert
+SecurityPolicy scans pods  →  Correlator groups signals  →  LLM generates fix plan   →  GitHub PR with fix
+MonitoringPolicy watches  →  Anomaly detector fires     →  into unified findings     →  or Slack/PagerDuty alert
 ClusterScan evaluates CIS  →  Compliance framework maps  →                            →
 ```
 
 1. **You declare intent** by creating CRDs like `SecurityPolicy`, `MonitoringPolicy`, or `ClusterScan`
-2. **Zelyo Operator observes** — scanning pods, watching restart rates, evaluating compliance
-3. **The brain reasons** — anomaly detector builds baselines, correlator groups events into incidents, LLM generates structured JSON fix plans
-4. **The engine acts** — remediation engine validates fixes, GitHub engine opens PRs, notifier routes alerts
+2. **Zelyo detects** — scanning pods across 7 security layers, watching for anomalies, evaluating compliance
+3. **The brain correlates** — anomaly detector builds baselines, correlator groups events into security findings (e.g., overprivileged role + exposed service = attack chain), LLM generates confidence-scored fix plans
+4. **The engine fixes** — remediation engine validates fixes, GitHub engine opens production-safe PRs, notifier routes alerts
 5. **It never stops** — continuous reconciliation catches new violations, drift, and anomalies
 
 ## System Architecture
@@ -35,7 +35,7 @@ graph TB
         Logs[Pod Logs & Metrics]
     end
 
-    subgraph "Zelyo Operator — The Digital SRE"
+    subgraph "Zelyo Operator — AI Security Agent"
         subgraph "Observe (Controllers)"
             SecPolCtrl["SecurityPolicy<br/>pod scanning"]
             MonCtrl["MonitoringPolicy<br/>pod restart watch"]
@@ -89,13 +89,13 @@ graph TB
     SecPolCtrl & MonCtrl --> Prometheus
 ```
 
-## The Digital SRE Brain (`internal/`)
+## The AI Security Brain (`internal/`)
 
-The intelligence lives entirely within the `internal/` packages. These form the autonomous pipeline that converts raw Kubernetes telemetry into actionable GitOps Pull Requests.
+The intelligence lives entirely within the `internal/` packages. These form the autonomous pipeline that converts raw Kubernetes security signals into actionable GitOps Pull Requests.
 
 ### Observe Layer
 
-| Package | What the Digital SRE Observes |
+| Package | What the Security Agent Detects |
 |---|---|
 | `scanner` | 8 pluggable scanners — RBAC, container security, images, PodSecurity, secrets, network, privilege escalation, resource limits |
 | `monitor` | Real-time Kubernetes resource watcher with event dispatch |
@@ -103,7 +103,7 @@ The intelligence lives entirely within the `internal/` packages. These form the 
 
 ### Reason Layer
 
-| Package | How the Digital SRE Thinks |
+| Package | How the Security Agent Correlates |
 |---|---|
 | `anomaly` | Statistical baseline engine — σ-deviation detection with sliding windows (1000 data points per metric) |
 | `correlator` | Time-windowed event grouping — merges security findings + anomalies + crashes into unified incidents |
@@ -113,16 +113,16 @@ The intelligence lives entirely within the `internal/` packages. These form the 
 
 ### Act Layer
 
-| Package | How the Digital SRE Acts |
+| Package | How the Security Agent Fixes |
 |---|---|
 | `remediation` | LLM-powered fix generation — structured JSON output, risk scoring (0-100), blast radius protection |
 | `github` | GitHub App engine — RS256 JWT auth, token caching, branch → commit → PR → label lifecycle (stdlib only) |
 | `gitops` | GitOps interface + ArgoCD/Flux/Kustomize/Helm source discovery |
 | `notifier` | Multi-channel delivery — Slack, Teams, PagerDuty, webhooks with severity filtering + deduplication |
 
-## Controllers — The Digital SRE's Responsibilities
+## Controllers — The Security Agent's Responsibilities
 
-| Controller | Observe | Reason | Act |
+| Controller | Detect | Correlate | Fix |
 |---|---|---|---|
 | **SecurityPolicy** | Scans pods for violations | Feeds findings → correlator | — |
 | **MonitoringPolicy** | Watches pod restart counts | Feeds → anomaly detector → correlator | — |
@@ -210,7 +210,7 @@ zelyo-operator/
 ├── cmd/main.go             # Entrypoint — wires controllers, brain, scanners
 ├── config/                 # Kustomize manifests (CRDs, RBAC, webhook, samples)
 ├── internal/
-│   ├── controller/         # 7 controllers (Observe → Reason → Act)
+│   ├── controller/         # 7 controllers (Detect → Correlate → Fix)
 │   ├── scanner/            # 8 security scanners + registry
 │   ├── anomaly/            # σ-deviation baseline engine
 │   ├── correlator/         # Time-windowed incident correlation
