@@ -1,0 +1,49 @@
+apiVersion: zelyo.ai/v1alpha1
+kind: CloudAccountConfig
+metadata:
+  labels:
+    app.kubernetes.io/name: zelyo-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: cloudaccountconfig-sample
+  namespace: zelyo-system
+spec:
+  # Cloud provider to scan.
+  provider: aws
+
+  # AWS Account ID.
+  accountID: "123456789012"
+
+  # Regions to scan. Empty means all regions.
+  regions:
+    - us-east-1
+    - us-west-2
+    - eu-west-1
+
+  # Credential configuration.
+  # Recommended: Use IRSA (IAM Roles for Service Accounts) on EKS.
+  credentials:
+    method: irsa
+    roleARN: "arn:aws:iam::123456789012:role/ZelyoOperatorReadOnly"
+
+  # Which scanner categories to run. Empty means all categories.
+  scanCategories:
+    - cspm
+    - ciem
+    - network
+    - dspm
+
+  # Compliance frameworks to evaluate against.
+  complianceFrameworks:
+    - soc2
+    - pci-dss
+    - hipaa
+
+  # Schedule for periodic scans (cron expression).
+  # This runs daily at 2:00 AM.
+  schedule: "0 2 * * *"
+
+  # Number of scan reports to retain.
+  historyLimit: 10
+
+  # Set to true to pause scanning.
+  suspend: false

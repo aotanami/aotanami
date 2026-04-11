@@ -98,6 +98,13 @@ linters:
       - path: internal/controller/
         linters:
           - dupl
+      # Cloud scanner implementations — interface methods and AWS SDK value types
+      - path: internal/cloudscanner/
+        linters:
+          - revive
+          - dupl
+          - gocritic
+          - goconst
       # Kubebuilder-generated main.go
       - path: cmd/main\.go
         linters:

@@ -1,3 +1,7 @@
+/*
+Copyright 2026 Zelyo AI
+*/
+
 package llm
 
 import (

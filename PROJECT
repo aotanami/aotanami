@@ -94,4 +94,13 @@ resources:
   kind: GitOpsRepository
   path: github.com/zelyo-ai/zelyo-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: zelyo.ai
+  group: zelyo-operator
+  kind: CloudAccountConfig
+  path: github.com/zelyo-ai/zelyo-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

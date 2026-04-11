@@ -27,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -427,6 +426,3 @@ func (r *ClusterScanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Named("clusterscan").
 		Complete(r)
 }
-
-// Ensure the ClusterScanReconciler uses the NamespacedName for singleton lookups.
-var _ = types.NamespacedName{}

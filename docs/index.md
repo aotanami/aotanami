@@ -1,6 +1,6 @@
 ---
-title: "Zelyo Operator - Autonomous AI Security Agent for Kubernetes"
-description: "Autonomous AI security agent for Kubernetes. Detects misconfigurations, correlates signals with AI, and auto-generates confidence-scored GitOps PRs."
+title: "Zelyo Operator - Open-Source Cloud-Native Application Protection Platform (CNAPP)"
+description: "Autonomous AI security agent for Kubernetes and cloud infrastructure. 56 security scanners across K8s, CSPM, CIEM, Network, DSPM, Supply Chain, and CI/CD. Auto-generates confidence-scored GitOps PRs."
 hide:
   - navigation
   - toc
@@ -12,7 +12,7 @@ hide:
 
 # Zelyo
 
-<p class="hero-subtitle">Autonomous AI Security Agent for Kubernetes</p>
+<p class="hero-subtitle">Open-Source CNAPP &mdash; Autonomous AI Security Agent for Kubernetes & Cloud</p>
 
 <div class="badges">
   <a href="https://github.com/zelyo-ai/zelyo-operator/actions/workflows/ci.yml"><img src="https://github.com/zelyo-ai/zelyo-operator/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -32,9 +32,9 @@ hide:
 
 ## What is Zelyo?
 
-**Zelyo** is your **AI Security Agent** powered by **Agentic AI** that does the job of a full-time site reliability and security engineer. It autonomously **detects** security misconfigurations, **correlates** signals with AI, and **fixes** by opening GitOps PRs with production-ready fixes — all with **read-only cluster access**.
+**Zelyo** is an open-source **Cloud-Native Application Protection Platform (CNAPP)** that operates as an **autonomous AI security agent**. It scans **56 security checks** across Kubernetes workloads and cloud infrastructure (AWS, with GCP/Azure expanding), **correlates** signals with AI, and **auto-generates remediation code as GitOps PRs** — the only open-source tool that closes the loop from detection to fix.
 
-The **Zelyo Operator** is a self-hosted Kubernetes Operator that allows you to manage and automate the lifecycle of Zelyo within your cluster.
+Every other scanner (Prowler, Trivy, Kubescape) stops at detection. Zelyo generates the fix, opens the PR, and waits for your approval. **Human-in-the-loop. Production-safe. Read-only by default.**
 
 **Bring your own LLM API keys** (OpenRouter, OpenAI, Anthropic, Azure, Ollama) — optimized for minimal token usage.
 
@@ -47,8 +47,8 @@ The **Zelyo Operator** is a self-hosted Kubernetes Operator that allows you to m
 <div class="feature-card" markdown>
 <div class="feature-icon">🔒</div>
 
-### Security Scanning
-RBAC audit, image vulnerabilities, PodSecurity violations, secrets exposure, and network policy gaps.
+### 56 Security Scanners
+8 K8s scanners (RBAC, images, PodSecurity, secrets, network) + 48 cloud scanners (CSPM, CIEM, Network, DSPM, Supply Chain, CI/CD Pipeline).
 </div>
 
 <div class="feature-card" markdown>
@@ -59,10 +59,10 @@ CIS Benchmarks, NSA/CISA hardening, PCI-DSS, SOC2, and HIPAA compliance mapping 
 </div>
 
 <div class="feature-card" markdown>
-<div class="feature-icon">🔗</div>
+<div class="feature-icon">☁️</div>
 
-### Supply Chain Security
-SBOM analysis, image signature verification (Cosign/Notary), and base image CVE tracking.
+### Multi-Cloud CNAPP
+Onboard AWS accounts via CloudAccountConfig. 48 checks across CSPM, CIEM, Network, DSPM, Supply Chain, and CI/CD Pipeline. SOC 2, PCI-DSS, HIPAA compliance mapping.
 </div>
 
 <div class="feature-card" markdown>

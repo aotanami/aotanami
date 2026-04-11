@@ -1,0 +1,289 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: cloudaccountconfigs.zelyo.ai
+spec:
+  group: zelyo.ai
+  names:
+    kind: CloudAccountConfig
+    listKind: CloudAccountConfigList
+    plural: cloudaccountconfigs
+    singular: cloudaccountconfig
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.provider
+      name: Provider
+      type: string
+    - jsonPath: .spec.accountID
+      name: Account
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.findingsCount
+      name: Findings
+      type: integer
+    - jsonPath: .status.lastScanTime
+      name: Last Scan
+      type: date
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          CloudAccountConfig is the Schema for the cloudaccountconfigs API.
+          It onboards a cloud provider account for autonomous security scanning.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              CloudAccountConfigSpec defines the desired state of CloudAccountConfig.
+              CloudAccountConfig onboards a cloud provider account for security scanning.
+              Multiple accounts can exist per namespace (one per cloud account).
+            properties:
+              accountID:
+                description: |-
+                  accountID is the cloud account identifier.
+                  AWS: 12-digit Account ID, GCP: Project ID, Azure: Subscription ID.
+                type: string
+              complianceFrameworks:
+                description: complianceFrameworks selects compliance frameworks to
+                  evaluate against.
+                items:
+                  type: string
+                type: array
+              credentials:
+                description: credentials configures how to authenticate to the cloud
+                  provider.
+                properties:
+                  externalID:
+                    description: externalID is the STS ExternalId for cross-account
+                      AssumeRole.
+                    type: string
+                  method:
+                    description: |-
+                      method specifies the credential mechanism.
+                      irsa: IAM Roles for Service Accounts (EKS). Recommended.
+                      workload-identity: GCP Workload Identity Federation.
+                      pod-identity: EKS Pod Identity.
+                      secret: Static credentials from a Kubernetes Secret (least preferred).
+                    enum:
+                    - irsa
+                    - workload-identity
+                    - pod-identity
+                    - secret
+                    type: string
+                  roleARN:
+                    description: |-
+                      roleARN is the IAM role ARN to assume.
+                      Required for 'irsa' and when using cross-account access.
+                    type: string
+                  secretRef:
+                    description: |-
+                      secretRef references a Kubernetes Secret containing static credentials.
+                      Required when method is 'secret'.
+                      For AWS: keys "aws-access-key-id" and "aws-secret-access-key".
+                    type: string
+                  serviceAccountName:
+                    description: |-
+                      serviceAccountName is the Kubernetes ServiceAccount to use for IRSA/Workload Identity.
+                      Defaults to the operator's service account.
+                    type: string
+                required:
+                - method
+                type: object
+              historyLimit:
+                default: 10
+                description: historyLimit is the number of ScanReport resources to
+                  retain per account.
+                format: int32
+                minimum: 1
+                type: integer
+              provider:
+                description: provider identifies the cloud provider.
+                enum:
+                - aws
+                - gcp
+                - azure
+                type: string
+              regions:
+                description: |-
+                  regions lists the cloud regions to scan.
+                  Empty means all available regions for the provider.
+                items:
+                  type: string
+                type: array
+              scanCategories:
+                description: |-
+                  scanCategories selects which cloud scanner categories to run.
+                  Empty means all categories.
+                items:
+                  type: string
+                type: array
+              schedule:
+                description: |-
+                  schedule is a cron expression for periodic cloud scans.
+                  If empty, scans run only on creation or manual trigger.
+                type: string
+              suspend:
+                default: false
+                description: suspend pauses cloud scanning when true.
+                type: boolean
+            required:
+            - accountID
+            - credentials
+            - provider
+            type: object
+          status:
+            description: CloudAccountConfigStatus defines the observed state of CloudAccountConfig.
+            properties:
+              completedAt:
+                description: completedAt is when the last scan finished.
+                format: date-time
+                type: string
+              conditions:
+                description: conditions represent the current state of the resource.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              findingsCount:
+                description: findingsCount is the number of findings from the last
+                  scan.
+                format: int32
+                type: integer
+              findingsSummary:
+                description: findingsSummary breaks down findings by severity.
+                properties:
+                  critical:
+                    format: int32
+                    type: integer
+                  high:
+                    format: int32
+                    type: integer
+                  info:
+                    format: int32
+                    type: integer
+                  low:
+                    format: int32
+                    type: integer
+                  medium:
+                    format: int32
+                    type: integer
+                type: object
+              lastReportName:
+                description: lastReportName is the name of the most recent ScanReport.
+                type: string
+              lastScanTime:
+                description: lastScanTime is when the last scan was initiated.
+                format: date-time
+                type: string
+              observedGeneration:
+                description: observedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
+              phase:
+                description: phase indicates the current lifecycle phase.
+                enum:
+                - Initializing
+                - Active
+                - Degraded
+                - Error
+                - Running
+                - Completed
+                - Failed
+                type: string
+              resourcesScanned:
+                description: resourcesScanned is the number of cloud resources evaluated.
+                format: int32
+                type: integer
+              scannedRegions:
+                description: scannedRegions lists the regions that were scanned.
+                items:
+                  type: string
+                type: array
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

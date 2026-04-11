@@ -136,3 +136,65 @@ groups:
         annotations:
           summary: "Zelyo Operator controller {{ $labels.controller }} reconcile taking >30s"
 ```
+
+## Cloud Scan Metrics
+
+These metrics track cloud security scanning performed via `CloudAccountConfig` resources:
+
+| Metric | Type | Labels | What It Tells You |
+|---|---|---|---|
+| `zelyo_operator_cloudscan_completed_total` | Counter | `account`, `provider`, `namespace` | How many cloud scans have completed, broken down by cloud account, provider (aws/gcp/azure), and namespace |
+| `zelyo_operator_cloudscan_findings` | Gauge | `account`, `provider`, `category` | Current findings from the most recent cloud scan, by account, provider, and scanner category (cspm/ciem/network/dspm/supplychain/cicd) |
+| `zelyo_operator_cloudscan_resources_scanned_total` | Counter | `provider`, `category` | Total cloud resources evaluated, by provider and scanner category |
+| `zelyo_operator_cloudscan_scan_duration_seconds` | Histogram | `provider`, `category` | How long cloud scans take to complete, by provider and scanner category |
+
+**Example queries:**
+
+```promql
+# Cloud scans completed in the last 24 hours
+increase(zelyo_operator_cloudscan_completed_total[24h])
+
+# Critical CSPM findings across all AWS accounts
+zelyo_operator_cloudscan_findings{provider="aws", category="cspm"} > 0
+
+# Total cloud resources scanned per provider
+sum by (provider) (zelyo_operator_cloudscan_resources_scanned_total)
+
+# p95 cloud scan duration by category
+histogram_quantile(0.95, rate(zelyo_operator_cloudscan_scan_duration_seconds_bucket[1h]))
+
+# Cloud scan completion rate by provider
+rate(zelyo_operator_cloudscan_completed_total[1h])
+```
+
+### Cloud Scan Alerting Rules
+
+```yaml
+groups:
+  - name: zelyo-operator-cloud
+    rules:
+      - alert: ZelyoCloudScanCriticalFindings
+        expr: zelyo_operator_cloudscan_findings{category="cspm"} > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical cloud security findings in {{ $labels.account }} ({{ $labels.provider }})"
+          description: "{{ $labels.category }} found {{ $value }} findings in cloud account {{ $labels.account }}"
+
+      - alert: ZelyoCloudScanSlow
+        expr: histogram_quantile(0.99, rate(zelyo_operator_cloudscan_scan_duration_seconds_bucket[5m])) > 300
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cloud scan for {{ $labels.provider }}/{{ $labels.category }} taking >5m"
+
+      - alert: ZelyoCloudScanNotRunning
+        expr: increase(zelyo_operator_cloudscan_completed_total[8h]) == 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "No cloud scans completed for {{ $labels.account }} in the last 8 hours"
+```

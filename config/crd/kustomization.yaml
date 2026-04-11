@@ -11,6 +11,7 @@ resources:
 - bases/zelyo.ai_notificationchannels.yaml
 - bases/zelyo.ai_zelyoconfigs.yaml
 - bases/zelyo.ai_gitopsrepositories.yaml
+- bases/zelyo.ai_cloudaccountconfigs.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

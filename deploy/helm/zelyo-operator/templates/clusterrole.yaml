@@ -91,6 +91,7 @@ rules:
       - notificationchannels
       - zelyoconfigs
       - gitopsrepositories
+      - cloudaccountconfigs
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
   # Zelyo Operator CRD statuses
@@ -105,6 +106,7 @@ rules:
       - notificationchannels/status
       - zelyoconfigs/status
       - gitopsrepositories/status
+      - cloudaccountconfigs/status
     verbs: ["get", "update", "patch"]
 
   # Leader election

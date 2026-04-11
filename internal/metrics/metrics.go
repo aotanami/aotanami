@@ -262,6 +262,53 @@ var (
 		},
 		[]string{"channel_type", "severity"},
 	)
+
+	// ── Cloud Scan Metrics ──
+
+	// CloudScanCompletedTotal counts completed cloud account scans.
+	CloudScanCompletedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "zelyo_operator",
+			Subsystem: "cloudscan",
+			Name:      "completed_total",
+			Help:      "Total number of completed cloud account scans.",
+		},
+		[]string{"account", "provider", "namespace"},
+	)
+
+	// CloudScanFindingsGauge tracks the latest findings from a cloud scan by category.
+	CloudScanFindingsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "zelyo_operator",
+			Subsystem: "cloudscan",
+			Name:      "findings",
+			Help:      "Number of findings from the last cloud scan by category.",
+		},
+		[]string{"account", "provider", "category"},
+	)
+
+	// CloudResourcesScannedTotal counts cloud resources evaluated.
+	CloudResourcesScannedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "zelyo_operator",
+			Subsystem: "cloudscan",
+			Name:      "resources_scanned_total",
+			Help:      "Total cloud resources scanned by provider and category.",
+		},
+		[]string{"provider", "category"},
+	)
+
+	// CloudScanDuration tracks the duration of cloud scan operations.
+	CloudScanDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "zelyo_operator",
+			Subsystem: "cloudscan",
+			Name:      "scan_duration_seconds",
+			Help:      "Duration of cloud scan operations in seconds.",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"provider", "category"},
+	)
 )
 
 func init() { //nolint:gochecknoinits // standard practice for prometheus
@@ -288,5 +335,10 @@ func init() { //nolint:gochecknoinits // standard practice for prometheus
 		DriftDetectedTotal,
 		CompliancePctGauge,
 		NotifierDeliveredTotal,
+		// Cloud scan metrics.
+		CloudScanCompletedTotal,
+		CloudScanFindingsGauge,
+		CloudResourcesScannedTotal,
+		CloudScanDuration,
 	)
 }

@@ -96,6 +96,13 @@ const (
 	// ConditionLLMKeyVerified indicates whether the LLM API key has been verified
 	// by a live probe call to the provider.
 	ConditionLLMKeyVerified = "LLMKeyVerified"
+
+	// ConditionCloudConnected indicates whether the cloud provider is reachable
+	// and credentials are valid.
+	ConditionCloudConnected = "CloudConnected"
+
+	// ConditionCloudScanCompleted indicates whether the last cloud scan completed.
+	ConditionCloudScanCompleted = "CloudScanCompleted"
 )
 
 // Condition reason constants — these explain WHY a condition is True/False.
@@ -178,6 +185,18 @@ const (
 
 	// ReasonLLMKeyInvalid indicates the LLM API key probe failed.
 	ReasonLLMKeyInvalid = "LLMKeyInvalid"
+
+	// ReasonCloudAuthSuccess indicates successful cloud provider authentication.
+	ReasonCloudAuthSuccess = "CloudAuthSuccess"
+
+	// ReasonCloudAuthFailed indicates cloud provider authentication failure.
+	ReasonCloudAuthFailed = "CloudAuthFailed"
+
+	// ReasonCloudScanSuccess indicates a cloud scan completed successfully.
+	ReasonCloudScanSuccess = "CloudScanSuccess"
+
+	// ReasonCloudScanFailed indicates a cloud scan failed.
+	ReasonCloudScanFailed = "CloudScanFailed"
 )
 
 // Event reason constants for Kubernetes event recording.
@@ -214,6 +233,15 @@ const (
 
 	// EventReasonDiscoveryComplete is emitted when auto-discovery finishes.
 	EventReasonDiscoveryComplete = "DiscoveryComplete"
+
+	// EventReasonCloudScanStarted is emitted when a cloud scan begins.
+	EventReasonCloudScanStarted = "CloudScanStarted"
+
+	// EventReasonCloudScanCompleted is emitted when a cloud scan finishes.
+	EventReasonCloudScanCompleted = "CloudScanCompleted"
+
+	// EventReasonCloudAuthError is emitted when cloud authentication fails.
+	EventReasonCloudAuthError = "CloudAuthError"
 )
 
 // Severity constants used across SecurityPolicy, ScanReport, and NotificationChannel.
@@ -225,7 +253,7 @@ const (
 	SeverityInfo     = "info"
 )
 
-// SecurityRule type constants.
+// SecurityRule type constants — Kubernetes scanners.
 const (
 	RuleTypeContainerSecurityContext = "container-security-context"
 	RuleTypeRBACAudit                = "rbac-audit"
@@ -235,4 +263,76 @@ const (
 	RuleTypeSecretsExposure          = "secrets-exposure"
 	RuleTypeResourceLimits           = "resource-limits"
 	RuleTypePrivilegeEscalation      = "privilege-escalation"
+)
+
+// Cloud Security Rule type constants — CSPM (Cloud Security Posture Management).
+const (
+	RuleTypeCSPMPublicS3        = "cspm-public-s3-bucket"
+	RuleTypeCSPMUnencryptedEBS  = "cspm-unencrypted-ebs"
+	RuleTypeCSPMCloudTrail      = "cspm-cloudtrail-disabled"
+	RuleTypeCSPMRDSEncryption   = "cspm-rds-encryption"
+	RuleTypeCSPMKMSRotation     = "cspm-kms-rotation"
+	RuleTypeCSPMVPCFlowLogs     = "cspm-vpc-flow-logs"
+	RuleTypeCSPMS3Versioning    = "cspm-s3-versioning"
+	RuleTypeCSPMSecretsRotation = "cspm-secrets-rotation"
+)
+
+// Cloud Security Rule type constants — CIEM (Cloud Identity & Entitlement Management).
+const (
+	RuleTypeCIEMOverprivilegedIAM = "ciem-overprivileged-iam"
+	RuleTypeCIEMUnusedAccessKeys  = "ciem-unused-access-keys"
+	RuleTypeCIEMRootAccessKeys    = "ciem-root-access-keys"
+	RuleTypeCIEMWildcardPerms     = "ciem-wildcard-permissions"
+	RuleTypeCIEMCrossAccountTrust = "ciem-cross-account-trust"
+	RuleTypeCIEMInactiveUsers     = "ciem-inactive-users"
+	RuleTypeCIEMMFANotEnforced    = "ciem-mfa-not-enforced"
+	RuleTypeCIEMLongLivedKeys     = "ciem-long-lived-service-keys"
+)
+
+// Cloud Security Rule type constants — Network Security.
+const (
+	RuleTypeNetworkSSHOpen            = "network-ssh-open"
+	RuleTypeNetworkRDPOpen            = "network-rdp-open"
+	RuleTypeNetworkDBPortsExposed     = "network-db-ports-exposed"
+	RuleTypeNetworkNoNACLs            = "network-no-nacls"
+	RuleTypeNetworkUnrestrictedPeer   = "network-unrestricted-peering"
+	RuleTypeNetworkALBNotHTTPS        = "network-alb-not-https"
+	RuleTypeNetworkDefaultSGTraffic   = "network-default-sg-traffic"
+	RuleTypeNetworkUnrestrictedEgress = "network-unrestricted-egress"
+)
+
+// Cloud Security Rule type constants — DSPM (Data Security Posture Management).
+const (
+	RuleTypeDSPMS3PublicACLs         = "dspm-s3-public-acls"
+	RuleTypeDSPMS3NoEncryption       = "dspm-s3-no-encryption"
+	RuleTypeDSPMDynamoDBEncryption   = "dspm-dynamodb-encryption"
+	RuleTypeDSPMRDSPublic            = "dspm-rds-public"
+	RuleTypeDSPMEBSSnapshotsPublic   = "dspm-ebs-snapshots-public"
+	RuleTypeDSPMCloudWatchEncryption = "dspm-cloudwatch-unencrypted"
+	RuleTypeDSPMS3ObjectLock         = "dspm-s3-object-lock"
+	RuleTypeDSPMNoDataTags           = "dspm-no-data-tags"
+)
+
+// Cloud Security Rule type constants — Supply Chain Security.
+const (
+	RuleTypeSupplyChainECRCriticalCVEs  = "supplychain-ecr-critical-cves"
+	RuleTypeSupplyChainECRScanOnPush    = "supplychain-ecr-scan-on-push"
+	RuleTypeSupplyChainStaleImages      = "supplychain-base-images-stale"
+	RuleTypeSupplyChainHardcodedSecrets = "supplychain-hardcoded-secrets-env"
+	RuleTypeSupplyChainUnsignedImages   = "supplychain-unsigned-images"
+	RuleTypeSupplyChainThirdPartyCVEs   = "supplychain-third-party-cves"
+	RuleTypeSupplyChainNoSBOM           = "supplychain-no-sbom"
+	RuleTypeSupplyChainNotScanned       = "supplychain-images-not-scanned"
+)
+
+// Cloud Security Rule type constants — CI/CD Pipeline Security.
+const (
+	RuleTypeCICDHardcodedSecrets     = "cicd-hardcoded-secrets-repo"
+	RuleTypeCICDUnencryptedArtifacts = "cicd-unencrypted-artifacts"
+	RuleTypeCICDSecretsPlaintext     = "cicd-secrets-plaintext-env"
+	RuleTypeCICDNoApprovalGate       = "cicd-no-manual-approval"
+	RuleTypeCICDOverprivCodeBuild    = "cicd-overprivileged-codebuild"
+	RuleTypeCICDUnmanagedImages      = "cicd-unmanaged-build-images"
+	RuleTypeCICDArtifactNoEncrypt    = "cicd-artifact-repo-no-encryption"
+	RuleTypeCICDNoAuditLogging       = "cicd-no-audit-logging"
 )

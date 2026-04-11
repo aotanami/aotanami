@@ -2,8 +2,8 @@ apiVersion: v2
 name: zelyo-operator
 description: Zelyo Operator — Autonomous AI Security Agent for Kubernetes — Detect, Correlate, Fix
 type: application
-version: 0.0.3
-appVersion: "0.0.3"
+version: 1.0.0
+appVersion: "1.0.0"
 kubeVersion: ">=1.26.0-0"
 home: https://github.com/zelyo-ai/zelyo-operator
 icon: https://raw.githubusercontent.com/zelyo-ai/zelyo/main/docs/assets/icon.png
@@ -72,8 +72,20 @@ annotations:
       version: v1alpha1
       name: gitopsrepositories.zelyo.ai
       description: GitOps repository connections
+    - kind: CloudAccountConfig
+      version: v1alpha1
+      name: cloudaccountconfigs.zelyo.ai
+      description: Cloud provider account onboarding for multi-cloud scanning
   artifacthub.io/changes: |
     - kind: added
-      description: Initial release with 9 CRDs and 8 built-in security scanners
+      description: "CloudAccountConfig CRD: onboard AWS/GCP/Azure accounts for cloud security scanning"
+    - kind: added
+      description: "48 cloud security scanners across CSPM, CIEM, Network, DSPM, Supply Chain, CI/CD Pipeline"
+    - kind: added
+      description: "SOC 2, PCI-DSS, and HIPAA compliance controls mapped to cloud findings"
+    - kind: added
+      description: "Cloud IaC remediation (Terraform/CloudFormation) via LLM-powered fix generation"
+    - kind: added
+      description: "AWS SDK v2 integration with IRSA, Workload Identity, and Pod Identity support"
   artifacthub.io/containsSecurityUpdates: "false"
   artifacthub.io/prerelease: "true"

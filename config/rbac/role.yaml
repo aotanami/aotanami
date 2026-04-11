@@ -60,6 +60,7 @@ rules:
 - apiGroups:
   - zelyo.ai
   resources:
+  - cloudaccountconfigs
   - clusterscans
   - costpolicies
   - gitopsrepositories
@@ -80,6 +81,7 @@ rules:
 - apiGroups:
   - zelyo.ai
   resources:
+  - cloudaccountconfigs/finalizers
   - clusterscans/finalizers
   - costpolicies/finalizers
   - gitopsrepositories/finalizers
@@ -94,6 +96,7 @@ rules:
 - apiGroups:
   - zelyo.ai
   resources:
+  - cloudaccountconfigs/status
   - clusterscans/status
   - costpolicies/status
   - gitopsrepositories/status

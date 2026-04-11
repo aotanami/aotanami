@@ -152,7 +152,12 @@ func (e *Engine) SetConfig(cfg EngineConfig) {
 
 // GeneratePlan uses the LLM to analyze a finding and produce fix recommendations.
 func (e *Engine) GeneratePlan(ctx context.Context, finding *scanner.Finding) (*Plan, error) {
-	prompt := buildRemediationPrompt(finding)
+	var prompt string
+	if isCloudFinding(finding.RuleType) {
+		prompt = buildCloudRemediationPrompt(finding)
+	} else {
+		prompt = buildRemediationPrompt(finding)
+	}
 
 	e.mu.RLock()
 	client := e.llmClient
@@ -294,6 +299,39 @@ You MUST respond with a JSON object in this exact format:
 The operation field must be one of: "create", "update", "delete".
 The risk_score field is 0-100 (0 = safe, 100 = dangerous).
 Respond ONLY with the JSON object, no additional text.`
+
+// isCloudFinding returns true if the rule type indicates a cloud security finding.
+func isCloudFinding(ruleType string) bool {
+	prefixes := []string{"cspm-", "ciem-", "network-", "dspm-", "supplychain-", "cicd-"}
+	for _, p := range prefixes {
+		if len(ruleType) > len(p) && ruleType[:len(p)] == p {
+			return true
+		}
+	}
+	return false
+}
+
+func buildCloudRemediationPrompt(f *scanner.Finding) string {
+	return fmt.Sprintf(`Analyze this cloud security finding and provide an Infrastructure-as-Code fix as JSON:
+
+**Rule Type:** %s
+**Severity:** %s
+**Title:** %s
+**Description:** %s
+**Cloud Resource:** %s (Region: %s, Name: %s)
+**Recommendation:** %s
+
+Provide a fix using one of these IaC formats:
+1. Terraform HCL patch (preferred for Terraform-managed infrastructure)
+2. CloudFormation YAML patch (for CFN-managed infrastructure)
+3. AWS CLI remediation command (for immediate manual fix)
+
+Use the same JSON response schema from the system prompt.
+Set file_path to the Terraform module path (e.g., "terraform/modules/s3/main.tf") or
+CloudFormation template path. Include both the IaC fix and the equivalent AWS CLI command
+in the analysis field.`, f.RuleType, f.Severity, f.Title, f.Description,
+		f.ResourceKind, f.ResourceNamespace, f.ResourceName, f.Recommendation)
+}
 
 func buildRemediationPrompt(f *scanner.Finding) string {
 	return fmt.Sprintf(`Analyze this Kubernetes security finding and provide a fix as JSON:

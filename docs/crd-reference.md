@@ -1,6 +1,6 @@
 # CRD Reference
 
-Complete field reference for all 9 Zelyo Operator Custom Resource Definitions, including both `spec` and `status` fields.
+Complete field reference for all 10 Zelyo Operator Custom Resource Definitions, including both `spec` and `status` fields.
 
 ## SecurityPolicy
 
@@ -478,3 +478,127 @@ kubectl get securitypolicy my-policy -o jsonpath='{.status.conditions}' | jq .
 # Or use describe
 kubectl describe securitypolicy my-policy
 ```
+
+---
+
+## CloudAccountConfig
+
+**What it does**: Onboards an AWS, GCP, or Azure cloud account for multi-cloud security scanning. The controller authenticates to the cloud provider, runs the enabled scanner categories, and produces ScanReport resources with findings — just like Kubernetes scans.
+
+### Spec
+
+```yaml
+apiVersion: zelyo.ai/v1alpha1
+kind: CloudAccountConfig
+metadata:
+  name: aws-production
+  namespace: zelyo-system
+spec:
+  # Cloud provider to scan
+  # Options: aws | gcp | azure
+  provider: aws
+
+  # Cloud account identifier
+  # AWS: 12-digit account ID, GCP: project ID, Azure: subscription ID
+  accountId: "123456789012"
+
+  # Regions to scan (provider-specific region codes)
+  regions:
+    - us-east-1
+    - us-west-2
+
+  # Authentication configuration
+  authentication:
+    method: irsa                              # aws: irsa | podIdentity | static
+                                              # gcp: workloadIdentity | static
+                                              # azure: podIdentity | static
+    roleArn: "arn:aws:iam::123456789012:role/ZelyoSecurityAudit"  # AWS IRSA/Pod Identity
+    # gcpServiceAccount: "zelyo@project.iam.gserviceaccount.com"  # GCP Workload Identity
+    # azureClientId: "00000000-0000-0000-0000-000000000000"       # Azure Pod Identity
+    credentialSecret: ""                      # Secret with static credentials (if method=static)
+
+  # Which cloud scanner categories to enable
+  # Options: cspm | ciem | network | dspm | supplychain | cicd
+  scanCategories:
+    - cspm
+    - ciem
+    - network
+    - dspm
+    - supplychain
+    - cicd
+
+  # Cron schedule for periodic scans (empty = scan once on creation)
+  schedule: "0 */4 * * *"
+
+  # Minimum severity to report. Findings below this level are filtered out.
+  # Options: critical | high | medium | low | info
+  severity: medium
+
+  # Compliance frameworks to evaluate against cloud findings
+  complianceFrameworks: ["soc2", "pci-dss", "hipaa"]
+
+  # Where to send alerts
+  notificationChannels: ["slack-alerts"]
+
+  # Maximum number of ScanReports to retain
+  historyLimit: 30
+
+  # Pause scanning
+  suspend: false
+```
+
+**Available scan categories**: `cspm`, `ciem`, `network`, `dspm`, `supplychain`, `cicd`
+
+**Available authentication methods**:
+
+| Provider | Method | Description |
+|---|---|---|
+| AWS | `irsa` | IAM Roles for Service Accounts (EKS) |
+| AWS | `podIdentity` | EKS Pod Identity |
+| AWS | `static` | Access key/secret in a Kubernetes Secret |
+| GCP | `workloadIdentity` | GKE Workload Identity Federation |
+| GCP | `static` | Service account JSON key in a Kubernetes Secret |
+| Azure | `podIdentity` | Azure AD Pod Identity / Workload Identity |
+| Azure | `static` | Client ID/secret in a Kubernetes Secret |
+
+### Status
+
+```yaml
+status:
+  phase: Active                               # Pending | Active | Scanning | Completed | Error
+  observedGeneration: 2
+  lastScanTime: "2026-03-03T16:00:00Z"        # When the last scan started
+  completedAt: "2026-03-03T16:03:45Z"         # When the last scan finished
+  findingsCount: 23                           # Total findings from last scan
+  resourcesScanned: 412                       # Total cloud resources evaluated
+  lastReportName: aws-production-1709481234   # Name of the latest ScanReport
+  categorySummary:                            # Findings breakdown by category
+    cspm: 5
+    ciem: 8
+    network: 4
+    dspm: 3
+    supplychain: 2
+    cicd: 1
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: ReconcileSuccess
+      message: "Cloud account onboarded and scanning"
+      lastTransitionTime: "2026-03-03T16:00:00Z"
+      observedGeneration: 2
+    - type: Authenticated
+      status: "True"
+      reason: CredentialsValid
+      message: "Successfully authenticated to AWS account 123456789012"
+    - type: ScanCompleted
+      status: "True"
+      reason: ScanSuccess
+      message: "Scan completed: 23 findings across 412 resources"
+```
+
+**Key behaviors**:
+
+- Authentication is validated on creation and before each scan. If credentials expire or are revoked, the controller sets `Authenticated = False` and emits a warning event.
+- Cloud scans produce `ScanReport` resources owned by the `CloudAccountConfig`, automatically cleaned up when the parent is deleted (via finalizer).
+- When `schedule` is set, the controller triggers scans at the specified cron interval. When empty, a single scan runs on resource creation.
+- The `historyLimit` field controls how many ScanReports are retained. Older reports are garbage collected after each scan.

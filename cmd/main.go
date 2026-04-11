@@ -39,6 +39,7 @@ import (
 
 	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 	"github.com/zelyo-ai/zelyo-operator/internal/anomaly"
+	"github.com/zelyo-ai/zelyo-operator/internal/cloudscanner"
 	"github.com/zelyo-ai/zelyo-operator/internal/controller"
 	"github.com/zelyo-ai/zelyo-operator/internal/correlator"
 	"github.com/zelyo-ai/zelyo-operator/internal/dashboard"
@@ -191,9 +192,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize the scanner registry with all built-in scanners.
+	// Initialize the scanner registry with all built-in K8s scanners.
 	scannerRegistry := scanner.DefaultRegistry()
 	setupLog.Info("Scanner registry initialized", "registeredScanners", scannerRegistry.List())
+
+	// Initialize the cloud scanner registry with all 48 cloud security checks.
+	cloudScannerRegistry := cloudscanner.DefaultRegistry()
+	setupLog.Info("Cloud scanner registry initialized",
+		"registeredCloudScanners", cloudScannerRegistry.Count())
 
 	// ── Initialize the Agentic Pipeline (shared brain instances) ──
 	//
@@ -288,6 +294,15 @@ func main() {
 		RemediationEngine: remediationEngine,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "ZelyoConfig")
+		os.Exit(1)
+	}
+	if err := (&controller.CloudAccountConfigReconciler{
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		Recorder:             mgr.GetEventRecorderFor("cloudaccountconfig-controller"), //nolint:staticcheck,nolintlint
+		CloudScannerRegistry: cloudScannerRegistry,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "CloudAccountConfig")
 		os.Exit(1)
 	}
 	if err := (&controller.GitOpsRepositoryReconciler{

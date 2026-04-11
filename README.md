@@ -7,8 +7,8 @@
 <h1 align="center">Zelyo Operator</h1>
 
 <p align="center">
-  <strong>Autonomous AI Security Agent for Kubernetes</strong><br/>
-  <sub>Others detect. Zelyo detects AND fixes. Scans misconfigurations across 7 security layers, correlates signals with AI, and auto-generates confidence-scored GitOps PRs.</sub>
+  <strong>Autonomous AI Security Agent for Kubernetes & Multi-Cloud CNAPP</strong><br/>
+  <sub>Others detect. Zelyo detects AND fixes. 56 scanners (8 Kubernetes + 48 cloud) across Kubernetes workloads and AWS/GCP/Azure accounts, correlates signals with AI, and auto-generates confidence-scored GitOps PRs.</sub>
 </p>
 
 <p align="center">
@@ -37,13 +37,14 @@
 
 ## 🧠 What is Zelyo?
 
-**Zelyo** is an **autonomous AI security agent for Kubernetes**. It doesn't just alert — it **detects**, **correlates**, and **fixes**, continuously protecting your production clusters while you sleep. Non-destructive by design. Production-safe by default. Every decision logged and auditable.
+**Zelyo** is an **autonomous AI security agent for Kubernetes and multi-cloud environments**. It doesn't just alert — it **detects**, **correlates**, and **fixes**, continuously protecting your production clusters and cloud accounts while you sleep. Non-destructive by design. Production-safe by default. Every decision logged and auditable.
 
 ### Key Features
-- 🔒 **Continuous Security Scanning**: 8 scanners across Identity, Posture, Runtime, Network, Workload, Data, and Compliance layers.
+- 🔒 **Continuous Security Scanning**: 56 scanners (8 Kubernetes + 48 cloud) across Identity, Posture, Runtime, Network, Workload, Data, and Compliance layers plus CSPM, CIEM, Network Security, DSPM, Supply Chain, and CI/CD Pipeline for cloud.
+- ☁️ **Multi-Cloud CNAPP**: Onboard AWS, GCP, and Azure accounts via CloudAccountConfig CRD. 48 cloud security checks across 6 categories with native SDK integration (IRSA, Workload Identity, Pod Identity).
 - 🧠 **AI-Powered Threat Correlation**: Connects signals across layers — overprivileged role + exposed service = attack chain.
-- 🔧 **Automated Remediation**: Auto-generates code fixes as GitOps PRs with confidence scores. Every fix is a PR. Every decision is logged.
-- 📋 **Compliance-Grade Evidence**: Maps findings to SOC 2, PCI-DSS, HIPAA, NIST 800-53, and CIS Benchmarks with audit trail.
+- 🔧 **Automated Remediation**: Auto-generates code fixes as GitOps PRs with confidence scores, including cloud IaC remediation (Terraform/CloudFormation) via LLM. Every fix is a PR. Every decision is logged.
+- 📋 **Compliance-Grade Evidence**: Maps findings to SOC 2, PCI-DSS, HIPAA, NIST 800-53, and CIS Benchmarks with audit trail — now including cloud-specific compliance controls.
 - 🛡️ **Production-Safe by Default**: Read-only cluster access. Non-destructive by design.
 
 ## Use Cases
@@ -64,7 +65,7 @@ That's Zelyo. All automated, all autonomous, all with **read-only cluster access
 <td width="50%">
 
 ### 🔒 Security Scanning
-Continuously scans for RBAC issues, image CVEs, PodSecurity violations, secrets exposure, and network policy gaps.
+56 scanners continuously check for RBAC issues, image CVEs, PodSecurity violations, secrets exposure, network policy gaps, and 48 cloud security checks (CSPM, CIEM, DSPM, Network, Supply Chain, CI/CD).
 
 ### 🧠 Anomaly Detection
 Builds σ-deviation baselines for pod restarts, resource usage, and error rates — detects anomalies without static thresholds.
@@ -79,13 +80,13 @@ Detects idle workloads, recommends rightsizing, and assesses spot-instance readi
 <td width="50%">
 
 ### 🛡️ Compliance Auditing
-Maps scan findings to CIS Kubernetes Benchmark controls, generates audit-ready reports with evidence.
+Maps scan findings to CIS Kubernetes Benchmark, SOC 2, PCI-DSS, and HIPAA controls — including cloud-specific compliance checks. Generates audit-ready reports with evidence.
 
-### 🔗 Incident Correlation
-Groups related events within time windows into unified incidents for LLM diagnosis — no more alert fatigue.
+### ☁️ Cloud Security (CNAPP)
+Onboard AWS/GCP/Azure accounts via CloudAccountConfig. 48 checks across CSPM, CIEM, Network Security, DSPM, Supply Chain, and CI/CD Pipeline categories.
 
 ### 🤖 Auto-Remediation
-LLM generates structured JSON fix plans, validates them, and opens GitOps PRs with risk scores.
+LLM generates structured JSON fix plans for Kubernetes YAML and cloud IaC (Terraform/CloudFormation), validates them, and opens GitOps PRs with risk scores.
 
 ### 📢 On-Call Notifications
 Routes alerts to Slack, Teams, PagerDuty, Telegram, WhatsApp, and webhooks with severity filtering and deduplication.
@@ -117,7 +118,7 @@ graph LR
     ARGO -->|applied| K8S["Cluster"]
 ```
 
-1. **Detect** — SecurityPolicy scans pods across 7 security layers, MonitoringPolicy watches for anomalies, ClusterScan evaluates compliance
+1. **Detect** — SecurityPolicy scans pods across 7 security layers, CloudAccountConfig scans cloud accounts across 6 categories, MonitoringPolicy watches for anomalies, ClusterScan evaluates compliance
 2. **Correlate** — The correlator engine groups related signals within a 5-minute window into unified security findings (e.g., overprivileged role + exposed pod = lateral movement risk)
 3. **Reason** — The LLM analyzes the finding with full context and generates a confidence-scored JSON fix plan
 4. **Fix** — The remediation engine validates the plan, and the GitHub engine opens a production-safe PR with the fix
@@ -303,17 +304,18 @@ spec:
 
 ## 📦 CRD Reference
 
-Zelyo Operator uses **9 Custom Resource Definitions** to declaratively configure every aspect of the AI Security Agent:
+Zelyo Operator uses **10 Custom Resource Definitions** to declaratively configure every aspect of the AI Security Agent:
 
 | CRD | Purpose |
 |---|---|
 | `ZelyoConfig` | Global configuration — LLM provider, API keys, feature flags |
 | `SecurityPolicy` | Defines which security rules to scan for and which namespaces to target |
+| `CloudAccountConfig` | Onboards AWS/GCP/Azure cloud accounts for multi-cloud security scanning |
 | `MonitoringPolicy` | Configures real-time monitoring — event filters, anomaly detection, alerts |
 | `RemediationPolicy` | Controls auto-remediation — severity filter, dry-run, max PRs, GitOps target |
 | `GitOpsRepository` | Onboards a Git repository for drift detection and PR submission |
 | `ClusterScan` | Schedules cluster-wide security and compliance scans |
-| `ScanReport` | Stores individual scan results (auto-created by ClusterScan) |
+| `ScanReport` | Stores individual scan results (auto-created by ClusterScan or CloudAccountConfig) |
 | `CostPolicy` | Configures cost optimization rules and thresholds |
 | `NotificationChannel` | Configures alert delivery — Slack, Teams, PagerDuty, webhooks |
 
@@ -328,7 +330,8 @@ Zelyo Operator uses **9 Custom Resource Definitions** to declaratively configure
 
 | Package | Role in the Security Pipeline |
 |---|---|
-| `internal/scanner` | 8 security scanners (RBAC, images, PodSecurity, secrets, network, supply chain) |
+| `internal/scanner` | 8 Kubernetes security scanners (RBAC, images, PodSecurity, secrets, network, supply chain) |
+| `internal/cloudscanner` | 48 cloud security scanners across CSPM, CIEM, Network, DSPM, Supply Chain, and CI/CD Pipeline |
 | `internal/anomaly` | Statistical baseline engine — σ-deviation anomaly detection with sliding windows |
 | `internal/correlator` | Time-windowed event correlation — groups alerts into unified incidents |
 | `internal/compliance` | Maps findings to CIS/NIST/SOC2 controls, generates audit-ready reports |
@@ -339,7 +342,7 @@ Zelyo Operator uses **9 Custom Resource Definitions** to declaratively configure
 | `internal/gitops` | GitOps engine interface + ArgoCD/Flux/Kustomize/Helm source discovery |
 | `internal/notifier` | Multi-channel notifications with severity filtering, dedup, and rate limiting |
 | `internal/monitor` | Real-time Kubernetes resource watcher with event dispatch |
-| `internal/controller` | 7 Kubernetes controllers orchestrating the Detect → Correlate → Fix pipeline |
+| `internal/controller` | 10 Kubernetes controllers orchestrating the Detect → Correlate → Fix pipeline |
 
 </details>
 
@@ -401,8 +404,8 @@ make docker-push IMG=ghcr.io/zelyo-ai/zelyo-operator:dev
 | [Getting Started](docs/quickstart.md) | Step-by-step setup: clone, cluster, first policy, first scan |
 | [Quick Start Recipes](docs/quickstart.md) | Copy-paste YAML recipes for common use cases |
 | [Architecture](docs/architecture.md) | System design, controllers, scanner engine, data flow |
-| [Security Scanners](docs/scanners.md) | All 8 scanners: what they check, severity levels, example policies |
-| [CRD Reference](docs/crd-reference.md) | Complete field reference for all 9 CRDs (spec + status) |
+| [Security Scanners](docs/scanners.md) | All 56 scanners (8 Kubernetes + 48 cloud): what they check, severity levels, example policies |
+| [CRD Reference](docs/crd-reference.md) | Complete field reference for all 10 CRDs (spec + status) |
 | [Monitoring & Metrics](docs/metrics.md) | Prometheus metrics, PromQL queries, Grafana dashboards, alerting rules |
 | [LLM Configuration](docs/llm-configuration.md) | Provider setup, token budgets, and cost optimization |
 | [GitOps Onboarding](docs/gitops-onboarding.md) | How to connect your GitOps repositories for auto-remediation |

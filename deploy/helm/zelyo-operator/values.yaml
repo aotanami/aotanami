@@ -49,7 +49,15 @@ autoscaling:
 serviceAccount:
   # -- Create a ServiceAccount
   create: true
-  # -- Annotations (e.g. for workload identity: azure.workload.identity/client-id)
+  # -- Annotations for the ServiceAccount.
+  # For AWS IRSA (CloudAccountConfig with method: irsa):
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/zelyo-cloud-scanner
+  # For AWS EKS Pod Identity (CloudAccountConfig with method: pod-identity):
+  #   eks.amazonaws.com/pod-identity-association: arn:aws:iam::123456789012:role/zelyo-cloud-scanner
+  # For GCP Workload Identity:
+  #   iam.gke.io/gcp-service-account: zelyo@my-project.iam.gserviceaccount.com
+  # For Azure Workload Identity:
+  #   azure.workload.identity/client-id: <client-id>
   annotations: {}
   # -- Name of the ServiceAccount (generated if not set)
   name: ""

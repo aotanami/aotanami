@@ -9,9 +9,10 @@ This document details the internal intelligence architecture.
 ```mermaid
 graph TB
     subgraph "Observe"
-        SC["SecurityPolicy Controller<br/>security scanning"]
+        SC["SecurityPolicy Controller<br/>K8s pod scanning"]
         MC["MonitoringPolicy Controller<br/>pod restarts, events"]
         CS["ClusterScan Controller<br/>scheduled compliance scans"]
+        CA["CloudAccountConfig Controller<br/>cloud API scanning"]
     end
 
     subgraph "Reason"
@@ -29,6 +30,7 @@ graph TB
     end
 
     SC -->|findings| CE
+    CA -->|cloud findings| CE
     MC -->|pod metrics| AD
     AD -->|anomalies| CE
     CS -->|findings| CF
@@ -103,10 +105,11 @@ Maps security findings to industry compliance controls, generating **audit-ready
 
 | Feature | Implementation |
 |---|---|
-| **CIS Kubernetes Benchmark** | 15 controls mapped to scanner rule types (pod-security, RBAC, secrets, etc.) |
+| **CIS Kubernetes Benchmark** | 15 K8s controls mapped to scanner rule types (pod-security, RBAC, secrets, etc.) |
+| **SOC 2 / PCI-DSS / HIPAA** | 30 cloud controls mapped to CSPM, CIEM, Network, DSPM, Supply Chain, and CI/CD rule types |
 | **Finding Evaluation** | `EvaluateFindings()` maps findings to controls via `RelatedRuleTypes`, attaches evidence |
-| **Multi-Framework** | Architecture supports CIS, NIST 800-53, SOC 2, PCI-DSS, HIPAA, ISO 27001 |
-| **ClusterScan Integration** | After every scan, evaluates CIS compliance and emits `ComplianceViolation` Kubernetes events |
+| **Multi-Framework** | CIS K8s, NIST 800-53, SOC 2, PCI-DSS, HIPAA, ISO 27001 |
+| **ClusterScan + Cloud Integration** | After every K8s or cloud scan, evaluates compliance and emits events |
 
 ### 6. Live Drift Detection (`internal/drift`)
 
@@ -147,14 +150,17 @@ The reasoning core. Built for resilient, cost-effective, 24/7 autonomous operati
 
 ## Controller Orchestration
 
-The AI Security Agent's autonomy lives in the **7 Kubernetes controllers** that wire the pipeline together:
+The AI Security Agent's autonomy lives in the **10 Kubernetes controllers** that wire the pipeline together:
 
 | Controller | Detect | Correlate | Fix |
 |---|---|---|---|
-| `SecurityPolicy` | Scans pods for violations | Feeds findings into correlator | — |
+| `SecurityPolicy` | Scans K8s pods for violations | Feeds findings into correlator | — |
+| `CloudAccountConfig` | Scans cloud accounts (48 checks) | Evaluates SOC2/PCI-DSS/HIPAA | Creates ScanReport CRs |
 | `MonitoringPolicy` | Watches pod restart counts | Feeds into anomaly detector → correlator | — |
 | `RemediationPolicy` | — | Queries correlator for open incidents | Generates LLM plan → opens GitOps PR |
-| `ClusterScan` | Runs scheduled security scans | Evaluates CIS compliance | Creates ScanReport CRs |
+| `ClusterScan` | Runs scheduled K8s security scans | Evaluates CIS compliance | Creates ScanReport CRs |
+| `ScanReport` | Stores scan results | — | — |
+| `NotificationChannel` | — | — | Routes alerts to Slack, Teams, PagerDuty |
 | `GitOpsRepository` | Discovers repo structure | — | Provides Git context for remediation |
 | `CostPolicy` | Analyzes resource utilization | Identifies optimization opportunities | — |
 | `ZelyoConfig` | — | — | Configures global settings |
