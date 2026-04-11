@@ -124,9 +124,9 @@ func (r *CloudAccountConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	// ── Validate and build cloud credentials ──
-	awsClients, err := r.buildCloudClients(ctx, account)
+	credConfig, err := r.buildCredentialConfig(ctx, account)
 	if err != nil {
-		log.Error(err, "Failed to build cloud clients")
+		log.Error(err, "Failed to build cloud credentials")
 		r.Recorder.Event(account, corev1.EventTypeWarning, zelyov1alpha1.EventReasonCloudAuthError, err.Error())
 		account.Status.Phase = zelyov1alpha1.PhaseDegraded
 		conditions.MarkFalse(&account.Status.Conditions, zelyov1alpha1.ConditionCloudConnected,
@@ -136,6 +136,32 @@ func (r *CloudAccountConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	}
+
+	// Verify identity with the default region before scanning.
+	defaultClients, err := awsclients.NewClients(ctx, credConfig)
+	if err != nil {
+		log.Error(err, "Failed to create AWS clients")
+		account.Status.Phase = zelyov1alpha1.PhaseDegraded
+		conditions.MarkFalse(&account.Status.Conditions, zelyov1alpha1.ConditionCloudConnected,
+			zelyov1alpha1.ReasonCloudAuthFailed, err.Error(), account.Generation)
+		if statusErr := r.Status().Update(ctx, account); statusErr != nil {
+			return ctrl.Result{}, fmt.Errorf("updating auth error status: %w", statusErr)
+		}
+		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	}
+
+	verifiedAccount, arn, err := defaultClients.VerifyIdentity(ctx)
+	if err != nil {
+		log.Error(err, "Failed to verify AWS identity")
+		account.Status.Phase = zelyov1alpha1.PhaseDegraded
+		conditions.MarkFalse(&account.Status.Conditions, zelyov1alpha1.ConditionCloudConnected,
+			zelyov1alpha1.ReasonCloudAuthFailed, err.Error(), account.Generation)
+		if statusErr := r.Status().Update(ctx, account); statusErr != nil {
+			return ctrl.Result{}, fmt.Errorf("updating auth error status: %w", statusErr)
+		}
+		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	}
+	log.Info("AWS identity verified", "account", verifiedAccount, "arn", arn)
 
 	// Mark cloud connected.
 	conditions.MarkTrue(&account.Status.Conditions, zelyov1alpha1.ConditionCloudConnected,
@@ -152,7 +178,7 @@ func (r *CloudAccountConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, fmt.Errorf("updating running status: %w", err)
 	}
 
-	allFindings, summary, scannedRegions := r.runCloudScans(ctx, account, awsClients)
+	allFindings, summary, scannedRegions := r.runCloudScans(ctx, account, credConfig)
 
 	// ── Evaluate compliance ──
 	var complianceResults []zelyov1alpha1.ComplianceResult
@@ -173,8 +199,8 @@ func (r *CloudAccountConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 	reportFindings := toReportFindings(allFindings)
 	report := &zelyov1alpha1.ScanReport{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%d", account.Name, time.Now().Unix()),
-			Namespace: account.Namespace,
+			GenerateName: fmt.Sprintf("%s-", account.Name),
+			Namespace:    account.Namespace,
 			Labels: map[string]string{
 				"zelyo.ai/scan":      account.Name,
 				"zelyo.ai/scan-type": "cloud",
@@ -251,11 +277,12 @@ func (r *CloudAccountConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{RequeueAfter: defaultCloudScanInterval}, nil
 }
 
-// buildCloudClients creates authenticated cloud provider clients.
-func (r *CloudAccountConfigReconciler) buildCloudClients(ctx context.Context, account *zelyov1alpha1.CloudAccountConfig) (*awsclients.Clients, error) {
+// buildCredentialConfig prepares the AWS credential configuration from the CloudAccountConfig spec.
+// It resolves secrets but does not create clients — callers create per-region clients as needed.
+func (r *CloudAccountConfigReconciler) buildCredentialConfig(ctx context.Context, account *zelyov1alpha1.CloudAccountConfig) (*awsclients.CredentialConfig, error) {
 	creds := account.Spec.Credentials
 
-	cc := awsclients.CredentialConfig{
+	cc := &awsclients.CredentialConfig{
 		Method:  awsclients.CredentialMethod(creds.Method),
 		RoleARN: creds.RoleARN,
 	}
@@ -298,29 +325,16 @@ func (r *CloudAccountConfigReconciler) buildCloudClients(ctx context.Context, ac
 	}
 	cc.Region = region
 
-	clients, err := awsclients.NewClients(ctx, &cc)
-	if err != nil {
-		return nil, fmt.Errorf("creating AWS clients: %w", err)
-	}
-
-	// Verify identity.
-	verifiedAccount, arn, err := clients.VerifyIdentity(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("verifying AWS identity: %w", err)
-	}
-
-	logf.FromContext(ctx).Info("AWS identity verified",
-		"account", verifiedAccount, "arn", arn)
-
-	return clients, nil
+	return cc, nil
 }
 
 // runCloudScans executes all configured cloud scanners.
+// Regional scanners get per-region AWS clients; global scanners use the default region.
 // Individual scanner errors are logged and skipped; the function always succeeds.
 func (r *CloudAccountConfigReconciler) runCloudScans(
 	ctx context.Context,
 	account *zelyov1alpha1.CloudAccountConfig,
-	awsClients *awsclients.Clients,
+	credConfig *awsclients.CredentialConfig,
 ) ([]scanner.Finding, zelyov1alpha1.ScanSummary, []string) {
 	log := logf.FromContext(ctx)
 
@@ -337,8 +351,26 @@ func (r *CloudAccountConfigReconciler) runCloudScans(
 	}
 
 	var allFindings []scanner.Finding
-	var totalResources int32
+	var totalChecks int32
 	scannedGlobal := make(map[string]bool) // Track global scanners already run.
+
+	// Create clients for the default region (used for global scanners).
+	defaultClients, err := awsclients.NewClients(ctx, credConfig)
+	if err != nil {
+		log.Error(err, "Failed to create default-region AWS clients")
+		return nil, zelyov1alpha1.ScanSummary{}, regions
+	}
+
+	// Pre-create per-region clients.
+	regionClients := make(map[string]*awsclients.Clients)
+	for _, region := range regions {
+		rc, err := awsclients.NewClientsForRegion(ctx, credConfig, region)
+		if err != nil {
+			log.Error(err, "Failed to create AWS clients for region, skipping", "region", region)
+			continue
+		}
+		regionClients[region] = rc
+	}
 
 	for _, category := range categories {
 		scanners := r.CloudScannerRegistry.GetByCategoryAndProvider(category, account.Spec.Provider)
@@ -350,47 +382,9 @@ func (r *CloudAccountConfigReconciler) runCloudScans(
 		scanStart := time.Now()
 
 		for _, s := range scanners {
-			// Global scanners run once, not per-region.
-			if s.IsGlobal() {
-				if scannedGlobal[s.RuleType()] {
-					continue
-				}
-				scannedGlobal[s.RuleType()] = true
-
-				cc := &cloudscanner.CloudContext{
-					Provider:   account.Spec.Provider,
-					AccountID:  account.Spec.AccountID,
-					Region:     "",
-					AWSClients: awsClients,
-				}
-
-				findings, err := s.Scan(ctx, cc)
-				if err != nil {
-					log.Error(err, "Cloud scanner failed", "scanner", s.Name(), "ruleType", s.RuleType())
-					continue
-				}
-				allFindings = append(allFindings, findings...)
-				totalResources++
-			} else {
-				// Regional scanners run per-region.
-				for _, region := range regions {
-					cc := &cloudscanner.CloudContext{
-						Provider:   account.Spec.Provider,
-						AccountID:  account.Spec.AccountID,
-						Region:     region,
-						AWSClients: awsClients,
-					}
-
-					findings, err := s.Scan(ctx, cc)
-					if err != nil {
-						log.Error(err, "Cloud scanner failed",
-							"scanner", s.Name(), "ruleType", s.RuleType(), "region", region)
-						continue
-					}
-					allFindings = append(allFindings, findings...)
-					totalResources++
-				}
-			}
+			findings, checks := runSingleScanner(ctx, s, account, regions, defaultClients, regionClients, scannedGlobal)
+			allFindings = append(allFindings, findings...)
+			totalChecks += checks
 		}
 
 		zelyometrics.CloudScanDuration.WithLabelValues(account.Spec.Provider, category).
@@ -398,7 +392,7 @@ func (r *CloudAccountConfigReconciler) runCloudScans(
 	}
 
 	// Build summary.
-	summary := buildFindingsSummary(allFindings, totalResources)
+	summary := buildFindingsSummary(allFindings, totalChecks)
 
 	// Record per-category finding metrics.
 	categoryFindings := make(map[string]int)
@@ -419,11 +413,67 @@ func (r *CloudAccountConfigReconciler) runCloudScans(
 	return allFindings, summary, regions
 }
 
+// runSingleScanner executes one scanner across regions (or once for global scanners).
+func runSingleScanner(
+	ctx context.Context,
+	s cloudscanner.CloudScanner,
+	account *zelyov1alpha1.CloudAccountConfig,
+	regions []string,
+	defaultClients *awsclients.Clients,
+	regionClients map[string]*awsclients.Clients,
+	scannedGlobal map[string]bool,
+) (findings []scanner.Finding, checks int32) {
+	log := logf.FromContext(ctx)
+
+	if s.IsGlobal() {
+		if scannedGlobal[s.RuleType()] {
+			return nil, 0
+		}
+		scannedGlobal[s.RuleType()] = true
+
+		cc := &cloudscanner.CloudContext{
+			Provider:   account.Spec.Provider,
+			AccountID:  account.Spec.AccountID,
+			AWSClients: defaultClients,
+		}
+		result, err := s.Scan(ctx, cc)
+		if err != nil {
+			log.Error(err, "Cloud scanner failed", "scanner", s.Name(), "ruleType", s.RuleType())
+			return nil, 0
+		}
+		return result, 1
+	}
+
+	for _, region := range regions {
+		rc, ok := regionClients[region]
+		if !ok {
+			continue
+		}
+
+		cc := &cloudscanner.CloudContext{
+			Provider:   account.Spec.Provider,
+			AccountID:  account.Spec.AccountID,
+			Region:     region,
+			AWSClients: rc,
+		}
+		result, err := s.Scan(ctx, cc)
+		if err != nil {
+			log.Error(err, "Cloud scanner failed",
+				"scanner", s.Name(), "ruleType", s.RuleType(), "region", region)
+			continue
+		}
+		findings = append(findings, result...)
+		checks++
+	}
+
+	return findings, checks
+}
+
 // buildFindingsSummary aggregates finding counts by severity.
-func buildFindingsSummary(findings []scanner.Finding, resourcesScanned int32) zelyov1alpha1.ScanSummary {
+func buildFindingsSummary(findings []scanner.Finding, checksPerformed int32) zelyov1alpha1.ScanSummary {
 	summary := zelyov1alpha1.ScanSummary{
 		TotalFindings:    int32(len(findings)), //nolint:gosec // G115: finding count fits in int32
-		ResourcesScanned: resourcesScanned,
+		ResourcesScanned: checksPerformed,
 	}
 	for i := range findings {
 		switch findings[i].Severity {

@@ -194,6 +194,14 @@ func assumeRole(cfg aws.Config, cc *CredentialConfig) aws.Config {
 	return cfg
 }
 
+// NewClientsForRegion creates AWS clients configured for a specific region,
+// reusing the same credential config but overriding the region.
+func NewClientsForRegion(ctx context.Context, cc *CredentialConfig, region string) (*Clients, error) {
+	regionCC := *cc
+	regionCC.Region = region
+	return NewClients(ctx, &regionCC)
+}
+
 // VerifyIdentity calls STS GetCallerIdentity to verify the credentials are valid.
 // Returns the account ID and ARN on success.
 func (c *Clients) VerifyIdentity(ctx context.Context) (accountID, arn string, err error) {

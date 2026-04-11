@@ -120,6 +120,11 @@ func findUnconditionedCrossAccountPrincipals(doc trustPolicyDocument, ownAccount
 
 		principals := extractARNPrincipals(stmt.Principal)
 		for _, p := range principals {
+			// Wildcard principal without conditions is extremely dangerous.
+			if p == "*" {
+				externalAccounts = append(externalAccounts, "*")
+				continue
+			}
 			accountID := extractAccountFromARN(p)
 			if accountID != "" && accountID != ownAccountID {
 				externalAccounts = append(externalAccounts, accountID)

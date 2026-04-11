@@ -58,12 +58,39 @@ func (s *ECRCriticalCVEsScanner) Scan(ctx context.Context, cc *awsclients.CloudC
 		for _, repo := range page.Repositories {
 			repoName := awssdk.ToString(repo.RepositoryName)
 
-			// Get scan findings for the latest image in this repository.
+			// Find the most recently pushed image to check scan results.
+			imagesOut, err := cc.AWSClients.ECR.DescribeImages(ctx, &ecr.DescribeImagesInput{
+				RepositoryName: repo.RepositoryName,
+				Filter:         &ecrtypes.DescribeImagesFilter{TagStatus: ecrtypes.TagStatusTagged},
+			})
+			if err != nil {
+				slog.Warn("failed to describe images, skipping repository",
+					"repository", repoName, "error", err)
+				continue
+			}
+			if len(imagesOut.ImageDetails) == 0 {
+				continue
+			}
+
+			// Pick the most recently pushed image.
+			mostRecent := imagesOut.ImageDetails[0]
+			for i := range imagesOut.ImageDetails {
+				if imagesOut.ImageDetails[i].ImagePushedAt != nil &&
+					mostRecent.ImagePushedAt != nil &&
+					imagesOut.ImageDetails[i].ImagePushedAt.After(*mostRecent.ImagePushedAt) {
+					mostRecent = imagesOut.ImageDetails[i]
+				}
+			}
+
+			imageID := &ecrtypes.ImageIdentifier{ImageDigest: mostRecent.ImageDigest}
+			tagLabel := awssdk.ToString(mostRecent.ImageDigest)
+			if len(mostRecent.ImageTags) > 0 {
+				tagLabel = mostRecent.ImageTags[0]
+			}
+
 			scanOut, err := cc.AWSClients.ECR.DescribeImageScanFindings(ctx, &ecr.DescribeImageScanFindingsInput{
 				RepositoryName: repo.RepositoryName,
-				ImageId: &ecrtypes.ImageIdentifier{
-					ImageTag: awssdk.String("latest"),
-				},
+				ImageId:        imageID,
 			})
 			if err != nil {
 				slog.Warn("failed to get image scan findings, skipping repository",
@@ -80,8 +107,8 @@ func (s *ECRCriticalCVEsScanner) Scan(ctx context.Context, cc *awsclients.CloudC
 				findings = append(findings, scanner.Finding{
 					RuleType:          v1alpha1.RuleTypeSupplyChainECRCriticalCVEs,
 					Severity:          v1alpha1.SeverityCritical,
-					Title:             fmt.Sprintf("ECR repository %q has %d critical CVEs in latest image", repoName, criticalCount),
-					Description:       fmt.Sprintf("ECR repository %q in region %s contains images with %d critical vulnerabilities detected by ECR image scanning. Critical CVEs represent exploitable vulnerabilities that could lead to full system compromise.", repoName, cc.Region, criticalCount),
+					Title:             fmt.Sprintf("ECR repository %q has %d critical CVEs in image %s", repoName, criticalCount, tagLabel),
+					Description:       fmt.Sprintf("ECR repository %q in region %s contains image %s with %d critical vulnerabilities detected by ECR image scanning. Critical CVEs represent exploitable vulnerabilities that could lead to full system compromise.", repoName, cc.Region, tagLabel, criticalCount),
 					ResourceKind:      "ECRRepository",
 					ResourceNamespace: cc.Region,
 					ResourceName:      repoName,
