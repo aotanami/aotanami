@@ -87,7 +87,6 @@ graph LR
 ```bash
 # 1. Install cert-manager (required for webhook TLS)
 helm install cert-manager oci://quay.io/jetstack/charts/cert-manager \
-  --version v1.20.0 \
   --namespace cert-manager \
   --create-namespace \
   --set crds.enabled=true
