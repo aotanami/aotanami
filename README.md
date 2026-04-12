@@ -2,7 +2,7 @@
   <img src="assets/logo.png" alt="Zelyo" width="180" />
 </p>
 
-<h1 align="center">Zelyo Operator</h1>
+<h1 align="center">Zelyo</h1>
 
 <p align="center">
   <strong>Open-Source CNAPP — Detect, Correlate, Fix</strong><br/>
