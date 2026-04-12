@@ -1,4 +1,4 @@
-name: Release Helm Chart (OCI)
+name: Release Helm Charts (OCI)
 
 on:
   push:
@@ -11,16 +11,22 @@ permissions: {}
 env:
   REGISTRY: ghcr.io
   HELM_REGISTRY: ghcr.io/zelyo-ai/charts
-  CHART_PATH: deploy/helm/zelyo-operator
 
 jobs:
   release-helm:
-    name: Package, Push & Sign Helm Chart
+    name: Package, Push & Sign Helm Charts
     runs-on: ubuntu-latest
     permissions:
       contents: write          # GitHub Release asset upload
       packages: write          # Push to GHCR
       id-token: write          # Cosign keyless signing (Fulcio OIDC)
+    strategy:
+      matrix:
+        chart:
+          - name: zelyo-operator
+            path: deploy/helm/zelyo-operator
+          - name: zelyo-policies
+            path: deploy/helm/zelyo-policies
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
@@ -67,30 +73,30 @@ jobs:
 
       # ── Lint before packaging ──
       - name: Lint Helm chart
-        run: helm lint "${{ env.CHART_PATH }}"
+        run: helm lint "${{ matrix.chart.path }}"
 
       # ── Stamp version into Chart.yaml ──
       - name: Update chart version
         run: |
           sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" \
-            "${{ env.CHART_PATH }}/Chart.yaml"
+            "${{ matrix.chart.path }}/Chart.yaml"
           sed -i "s/^appVersion:.*/appVersion: \"${{ steps.version.outputs.version }}\"/" \
-            "${{ env.CHART_PATH }}/Chart.yaml"
+            "${{ matrix.chart.path }}/Chart.yaml"
 
       # ── Validate template rendering ──
       - name: Validate template rendering
-        run: helm template zelyo-operator "${{ env.CHART_PATH }}" --debug > /dev/null
+        run: helm template ${{ matrix.chart.name }} "${{ matrix.chart.path }}" --debug > /dev/null
 
       # ── Package ──
       - name: Package Helm chart
         run: |
-          helm package "${{ env.CHART_PATH }}" --destination .helm-packages/
+          helm package "${{ matrix.chart.path }}" --destination .helm-packages/
 
       # ── Push to OCI registry ──
       - name: Push Helm chart to GHCR (OCI)
         id: helm-push
         run: |
-          CHART_PACKAGE=".helm-packages/zelyo-operator-${{ steps.version.outputs.version }}.tgz"
+          CHART_PACKAGE=".helm-packages/${{ matrix.chart.name }}-${{ steps.version.outputs.version }}.tgz"
           # Push and capture the output to extract the digest
           PUSH_OUT=$(helm push "${CHART_PACKAGE}" "oci://${{ env.HELM_REGISTRY }}" 2>&1)
           echo "$PUSH_OUT"
@@ -102,28 +108,28 @@ jobs:
       - name: Sign Helm chart OCI artifact
         run: |
           cosign sign --yes \
-            "${{ env.HELM_REGISTRY }}/zelyo-operator@${{ steps.helm-push.outputs.digest }}"
+            "${{ env.HELM_REGISTRY }}/${{ matrix.chart.name }}@${{ steps.helm-push.outputs.digest }}"
 
       # ── SBOM for the chart package ──
       - name: Generate Helm chart SBOM
         run: |
-          CHART_PACKAGE=".helm-packages/zelyo-operator-${{ steps.version.outputs.version }}.tgz"
+          CHART_PACKAGE=".helm-packages/${{ matrix.chart.name }}-${{ steps.version.outputs.version }}.tgz"
           syft "${CHART_PACKAGE}" \
-            -o spdx-json=helm-sbom-spdx.json \
-            -o cyclonedx-json=helm-sbom-cyclonedx.json
+            -o spdx-json=${{ matrix.chart.name }}-sbom-spdx.json \
+            -o cyclonedx-json=${{ matrix.chart.name }}-sbom-cyclonedx.json
 
       # ── Attest SBOM ──
       - name: Attest Helm chart SBOM
         run: |
           cosign attest --yes \
-            --predicate helm-sbom-spdx.json \
+            --predicate ${{ matrix.chart.name }}-sbom-spdx.json \
             --type spdxjson \
-            "${{ env.HELM_REGISTRY }}/zelyo-operator@${{ steps.helm-push.outputs.digest }}"
+            "${{ env.HELM_REGISTRY }}/${{ matrix.chart.name }}@${{ steps.helm-push.outputs.digest }}"
 
       # ── Upload SBOMs as release assets ──
       - name: Upload Helm SBOMs to release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            helm-sbom-spdx.json
-            helm-sbom-cyclonedx.json
+            ${{ matrix.chart.name }}-sbom-spdx.json
+            ${{ matrix.chart.name }}-sbom-cyclonedx.json

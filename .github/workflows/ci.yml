@@ -41,6 +41,8 @@ jobs:
           file_or_dir: |
             deploy/helm/zelyo-operator/Chart.yaml
             deploy/helm/zelyo-operator/values.yaml
+            deploy/helm/zelyo-policies/Chart.yaml
+            deploy/helm/zelyo-policies/values.yaml
             .github/workflows/
           config_data: |
             extends: default
@@ -92,6 +94,11 @@ jobs:
   helm-lint:
     name: Helm Lint
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        chart:
+          - deploy/helm/zelyo-operator
+          - deploy/helm/zelyo-policies
     steps:
       - uses: actions/checkout@v6
 
@@ -101,7 +108,7 @@ jobs:
           version: v3.16.0
 
       - name: Helm lint
-        run: helm lint deploy/helm/zelyo-operator/
+        run: helm lint ${{ matrix.chart }}/
 
       - name: Helm template
-        run: helm template zelyo-operator deploy/helm/zelyo-operator/ --debug
+        run: helm template test-release ${{ matrix.chart }}/ --debug
