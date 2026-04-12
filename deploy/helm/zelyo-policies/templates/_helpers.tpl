@@ -175,8 +175,9 @@ strict   — all 8 rules, all enforced
 {{- end }}
 
 {{/*
-Collect enabled compliance frameworks from compliance.presets into a YAML list.
-Used by ClusterScan and CloudAccountConfig templates.
+Collect enabled compliance frameworks valid for ClusterScan.
+ClusterScan enum: cis, nsa-cisa, pci-dss, soc2, hipaa.
+Note: nist-800-53 and iso-27001 are cloud-only and NOT valid here.
 */}}
 {{- define "zelyo-policies.complianceFrameworks" -}}
 {{- $frameworks := list }}
@@ -191,12 +192,6 @@ Used by ClusterScan and CloudAccountConfig templates.
 {{- end }}
 {{- if .Values.compliance.presets.hipaa }}
 {{- $frameworks = append $frameworks "hipaa" }}
-{{- end }}
-{{- if .Values.compliance.presets.nist }}
-{{- $frameworks = append $frameworks "nist-800-53" }}
-{{- end }}
-{{- if .Values.compliance.presets.iso27001 }}
-{{- $frameworks = append $frameworks "iso-27001" }}
 {{- end }}
 {{- toJson $frameworks }}
 {{- end }}

@@ -2,13 +2,13 @@
 {{- /*
   Build the preset compliance frameworks list once for reuse.
 */ -}}
+{{- /* ClusterScan only supports: cis, nsa-cisa, pci-dss, soc2, hipaa.
+       nist-800-53 and iso-27001 are cloud-only (CloudAccountConfig). */ -}}
 {{- $presetFrameworks := list }}
 {{- if .Values.compliance.presets.cis }}{{ $presetFrameworks = append $presetFrameworks "cis" }}{{ end }}
 {{- if .Values.compliance.presets.soc2 }}{{ $presetFrameworks = append $presetFrameworks "soc2" }}{{ end }}
 {{- if .Values.compliance.presets.pciDss }}{{ $presetFrameworks = append $presetFrameworks "pci-dss" }}{{ end }}
 {{- if .Values.compliance.presets.hipaa }}{{ $presetFrameworks = append $presetFrameworks "hipaa" }}{{ end }}
-{{- if .Values.compliance.presets.nist }}{{ $presetFrameworks = append $presetFrameworks "nist-800-53" }}{{ end }}
-{{- if .Values.compliance.presets.iso27001 }}{{ $presetFrameworks = append $presetFrameworks "iso-27001" }}{{ end }}
 {{- /*
   Nightly ClusterScan — full scan every night.
 */ -}}
