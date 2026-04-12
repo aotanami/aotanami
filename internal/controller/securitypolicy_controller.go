@@ -75,8 +75,6 @@ type SecurityPolicyReconciler struct {
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile implements the main reconciliation loop for SecurityPolicy.
-//
-//nolint:gocyclo // Controller reconciliation logic is inherently complex.
 func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	start := time.Now()
@@ -84,7 +82,6 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		zelyometrics.ReconcileDuration.WithLabelValues("securitypolicy").Observe(time.Since(start).Seconds())
 	}()
 
-	// Fetch the SecurityPolicy resource.
 	policy := &zelyov1alpha1.SecurityPolicy{}
 	if err := r.Get(ctx, req.NamespacedName, policy); err != nil {
 		if errors.IsNotFound(err) {
@@ -97,30 +94,58 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	log.Info("Reconciling SecurityPolicy", "name", policy.Name, "namespace", policy.Namespace,
 		"generation", policy.Generation, "rulesCount", len(policy.Spec.Rules))
 
-	// ── Step 1: Resolve target pods ──
+	// Step 1: Resolve target pods.
 	pods, err := r.resolveTargetPods(ctx, policy)
 	if err != nil {
-		r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
-			fmt.Sprintf("Failed to resolve target pods: %v", err))
-		conditions.MarkFalse(&policy.Status.Conditions, zelyov1alpha1.ConditionReady,
-			zelyov1alpha1.ReasonReconcileFailed, fmt.Sprintf("Failed to resolve targets: %v", err), policy.Generation)
-		policy.Status.Phase = zelyov1alpha1.PhaseError
-		policy.Status.ObservedGeneration = policy.Generation
-		if statusErr := r.Status().Update(ctx, policy); statusErr != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
-		}
-		zelyometrics.ReconcileTotal.WithLabelValues("securitypolicy", "error").Inc()
-		return ctrl.Result{RequeueAfter: requeueIntervalScan}, nil
+		return r.handlePodResolutionError(ctx, policy, err)
 	}
 
 	log.Info("Resolved target pods", "count", len(pods))
-
 	r.Recorder.Event(policy, corev1.EventTypeNormal, zelyov1alpha1.EventReasonScanStarted,
 		fmt.Sprintf("Starting scan: %d rules against %d pods", len(policy.Spec.Rules), len(pods)))
 
-	// ── Step 2: Run scanners for each rule ──
-	var allFindings []scanner.Finding
-	var scanErrors []string
+	// Step 2: Run scanners, correlate, notify.
+	eval := r.runPolicyScanners(ctx, policy, pods)
+	r.ingestFindingsToCorrelator(ctx, policy, eval.findings)
+
+	if len(eval.findings) > 0 {
+		r.sendNotifications(ctx, policy, eval.findings)
+	}
+
+	// Step 3: Update status and metrics.
+	if err := r.updatePolicyStatus(ctx, policy, eval, len(pods)); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	zelyometrics.ReconcileTotal.WithLabelValues("securitypolicy", "success").Inc()
+	return ctrl.Result{RequeueAfter: requeueIntervalScan}, nil
+}
+
+// handlePodResolutionError records a failure event and updates status when target pods cannot be resolved.
+func (r *SecurityPolicyReconciler) handlePodResolutionError(ctx context.Context, policy *zelyov1alpha1.SecurityPolicy, err error) (ctrl.Result, error) {
+	r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
+		fmt.Sprintf("Failed to resolve target pods: %v", err))
+	conditions.MarkFalse(&policy.Status.Conditions, zelyov1alpha1.ConditionReady,
+		zelyov1alpha1.ReasonReconcileFailed, fmt.Sprintf("Failed to resolve targets: %v", err), policy.Generation)
+	policy.Status.Phase = zelyov1alpha1.PhaseError
+	policy.Status.ObservedGeneration = policy.Generation
+	if statusErr := r.Status().Update(ctx, policy); statusErr != nil {
+		return ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
+	}
+	zelyometrics.ReconcileTotal.WithLabelValues("securitypolicy", "error").Inc()
+	return ctrl.Result{RequeueAfter: requeueIntervalScan}, nil
+}
+
+// policyEvalResult holds the output of running policy scanners against target pods.
+type policyEvalResult struct {
+	findings   []scanner.Finding
+	scanErrors []string
+}
+
+// runPolicyScanners executes scanners for each policy rule and filters findings by severity threshold.
+func (r *SecurityPolicyReconciler) runPolicyScanners(ctx context.Context, policy *zelyov1alpha1.SecurityPolicy, pods []corev1.Pod) *policyEvalResult {
+	log := logf.FromContext(ctx)
+	eval := &policyEvalResult{}
 	minSeverity := severityOrder[policy.Spec.Severity]
 
 	for _, rule := range policy.Spec.Rules {
@@ -135,85 +160,78 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			log.Error(scanErr, "Scanner failed", "scanner", s.Name(), "ruleType", rule.Type)
 			r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 				fmt.Sprintf("Scanner %q failed: %v", s.Name(), scanErr))
-			scanErrors = append(scanErrors, fmt.Sprintf("%s: %v", s.Name(), scanErr))
+			eval.scanErrors = append(eval.scanErrors, fmt.Sprintf("%s: %v", s.Name(), scanErr))
 			continue
 		}
 
-		// Filter findings by severity threshold.
 		for i := range findings {
 			f := &findings[i]
 			if severityOrder[f.Severity] <= minSeverity {
-				allFindings = append(allFindings, *f)
+				eval.findings = append(eval.findings, *f)
 			}
 		}
 	}
 
-	// Sort findings by severity (critical first).
-	sort.Slice(allFindings, func(i, j int) bool {
-		return severityOrder[allFindings[i].Severity] < severityOrder[allFindings[j].Severity]
+	sort.Slice(eval.findings, func(i, j int) bool {
+		return severityOrder[eval.findings[i].Severity] < severityOrder[eval.findings[j].Severity]
 	})
+	return eval
+}
 
-	// ── Step 2b: Feed findings into the correlator for cross-signal correlation ──
-	if r.CorrelatorEngine != nil && len(allFindings) > 0 {
-		for i := range allFindings {
-			f := &allFindings[i]
-			r.CorrelatorEngine.Ingest(&correlator.Event{
-				Type:         correlator.EventSecurityViolation,
-				Source:       fmt.Sprintf("securitypolicy/%s", policy.Name),
-				Severity:     f.Severity,
-				Namespace:    f.ResourceNamespace,
-				Resource:     f.ResourceName,
-				ResourceKind: f.ResourceKind,
-				Message:      f.Title,
-			})
-		}
-		log.Info("Ingested findings into correlator", "count", len(allFindings))
+// ingestFindingsToCorrelator feeds scan findings into the agentic correlator engine.
+func (r *SecurityPolicyReconciler) ingestFindingsToCorrelator(ctx context.Context, policy *zelyov1alpha1.SecurityPolicy, findings []scanner.Finding) {
+	if r.CorrelatorEngine == nil || len(findings) == 0 {
+		return
 	}
-
-	// ── Step 2c: Send notifications to Slack/Teams/etc ──
-	if len(allFindings) > 0 {
-		r.sendNotifications(ctx, policy, allFindings)
+	log := logf.FromContext(ctx)
+	for i := range findings {
+		f := &findings[i]
+		r.CorrelatorEngine.Ingest(&correlator.Event{
+			Type:         correlator.EventSecurityViolation,
+			Source:       fmt.Sprintf("securitypolicy/%s", policy.Name),
+			Severity:     f.Severity,
+			Namespace:    f.ResourceNamespace,
+			Resource:     f.ResourceName,
+			ResourceKind: f.ResourceKind,
+			Message:      f.Title,
+		})
 	}
+	log.Info("Ingested findings into correlator", "count", len(findings))
+}
 
-	// ── Step 3: Update status ──
+// updatePolicyStatus writes the reconciliation result into the SecurityPolicy status.
+func (r *SecurityPolicyReconciler) updatePolicyStatus(ctx context.Context, policy *zelyov1alpha1.SecurityPolicy, eval *policyEvalResult, podsScanned int) error {
+	log := logf.FromContext(ctx)
 	now := metav1.Now()
-	policy.Status.ViolationCount = int32(len(allFindings)) //nolint:gosec // Count is bounded
+	policy.Status.ViolationCount = int32(len(eval.findings)) //nolint:gosec // Count is bounded
 	policy.Status.LastEvaluated = &now
 	policy.Status.ObservedGeneration = policy.Generation
 
-	if len(allFindings) > 0 {
+	if len(eval.findings) > 0 {
 		conditions.MarkTrue(&policy.Status.Conditions, zelyov1alpha1.ConditionScanCompleted,
 			zelyov1alpha1.ReasonViolationsFound,
-			fmt.Sprintf("Scan completed: %d violations found", len(allFindings)), policy.Generation)
-
+			fmt.Sprintf("Scan completed: %d violations found", len(eval.findings)), policy.Generation)
 		r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonViolationsDetected,
 			fmt.Sprintf("Found %d violations across %d pods (severity >= %s)",
-				len(allFindings), len(pods), policy.Spec.Severity))
-
-		// Log the top 5 findings for visibility.
-		limit := 5
-		if len(allFindings) < limit {
-			limit = len(allFindings)
-		}
-		for i := range allFindings[:limit] {
-			f := &allFindings[i]
+				len(eval.findings), podsScanned, policy.Spec.Severity))
+		limit := min(5, len(eval.findings))
+		for i := range eval.findings[:limit] {
+			f := &eval.findings[i]
 			log.Info("Violation detected",
-				"severity", f.Severity,
-				"title", f.Title,
+				"severity", f.Severity, "title", f.Title,
 				"resource", fmt.Sprintf("%s/%s", f.ResourceNamespace, f.ResourceName))
 		}
 	} else {
 		conditions.MarkTrue(&policy.Status.Conditions, zelyov1alpha1.ConditionScanCompleted,
 			zelyov1alpha1.ReasonNoViolations, "Scan completed with no violations", policy.Generation)
-
 		r.Recorder.Event(policy, corev1.EventTypeNormal, zelyov1alpha1.EventReasonScanCompleted,
-			fmt.Sprintf("Scan completed with 0 violations across %d pods", len(pods)))
+			fmt.Sprintf("Scan completed with 0 violations across %d pods", podsScanned))
 	}
 
-	if len(scanErrors) > 0 {
+	if len(eval.scanErrors) > 0 {
 		conditions.MarkFalse(&policy.Status.Conditions, zelyov1alpha1.ConditionReady,
 			zelyov1alpha1.ReasonReconcileFailed,
-			fmt.Sprintf("Scans completed with %d error(s): %s", len(scanErrors), strings.Join(scanErrors, "; ")),
+			fmt.Sprintf("Scans completed with %d error(s): %s", len(eval.scanErrors), strings.Join(eval.scanErrors, "; ")),
 			policy.Generation)
 		policy.Status.Phase = zelyov1alpha1.PhaseDegraded
 	} else {
@@ -222,25 +240,22 @@ func (r *SecurityPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		policy.Status.Phase = zelyov1alpha1.PhaseActive
 	}
 
-	// Record metrics.
-	zelyometrics.PolicyViolationsGauge.WithLabelValues(policy.Name, policy.Namespace, policy.Spec.Severity).Set(float64(len(allFindings)))
-	for i := range allFindings {
-		f := &allFindings[i]
+	zelyometrics.PolicyViolationsGauge.WithLabelValues(policy.Name, policy.Namespace, policy.Spec.Severity).Set(float64(len(eval.findings)))
+	for i := range eval.findings {
+		f := &eval.findings[i]
 		zelyometrics.ScanFindingsTotal.WithLabelValues("securitypolicy", f.Severity).Inc()
 	}
-	zelyometrics.ResourcesScannedTotal.WithLabelValues("securitypolicy").Add(float64(len(pods)))
+	zelyometrics.ResourcesScannedTotal.WithLabelValues("securitypolicy").Add(float64(podsScanned))
 
 	if err := r.Status().Update(ctx, policy); err != nil {
-		return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
+		return fmt.Errorf("updating status: %w", err)
 	}
 
 	log.Info("SecurityPolicy reconciled",
 		"phase", policy.Status.Phase,
 		"violations", policy.Status.ViolationCount,
-		"podsScanned", len(pods))
-
-	zelyometrics.ReconcileTotal.WithLabelValues("securitypolicy", "success").Inc()
-	return ctrl.Result{RequeueAfter: requeueIntervalScan}, nil
+		"podsScanned", podsScanned)
+	return nil
 }
 
 // resolveTargetPods lists pods matching the policy's scope (namespaces, labels, resource kinds).

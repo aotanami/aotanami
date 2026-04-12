@@ -78,8 +78,6 @@ type Result struct {
 //   - Raw manifests by the presence of .yaml, .yml, or .json files
 //
 // The function supports monorepos with multiple sources in different directories.
-//
-//nolint:gocyclo // Discovery logic inherently checks many file patterns
 func Discover(files []string) *Result {
 	result := &Result{}
 
@@ -89,58 +87,12 @@ func Discover(files []string) *Result {
 	yamlDirs := make(map[string]bool)
 
 	for _, f := range files {
-		dir := filepath.Dir(f)
-		base := strings.ToLower(filepath.Base(f))
-		ext := strings.ToLower(filepath.Ext(f))
-
-		switch {
-		case base == "chart.yaml" || base == "chart.yml":
-			if !helmDirs[dir] {
-				helmDirs[dir] = true
-				result.Sources = append(result.Sources, DetectedSource{
-					Path: dir,
-					Type: SourceTypeHelm,
-					Metadata: map[string]string{
-						"chartFile": f,
-					},
-				})
-			}
-
-		case base == "kustomization.yaml" || base == "kustomization.yml" || base == "kustomization":
-			if !kustomizeDirs[dir] {
-				kustomizeDirs[dir] = true
-				result.Sources = append(result.Sources, DetectedSource{
-					Path: dir,
-					Type: SourceTypeKustomize,
-					Metadata: map[string]string{
-						"kustomizationFile": f,
-					},
-				})
-			}
-
-		case ext == ".yaml" || ext == ".yml" || ext == ".json":
-			// Only add raw YAML dirs that aren't already claimed by Helm or Kustomize.
-			// We'll filter these after the full scan.
-			yamlDirs[dir] = true
+		if src := categorizeFile(f, helmDirs, kustomizeDirs, yamlDirs); src != nil {
+			result.Sources = append(result.Sources, *src)
 		}
 	}
 
-	// Add raw source dirs that aren't already covered by Helm or Kustomize.
-	for dir := range yamlDirs {
-		if helmDirs[dir] || kustomizeDirs[dir] {
-			continue
-		}
-		// Also skip if this dir is a subdirectory of a Helm chart (e.g., templates/).
-		if isSubdirOf(dir, helmDirs) {
-			continue
-		}
-
-		result.Sources = append(result.Sources, DetectedSource{
-			Path:     dir,
-			Type:     SourceTypeRaw,
-			Metadata: map[string]string{},
-		})
-	}
+	result.Sources = append(result.Sources, filterRawSources(yamlDirs, helmDirs, kustomizeDirs)...)
 
 	// Sort sources for deterministic output.
 	sort.Slice(result.Sources, func(i, j int) bool {
@@ -151,6 +103,67 @@ func Discover(files []string) *Result {
 	result.PrimaryType = determinePrimaryType(result.Sources)
 
 	return result
+}
+
+// categorizeFile classifies a single file path as a Helm, Kustomize, or raw YAML source.
+// Returns a non-nil DetectedSource for Helm and Kustomize discoveries; raw YAML dirs
+// are tracked in yamlDirs and resolved later by filterRawSources.
+func categorizeFile(f string, helmDirs, kustomizeDirs, yamlDirs map[string]bool) *DetectedSource {
+	dir := filepath.Dir(f)
+	base := strings.ToLower(filepath.Base(f))
+	ext := strings.ToLower(filepath.Ext(f))
+
+	switch {
+	case base == "chart.yaml" || base == "chart.yml":
+		if !helmDirs[dir] {
+			helmDirs[dir] = true
+			return &DetectedSource{
+				Path: dir,
+				Type: SourceTypeHelm,
+				Metadata: map[string]string{
+					"chartFile": f,
+				},
+			}
+		}
+
+	case base == "kustomization.yaml" || base == "kustomization.yml" || base == "kustomization":
+		if !kustomizeDirs[dir] {
+			kustomizeDirs[dir] = true
+			return &DetectedSource{
+				Path: dir,
+				Type: SourceTypeKustomize,
+				Metadata: map[string]string{
+					"kustomizationFile": f,
+				},
+			}
+		}
+
+	case ext == ".yaml" || ext == ".yml" || ext == ".json":
+		yamlDirs[dir] = true
+	}
+
+	return nil
+}
+
+// filterRawSources returns DetectedSource entries for YAML directories that are not
+// already claimed by Helm or Kustomize sources.
+func filterRawSources(yamlDirs, helmDirs, kustomizeDirs map[string]bool) []DetectedSource {
+	var sources []DetectedSource
+	for dir := range yamlDirs {
+		if helmDirs[dir] || kustomizeDirs[dir] {
+			continue
+		}
+		// Skip subdirectories of Helm charts (e.g., templates/).
+		if isSubdirOf(dir, helmDirs) {
+			continue
+		}
+		sources = append(sources, DetectedSource{
+			Path:     dir,
+			Type:     SourceTypeRaw,
+			Metadata: map[string]string{},
+		})
+	}
+	return sources
 }
 
 // DiscoverForPaths runs discovery scoped to specific paths within a file list.

@@ -55,116 +55,131 @@ var dangerousCapabilities = map[corev1.Capability]bool{
 }
 
 // Scan implements Scanner.
-//
-//nolint:gocyclo // Scanner logic evaluates multiple interrelated pod fields
 func (s *PodSecurityScanner) Scan(_ context.Context, pods []corev1.Pod, _ map[string]string) ([]Finding, error) {
-	var findings []Finding
-
+	findings := make([]Finding, 0, len(pods))
 	for i := range pods {
 		pod := &pods[i]
+		findings = append(findings, s.checkHostNamespaces(pod)...)
+		findings = append(findings, s.checkHostPaths(pod)...)
+		findings = append(findings, s.checkCapabilities(pod)...)
+		findings = append(findings, s.checkProcessSharing(pod)...)
+	}
+	return findings, nil
+}
 
-		// Check: HostNetwork
-		if pod.Spec.HostNetwork {
-			findings = append(findings, Finding{
-				RuleType:          s.RuleType(),
-				Severity:          zelyov1alpha1.SeverityCritical,
-				Title:             "Pod uses host network",
-				Description:       "hostNetwork is enabled, giving the pod access to the host's network interfaces. This bypasses network policies.",
-				ResourceKind:      "Pod",
-				ResourceNamespace: pod.Namespace,
-				ResourceName:      pod.Name,
-				Recommendation:    "Remove hostNetwork: true unless the pod genuinely needs host networking (e.g., CNI plugins).",
-			})
-		}
+// checkHostNamespaces detects pods using host network, PID, or IPC namespaces.
+func (s *PodSecurityScanner) checkHostNamespaces(pod *corev1.Pod) []Finding {
+	var findings []Finding
 
-		// Check: HostPID
-		if pod.Spec.HostPID {
-			findings = append(findings, Finding{
-				RuleType:          s.RuleType(),
-				Severity:          zelyov1alpha1.SeverityCritical,
-				Title:             "Pod uses host PID namespace",
-				Description:       "hostPID is enabled, allowing the pod to see and signal all host processes.",
-				ResourceKind:      "Pod",
-				ResourceNamespace: pod.Namespace,
-				ResourceName:      pod.Name,
-				Recommendation:    "Remove hostPID: true. This is rarely needed outside of system-level debugging.",
-			})
-		}
+	if pod.Spec.HostNetwork {
+		findings = append(findings, Finding{
+			RuleType:          s.RuleType(),
+			Severity:          zelyov1alpha1.SeverityCritical,
+			Title:             "Pod uses host network",
+			Description:       "hostNetwork is enabled, giving the pod access to the host's network interfaces. This bypasses network policies.",
+			ResourceKind:      "Pod",
+			ResourceNamespace: pod.Namespace,
+			ResourceName:      pod.Name,
+			Recommendation:    "Remove hostNetwork: true unless the pod genuinely needs host networking (e.g., CNI plugins).",
+		})
+	}
 
-		// Check: HostIPC
-		if pod.Spec.HostIPC {
-			findings = append(findings, Finding{
-				RuleType:          s.RuleType(),
-				Severity:          zelyov1alpha1.SeverityHigh,
-				Title:             "Pod uses host IPC namespace",
-				Description:       "hostIPC is enabled, enabling shared memory communication with host processes.",
-				ResourceKind:      "Pod",
-				ResourceNamespace: pod.Namespace,
-				ResourceName:      pod.Name,
-				Recommendation:    "Remove hostIPC: true unless required for legacy IPC communication.",
-			})
-		}
+	if pod.Spec.HostPID {
+		findings = append(findings, Finding{
+			RuleType:          s.RuleType(),
+			Severity:          zelyov1alpha1.SeverityCritical,
+			Title:             "Pod uses host PID namespace",
+			Description:       "hostPID is enabled, allowing the pod to see and signal all host processes.",
+			ResourceKind:      "Pod",
+			ResourceNamespace: pod.Namespace,
+			ResourceName:      pod.Name,
+			Recommendation:    "Remove hostPID: true. This is rarely needed outside of system-level debugging.",
+		})
+	}
 
-		// Check: HostPath volumes
-		for i := range pod.Spec.Volumes {
-			vol := &pod.Spec.Volumes[i]
-			if vol.HostPath != nil {
-				sev := zelyov1alpha1.SeverityHigh
-				if strings.HasPrefix(vol.HostPath.Path, "/var/run/docker.sock") ||
-					strings.HasPrefix(vol.HostPath.Path, "/etc") ||
-					strings.HasPrefix(vol.HostPath.Path, "/root") {
-					sev = zelyov1alpha1.SeverityCritical
-				}
-				findings = append(findings, Finding{
-					RuleType:          s.RuleType(),
-					Severity:          sev,
-					Title:             fmt.Sprintf("Pod mounts host path %q", vol.HostPath.Path),
-					Description:       fmt.Sprintf("Volume %q mounts host path %q. This can expose sensitive host files.", vol.Name, vol.HostPath.Path),
-					ResourceKind:      "Pod",
-					ResourceNamespace: pod.Namespace,
-					ResourceName:      pod.Name,
-					Recommendation:    "Use PersistentVolumeClaims or emptyDir instead of hostPath. If hostPath is needed, use readOnly mode.",
-				})
+	if pod.Spec.HostIPC {
+		findings = append(findings, Finding{
+			RuleType:          s.RuleType(),
+			Severity:          zelyov1alpha1.SeverityHigh,
+			Title:             "Pod uses host IPC namespace",
+			Description:       "hostIPC is enabled, enabling shared memory communication with host processes.",
+			ResourceKind:      "Pod",
+			ResourceNamespace: pod.Namespace,
+			ResourceName:      pod.Name,
+			Recommendation:    "Remove hostIPC: true unless required for legacy IPC communication.",
+		})
+	}
+
+	return findings
+}
+
+// checkHostPaths detects pods mounting host filesystem paths.
+func (s *PodSecurityScanner) checkHostPaths(pod *corev1.Pod) []Finding {
+	var findings []Finding
+	for i := range pod.Spec.Volumes {
+		vol := &pod.Spec.Volumes[i]
+		if vol.HostPath != nil {
+			sev := zelyov1alpha1.SeverityHigh
+			if strings.HasPrefix(vol.HostPath.Path, "/var/run/docker.sock") ||
+				strings.HasPrefix(vol.HostPath.Path, "/etc") ||
+				strings.HasPrefix(vol.HostPath.Path, "/root") {
+				sev = zelyov1alpha1.SeverityCritical
 			}
-		}
-
-		// Check: Dangerous capabilities on containers
-		allContainers := append(pod.Spec.InitContainers, pod.Spec.Containers...) //nolint:gocritic
-		for j := range allContainers {
-			container := &allContainers[j]
-			if container.SecurityContext == nil || container.SecurityContext.Capabilities == nil {
-				continue
-			}
-			for _, cap := range container.SecurityContext.Capabilities.Add {
-				if dangerousCapabilities[cap] {
-					findings = append(findings, Finding{
-						RuleType:          s.RuleType(),
-						Severity:          zelyov1alpha1.SeverityHigh,
-						Title:             fmt.Sprintf("Container %q adds dangerous capability %s", container.Name, cap),
-						Description:       fmt.Sprintf("Capability %s is added to the container. This grants elevated kernel privileges.", cap),
-						ResourceKind:      "Pod",
-						ResourceNamespace: pod.Namespace,
-						ResourceName:      pod.Name,
-						Recommendation:    fmt.Sprintf("Remove %s from securityContext.capabilities.add unless absolutely required.", cap),
-					})
-				}
-			}
-		}
-
-		// Check: ShareProcessNamespace
-		if pod.Spec.ShareProcessNamespace != nil && *pod.Spec.ShareProcessNamespace {
 			findings = append(findings, Finding{
 				RuleType:          s.RuleType(),
-				Severity:          zelyov1alpha1.SeverityMedium,
-				Title:             "Pod shares process namespace between containers",
-				Description:       "shareProcessNamespace is enabled. Containers can see and signal each other's processes.",
+				Severity:          sev,
+				Title:             fmt.Sprintf("Pod mounts host path %q", vol.HostPath.Path),
+				Description:       fmt.Sprintf("Volume %q mounts host path %q. This can expose sensitive host files.", vol.Name, vol.HostPath.Path),
 				ResourceKind:      "Pod",
 				ResourceNamespace: pod.Namespace,
 				ResourceName:      pod.Name,
-				Recommendation:    "Disable shareProcessNamespace unless containers genuinely need to share PID namespace.",
+				Recommendation:    "Use PersistentVolumeClaims or emptyDir instead of hostPath. If hostPath is needed, use readOnly mode.",
 			})
 		}
 	}
+	return findings
+}
 
-	return findings, nil
+// checkCapabilities detects containers with dangerous Linux capabilities.
+func (s *PodSecurityScanner) checkCapabilities(pod *corev1.Pod) []Finding {
+	var findings []Finding
+	allContainers := append(pod.Spec.InitContainers, pod.Spec.Containers...) //nolint:gocritic
+	for j := range allContainers {
+		container := &allContainers[j]
+		if container.SecurityContext == nil || container.SecurityContext.Capabilities == nil {
+			continue
+		}
+		for _, cap := range container.SecurityContext.Capabilities.Add {
+			if dangerousCapabilities[cap] {
+				findings = append(findings, Finding{
+					RuleType:          s.RuleType(),
+					Severity:          zelyov1alpha1.SeverityHigh,
+					Title:             fmt.Sprintf("Container %q adds dangerous capability %s", container.Name, cap),
+					Description:       fmt.Sprintf("Capability %s is added to the container. This grants elevated kernel privileges.", cap),
+					ResourceKind:      "Pod",
+					ResourceNamespace: pod.Namespace,
+					ResourceName:      pod.Name,
+					Recommendation:    fmt.Sprintf("Remove %s from securityContext.capabilities.add unless absolutely required.", cap),
+				})
+			}
+		}
+	}
+	return findings
+}
+
+// checkProcessSharing detects pods sharing process namespace between containers.
+func (s *PodSecurityScanner) checkProcessSharing(pod *corev1.Pod) []Finding {
+	if pod.Spec.ShareProcessNamespace != nil && *pod.Spec.ShareProcessNamespace {
+		return []Finding{{
+			RuleType:          s.RuleType(),
+			Severity:          zelyov1alpha1.SeverityMedium,
+			Title:             "Pod shares process namespace between containers",
+			Description:       "shareProcessNamespace is enabled. Containers can see and signal each other's processes.",
+			ResourceKind:      "Pod",
+			ResourceNamespace: pod.Namespace,
+			ResourceName:      pod.Name,
+			Recommendation:    "Disable shareProcessNamespace unless containers genuinely need to share PID namespace.",
+		}}
+	}
+	return nil
 }

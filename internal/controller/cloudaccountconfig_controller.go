@@ -65,8 +65,6 @@ type CloudAccountConfigReconciler struct {
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile runs the cloud scan lifecycle for a CloudAccountConfig resource.
-//
-//nolint:gocyclo // Controller logic is inherently complex
 func (r *CloudAccountConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	start := time.Now()
@@ -84,25 +82,9 @@ func (r *CloudAccountConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	// ── Handle deletion / finalizer ──
-	if !account.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(account, cloudAccountFinalizer) {
-			if err := r.cleanupScanReports(ctx, account); err != nil {
-				return ctrl.Result{}, fmt.Errorf("cleaning up ScanReports: %w", err)
-			}
-			controllerutil.RemoveFinalizer(account, cloudAccountFinalizer)
-			if err := r.Update(ctx, account); err != nil {
-				return ctrl.Result{}, fmt.Errorf("removing finalizer: %w", err)
-			}
-		}
-		return ctrl.Result{}, nil
-	}
-
-	if !controllerutil.ContainsFinalizer(account, cloudAccountFinalizer) {
-		controllerutil.AddFinalizer(account, cloudAccountFinalizer)
-		if err := r.Update(ctx, account); err != nil {
-			return ctrl.Result{}, fmt.Errorf("adding finalizer: %w", err)
-		}
-		return ctrl.Result{Requeue: true}, nil
+	done, result, err := r.handleDeletion(ctx, account)
+	if done || err != nil {
+		return result, err
 	}
 
 	// ── Mark reconciling ──
@@ -137,35 +119,13 @@ func (r *CloudAccountConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	}
 
-	// Verify identity with the default region before scanning.
-	defaultClients, err := awsclients.NewClients(ctx, credConfig)
-	if err != nil {
-		log.Error(err, "Failed to create AWS clients")
-		account.Status.Phase = zelyov1alpha1.PhaseDegraded
-		conditions.MarkFalse(&account.Status.Conditions, zelyov1alpha1.ConditionCloudConnected,
-			zelyov1alpha1.ReasonCloudAuthFailed, err.Error(), account.Generation)
+	// ── Verify cloud identity ──
+	if err := r.verifyCloudIdentity(ctx, account, credConfig); err != nil {
 		if statusErr := r.Status().Update(ctx, account); statusErr != nil {
 			return ctrl.Result{}, fmt.Errorf("updating auth error status: %w", statusErr)
 		}
 		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	}
-
-	verifiedAccount, arn, err := defaultClients.VerifyIdentity(ctx)
-	if err != nil {
-		log.Error(err, "Failed to verify AWS identity")
-		account.Status.Phase = zelyov1alpha1.PhaseDegraded
-		conditions.MarkFalse(&account.Status.Conditions, zelyov1alpha1.ConditionCloudConnected,
-			zelyov1alpha1.ReasonCloudAuthFailed, err.Error(), account.Generation)
-		if statusErr := r.Status().Update(ctx, account); statusErr != nil {
-			return ctrl.Result{}, fmt.Errorf("updating auth error status: %w", statusErr)
-		}
-		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
-	}
-	log.Info("AWS identity verified", "account", verifiedAccount, "arn", arn)
-
-	// Mark cloud connected.
-	conditions.MarkTrue(&account.Status.Conditions, zelyov1alpha1.ConditionCloudConnected,
-		zelyov1alpha1.ReasonCloudAuthSuccess, "Cloud provider authenticated", account.Generation)
 
 	// ── Run cloud scans ──
 	r.Recorder.Event(account, corev1.EventTypeNormal, zelyov1alpha1.EventReasonCloudScanStarted,
@@ -181,10 +141,135 @@ func (r *CloudAccountConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 	allFindings, summary, scannedRegions := r.runCloudScans(ctx, account, credConfig)
 
 	// ── Evaluate compliance ──
-	var complianceResults []zelyov1alpha1.ComplianceResult
+	complianceResults := r.evaluateCloudCompliance(account, allFindings)
+
+	// ── Create ScanReport ──
+	reportName, err := r.createCloudScanReport(ctx, account, allFindings, summary, complianceResults)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.enforceHistoryLimit(ctx, account); err != nil {
+		log.Error(err, "Failed to enforce history limit")
+	}
+
+	return r.updateCloudStatus(ctx, account, summary, reportName, scannedRegions)
+}
+
+// updateCloudStatus writes the completed scan result into the CloudAccountConfig status and records metrics.
+func (r *CloudAccountConfigReconciler) updateCloudStatus(
+	ctx context.Context,
+	account *zelyov1alpha1.CloudAccountConfig,
+	summary zelyov1alpha1.ScanSummary,
+	reportName string,
+	scannedRegions []string,
+) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+	completedAt := metav1.Now()
+	account.Status.Phase = zelyov1alpha1.PhaseCompleted
+	account.Status.CompletedAt = &completedAt
+	account.Status.FindingsCount = summary.TotalFindings
+	account.Status.FindingsSummary = zelyov1alpha1.FindingsSummary{
+		Critical: summary.Critical,
+		High:     summary.High,
+		Medium:   summary.Medium,
+		Low:      summary.Low,
+		Info:     summary.Info,
+	}
+	account.Status.LastReportName = reportName
+	account.Status.ScannedRegions = scannedRegions
+	account.Status.ResourcesScanned = summary.ResourcesScanned
+	account.Status.ObservedGeneration = account.Generation
+
+	conditions.MarkTrue(&account.Status.Conditions, zelyov1alpha1.ConditionCloudScanCompleted,
+		zelyov1alpha1.ReasonCloudScanSuccess,
+		fmt.Sprintf("Scan completed: %d findings across %d resources", summary.TotalFindings, summary.ResourcesScanned),
+		account.Generation)
+	conditions.MarkTrue(&account.Status.Conditions, zelyov1alpha1.ConditionReady,
+		zelyov1alpha1.ReasonReconcileSuccess, "Cloud account scan completed", account.Generation)
+
+	if err := r.Status().Update(ctx, account); err != nil {
+		return ctrl.Result{}, fmt.Errorf("updating completed status: %w", err)
+	}
+
+	zelyometrics.CloudScanCompletedTotal.WithLabelValues(
+		account.Spec.AccountID, account.Spec.Provider, account.Namespace).Inc()
+	zelyometrics.ReconcileTotal.WithLabelValues("cloudaccountconfig", "success").Inc()
+
+	r.Recorder.Event(account, corev1.EventTypeNormal, zelyov1alpha1.EventReasonCloudScanCompleted,
+		fmt.Sprintf("Cloud scan completed: %d findings", summary.TotalFindings))
+
+	log.Info("Cloud scan completed",
+		"account", account.Spec.AccountID, "findings", summary.TotalFindings, "regions", len(scannedRegions))
+
+	return ctrl.Result{RequeueAfter: defaultCloudScanInterval}, nil
+}
+
+// handleDeletion processes the deletion/finalizer lifecycle for a CloudAccountConfig.
+// It returns (done=true) when the caller should return immediately (deletion in progress or finalizer added).
+func (r *CloudAccountConfigReconciler) handleDeletion(ctx context.Context, account *zelyov1alpha1.CloudAccountConfig) (done bool, result ctrl.Result, err error) {
+	if !account.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(account, cloudAccountFinalizer) {
+			if err := r.cleanupScanReports(ctx, account); err != nil {
+				return true, ctrl.Result{}, fmt.Errorf("cleaning up ScanReports: %w", err)
+			}
+			controllerutil.RemoveFinalizer(account, cloudAccountFinalizer)
+			if err := r.Update(ctx, account); err != nil {
+				return true, ctrl.Result{}, fmt.Errorf("removing finalizer: %w", err)
+			}
+		}
+		return true, ctrl.Result{}, nil
+	}
+
+	if !controllerutil.ContainsFinalizer(account, cloudAccountFinalizer) {
+		controllerutil.AddFinalizer(account, cloudAccountFinalizer)
+		if err := r.Update(ctx, account); err != nil {
+			return true, ctrl.Result{}, fmt.Errorf("adding finalizer: %w", err)
+		}
+		return true, ctrl.Result{Requeue: true}, nil
+	}
+
+	return false, ctrl.Result{}, nil
+}
+
+// verifyCloudIdentity creates default-region AWS clients, calls STS GetCallerIdentity,
+// and records the ConditionCloudConnected status condition on the account.
+// On failure it sets the account to PhaseDegraded and records the failure condition.
+func (r *CloudAccountConfigReconciler) verifyCloudIdentity(ctx context.Context, account *zelyov1alpha1.CloudAccountConfig, credConfig *awsclients.CredentialConfig) error {
+	log := logf.FromContext(ctx)
+
+	defaultClients, err := awsclients.NewClients(ctx, credConfig)
+	if err != nil {
+		log.Error(err, "Failed to create AWS clients")
+		account.Status.Phase = zelyov1alpha1.PhaseDegraded
+		conditions.MarkFalse(&account.Status.Conditions, zelyov1alpha1.ConditionCloudConnected,
+			zelyov1alpha1.ReasonCloudAuthFailed, err.Error(), account.Generation)
+		return fmt.Errorf("creating AWS clients: %w", err)
+	}
+
+	verifiedAccount, arn, err := defaultClients.VerifyIdentity(ctx)
+	if err != nil {
+		log.Error(err, "Failed to verify AWS identity")
+		account.Status.Phase = zelyov1alpha1.PhaseDegraded
+		conditions.MarkFalse(&account.Status.Conditions, zelyov1alpha1.ConditionCloudConnected,
+			zelyov1alpha1.ReasonCloudAuthFailed, err.Error(), account.Generation)
+		return fmt.Errorf("verifying AWS identity: %w", err)
+	}
+	log.Info("AWS identity verified", "account", verifiedAccount, "arn", arn)
+
+	conditions.MarkTrue(&account.Status.Conditions, zelyov1alpha1.ConditionCloudConnected,
+		zelyov1alpha1.ReasonCloudAuthSuccess, "Cloud provider authenticated", account.Generation)
+
+	return nil
+}
+
+// evaluateCloudCompliance runs compliance framework evaluations against scan findings
+// and records compliance metrics.
+func (r *CloudAccountConfigReconciler) evaluateCloudCompliance(account *zelyov1alpha1.CloudAccountConfig, findings []scanner.Finding) []zelyov1alpha1.ComplianceResult {
+	complianceResults := make([]zelyov1alpha1.ComplianceResult, 0, len(account.Spec.ComplianceFrameworks))
 	for _, fw := range account.Spec.ComplianceFrameworks {
 		framework := mapComplianceFramework(fw)
-		compFindings := toComplianceFindings(allFindings)
+		compFindings := toComplianceFindings(findings)
 		report := compliance.EvaluateFindings(framework, compFindings)
 		complianceResults = append(complianceResults, zelyov1alpha1.ComplianceResult{
 			Framework:      string(report.Framework),
@@ -194,9 +279,21 @@ func (r *CloudAccountConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 		})
 		zelyometrics.CompliancePctGauge.WithLabelValues(string(report.Framework)).Set(report.Summary.CompliancePct)
 	}
+	return complianceResults
+}
 
-	// ── Create ScanReport ──
-	reportFindings := toReportFindings(allFindings)
+// createCloudScanReport builds a ScanReport CR with the given findings, summary,
+// and compliance results, sets the owner reference, creates it, and returns the report name.
+func (r *CloudAccountConfigReconciler) createCloudScanReport(
+	ctx context.Context,
+	account *zelyov1alpha1.CloudAccountConfig,
+	findings []scanner.Finding,
+	summary zelyov1alpha1.ScanSummary,
+	complianceResults []zelyov1alpha1.ComplianceResult,
+) (string, error) {
+	log := logf.FromContext(ctx)
+
+	reportFindings := toReportFindings(findings)
 	report := &zelyov1alpha1.ScanReport{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: fmt.Sprintf("%s-", account.Name),
@@ -216,10 +313,10 @@ func (r *CloudAccountConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	if err := controllerutil.SetControllerReference(account, report, r.Scheme); err != nil {
-		return ctrl.Result{}, fmt.Errorf("setting owner reference on ScanReport: %w", err)
+		return "", fmt.Errorf("setting owner reference on ScanReport: %w", err)
 	}
 	if err := r.Create(ctx, report); err != nil {
-		return ctrl.Result{}, fmt.Errorf("creating ScanReport: %w", err)
+		return "", fmt.Errorf("creating ScanReport: %w", err)
 	}
 
 	// Mark report complete.
@@ -228,53 +325,7 @@ func (r *CloudAccountConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 		log.Error(err, "Failed to update ScanReport status")
 	}
 
-	// ── Enforce history limit ──
-	if err := r.enforceHistoryLimit(ctx, account); err != nil {
-		log.Error(err, "Failed to enforce history limit")
-	}
-
-	// ── Update status ──
-	completedAt := metav1.Now()
-	account.Status.Phase = zelyov1alpha1.PhaseCompleted
-	account.Status.CompletedAt = &completedAt
-	account.Status.FindingsCount = summary.TotalFindings
-	account.Status.FindingsSummary = zelyov1alpha1.FindingsSummary{
-		Critical: summary.Critical,
-		High:     summary.High,
-		Medium:   summary.Medium,
-		Low:      summary.Low,
-		Info:     summary.Info,
-	}
-	account.Status.LastReportName = report.Name
-	account.Status.ScannedRegions = scannedRegions
-	account.Status.ResourcesScanned = summary.ResourcesScanned
-	account.Status.ObservedGeneration = account.Generation
-
-	conditions.MarkTrue(&account.Status.Conditions, zelyov1alpha1.ConditionCloudScanCompleted,
-		zelyov1alpha1.ReasonCloudScanSuccess,
-		fmt.Sprintf("Scan completed: %d findings across %d resources", summary.TotalFindings, summary.ResourcesScanned),
-		account.Generation)
-	conditions.MarkTrue(&account.Status.Conditions, zelyov1alpha1.ConditionReady,
-		zelyov1alpha1.ReasonReconcileSuccess, "Cloud account scan completed", account.Generation)
-
-	if err := r.Status().Update(ctx, account); err != nil {
-		return ctrl.Result{}, fmt.Errorf("updating completed status: %w", err)
-	}
-
-	// ── Record metrics ──
-	zelyometrics.CloudScanCompletedTotal.WithLabelValues(
-		account.Spec.AccountID, account.Spec.Provider, account.Namespace).Inc()
-	zelyometrics.ReconcileTotal.WithLabelValues("cloudaccountconfig", "success").Inc()
-
-	r.Recorder.Event(account, corev1.EventTypeNormal, zelyov1alpha1.EventReasonCloudScanCompleted,
-		fmt.Sprintf("Cloud scan completed: %d findings", summary.TotalFindings))
-
-	log.Info("Cloud scan completed",
-		"account", account.Spec.AccountID,
-		"findings", summary.TotalFindings,
-		"regions", len(scannedRegions))
-
-	return ctrl.Result{RequeueAfter: defaultCloudScanInterval}, nil
+	return report.Name, nil
 }
 
 // buildCredentialConfig prepares the AWS credential configuration from the CloudAccountConfig spec.

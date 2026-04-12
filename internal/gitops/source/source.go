@@ -249,46 +249,52 @@ func (s *HelmSourceParser) Detect(files []string) bool {
 	return false
 }
 
+// helmFileClassification holds the categorized file paths from a Helm chart directory.
+type helmFileClassification struct {
+	chartPath     string
+	valuesFiles   []string
+	templateFiles []string
+}
+
+// classifyHelmFiles separates Helm chart files into chart, values, and template categories.
+func classifyHelmFiles(files []string, basePath string) *helmFileClassification {
+	c := &helmFileClassification{}
+	for _, f := range files {
+		base := strings.ToLower(filepath.Base(f))
+		ext := strings.ToLower(filepath.Ext(f))
+
+		if base == fileChart || base == "chart.yml" {
+			c.chartPath = f
+			continue
+		}
+
+		if base == "values.yaml" || base == "values.yml" ||
+			strings.HasPrefix(base, "values-") || strings.HasPrefix(base, "values_") {
+			c.valuesFiles = append(c.valuesFiles, f)
+			continue
+		}
+
+		if ext == extYaml || ext == extYml || ext == ".tpl" {
+			rel, _ := filepath.Rel(basePath, f)
+			if strings.HasPrefix(rel, "templates"+string(filepath.Separator)) || strings.HasPrefix(rel, "templates/") {
+				c.templateFiles = append(c.templateFiles, f)
+			}
+		}
+	}
+	return c
+}
+
 // Parse discovers Helm chart files and returns them as manifests.
-//
-//nolint:gocyclo // Parsing chart directories is complex but well-contained
 func (s *HelmSourceParser) Parse(_ context.Context, opts *ParseOptions) (*ParseResult, error) {
 	result := &ParseResult{
 		SourceType: "helm",
 		Metadata:   map[string]string{},
 	}
 
-	var chartPath string
-	var valuesFiles []string
-	var templateFiles []string
+	classified := classifyHelmFiles(opts.Files, opts.Path)
 
-	for _, f := range opts.Files {
-		base := strings.ToLower(filepath.Base(f))
-		ext := strings.ToLower(filepath.Ext(f))
-
-		if base == fileChart || base == "chart.yml" {
-			chartPath = f
-			continue
-		}
-
-		// Collect values files.
-		if base == "values.yaml" || base == "values.yml" ||
-			strings.HasPrefix(base, "values-") || strings.HasPrefix(base, "values_") {
-			valuesFiles = append(valuesFiles, f)
-			continue
-		}
-
-		// Collect template files.
-		if ext == extYaml || ext == extYml || ext == ".tpl" {
-			rel, _ := filepath.Rel(opts.Path, f)
-			if strings.HasPrefix(rel, "templates"+string(filepath.Separator)) || strings.HasPrefix(rel, "templates/") {
-				templateFiles = append(templateFiles, f)
-			}
-		}
-	}
-
-	if chartPath != "" {
-		result.Metadata["chartPath"] = chartPath
+	if classified.chartPath != "" {
+		result.Metadata["chartPath"] = classified.chartPath
 	}
 
 	if opts.HelmReleaseName != "" {
@@ -299,13 +305,15 @@ func (s *HelmSourceParser) Parse(_ context.Context, opts *ParseOptions) (*ParseR
 	}
 
 	// Values files — include both discovered and user-specified.
-	valuesFiles = append(valuesFiles, opts.HelmValuesFiles...)
-	for i, vf := range valuesFiles {
+	allValues := make([]string, 0, len(classified.valuesFiles)+len(opts.HelmValuesFiles))
+	allValues = append(allValues, classified.valuesFiles...)
+	allValues = append(allValues, opts.HelmValuesFiles...)
+	for i, vf := range allValues {
 		result.Metadata[fmt.Sprintf("valuesFile.%d", i)] = vf
 	}
 
 	// Templates as manifests.
-	for _, tf := range templateFiles {
+	for _, tf := range classified.templateFiles {
 		result.Manifests = append(result.Manifests, Manifest{
 			Path: tf,
 		})
