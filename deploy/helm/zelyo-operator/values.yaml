@@ -161,7 +161,7 @@ config:
     # -- Custom API endpoint (required for ollama/custom providers)
     endpoint: ""
     # -- LLM temperature (0.0 = deterministic, 1.0 = creative)
-    temperature: "0.1"
+    temperature: 0.1
     # -- Max tokens per LLM request
     maxTokensPerRequest: 4096
 
