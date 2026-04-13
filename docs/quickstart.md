@@ -23,10 +23,13 @@ kubectl cluster-info && helm version
 ```bash
 helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
   --namespace zelyo-system \
-  --create-namespace
+  --create-namespace \
+  --set config.llm.provider=openrouter \
+  --set config.llm.model=anthropic/claude-sonnet-4-20250514 \
+  --set config.llm.apiKeySecret=zelyo-llm
 ```
 
-This installs the operator, CRDs, and creates the `ZelyoConfig` CR automatically. The operator starts in Degraded phase until the LLM API key is provided.
+This installs the operator, CRDs, and creates the `ZelyoConfig` CR automatically. Override `config.llm.provider` and `config.llm.model` to use a different LLM (see provider table below). The operator starts in Degraded phase until the LLM API key secret is created.
 
 ## 2. Add Your LLM API Key
 

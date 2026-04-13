@@ -86,7 +86,10 @@ graph LR
 # 1. Install Zelyo Operator
 helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
   --namespace zelyo-system \
-  --create-namespace
+  --create-namespace \
+  --set config.llm.provider=openrouter \
+  --set config.llm.model=anthropic/claude-sonnet-4-20250514 \
+  --set config.llm.apiKeySecret=zelyo-llm
 
 # 2. Add your LLM API key (operator auto-activates within seconds)
 kubectl create secret generic zelyo-llm \

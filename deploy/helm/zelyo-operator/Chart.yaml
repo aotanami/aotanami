@@ -2,8 +2,8 @@ apiVersion: v2
 name: zelyo-operator
 description: Zelyo Operator — Autonomous AI Security Agent for Kubernetes — Detect, Correlate, Fix
 type: application
-version: 1.0.0
-appVersion: "1.0.0"
+version: 0.0.0-dev
+appVersion: "0.0.0-dev"
 kubeVersion: ">=1.26.0-0"
 home: https://github.com/zelyo-ai/zelyo-operator
 icon: https://raw.githubusercontent.com/zelyo-ai/zelyo/main/docs/assets/icon.png

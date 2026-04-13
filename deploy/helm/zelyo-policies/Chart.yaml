@@ -5,8 +5,8 @@ description: >-
   Deploys production-ready defaults with tiered profiles (starter, standard, strict),
   compliance presets (CIS, SOC 2, PCI-DSS, HIPAA), and per-environment namespace targeting.
 type: application
-version: 1.0.0
-appVersion: "1.0.0"
+version: 0.0.0-dev
+appVersion: "0.0.0-dev"
 kubeVersion: ">= 1.26.0-0"
 home: https://github.com/zelyo-ai/zelyo-operator
 icon: https://raw.githubusercontent.com/zelyo-ai/zelyo/main/docs/assets/icon.png
