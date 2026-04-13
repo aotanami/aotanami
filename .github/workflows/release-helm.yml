@@ -128,7 +128,7 @@ jobs:
 
       # ── Upload SBOMs as release assets ──
       - name: Upload Helm SBOMs to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             ${{ matrix.chart.name }}-sbom-spdx.json
