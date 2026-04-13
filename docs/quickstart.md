@@ -1,6 +1,6 @@
 # Quickstart
 
-Get Zelyo Operator running on your Kubernetes cluster and scanning workloads in under 10 minutes.
+Get Zelyo Operator running on your Kubernetes cluster and scanning workloads in under 5 minutes.
 
 Zelyo Operator is an open-source CNAPP that detects security misconfigurations across Kubernetes and cloud infrastructure, correlates them with an LLM, and opens GitOps PRs to fix them.
 
@@ -14,36 +14,21 @@ Zelyo Operator is an open-source CNAPP that detects security misconfigurations a
 kubectl cluster-info && helm version
 ```
 
+> **Note:** Webhook TLS certificates are self-signed by default. If you prefer cert-manager managed certificates, see [Optional: cert-manager for Webhook TLS](#optional-cert-manager-for-webhook-tls) below.
+
 ---
 
-## 1. Install cert-manager
-
-Required for webhook TLS certificates.
-
-```bash
-helm install cert-manager oci://quay.io/jetstack/charts/cert-manager \
-  --namespace cert-manager \
-  --create-namespace \
-  --set crds.enabled=true
-
-kubectl wait --for=condition=Ready pods --all -n cert-manager --timeout=120s
-```
-
-## 2. Install Zelyo Operator
+## 1. Install Zelyo Operator
 
 ```bash
 helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
   --namespace zelyo-system \
-  --create-namespace \
-  --set config.llm.provider=openrouter \
-  --set config.llm.model=anthropic/claude-sonnet-4-20250514 \
-  --set config.llm.apiKeySecret=zelyo-llm \
-  --set webhook.certManager.enabled=true
-
-kubectl get pods -n zelyo-system
+  --create-namespace
 ```
 
-## 3. Add Your LLM API Key
+This installs the operator, CRDs, and creates the `ZelyoConfig` CR automatically. The operator starts in Degraded phase until the LLM API key is provided.
+
+## 2. Add Your LLM API Key
 
 Get a key from [openrouter.ai/keys](https://openrouter.ai/keys) (or any supported provider -- see table below), then:
 
@@ -53,15 +38,17 @@ kubectl create secret generic zelyo-llm \
   --from-literal=api-key=<YOUR_API_KEY>
 ```
 
-| Provider | Config value | Get a key |
-|---|---|---|
-| OpenRouter | `openrouter` | [openrouter.ai/keys](https://openrouter.ai/keys) |
-| OpenAI | `openai` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
-| Anthropic | `anthropic` | [console.anthropic.com](https://console.anthropic.com) |
-| Azure OpenAI | `azure-openai` | [Azure Portal](https://portal.azure.com) |
-| Ollama (self-hosted) | `ollama` | [ollama.ai](https://ollama.ai) |
+The operator auto-activates within seconds once the secret is created.
 
-## 4. Deploy Default Policies (Recommended)
+| Provider             | Config value     | Get a key                                                         |
+| -------------------- | ---------------- | ----------------------------------------------------------------- |
+| OpenRouter           | `openrouter`   | [openrouter.ai/keys](https://openrouter.ai/keys)                     |
+| OpenAI               | `openai`       | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| Anthropic            | `anthropic`    | [console.anthropic.com](https://console.anthropic.com)               |
+| Azure OpenAI         | `azure-openai` | [Azure Portal](https://portal.azure.com)                             |
+| Ollama (self-hosted) | `ollama`       | [ollama.ai](https://ollama.ai)                                       |
+
+## 3. Deploy Default Policies (Recommended)
 
 The `zelyo-policies` Helm chart deploys production-ready security policies covering all 56 scanners in one command:
 
@@ -71,6 +58,7 @@ helm install zelyo-policies oci://ghcr.io/zelyo-ai/charts/zelyo-policies \
 ```
 
 This creates:
+
 - **3 SecurityPolicies** -- production (strict), staging (standard), default (standard) with per-environment namespace targeting
 - **2 ClusterScans** -- nightly full scan + weekly compliance evaluation with CIS Kubernetes Benchmark
 - **1 MonitoringPolicy** -- anomaly detection, warning events, log patterns for auth failures and secret exposure
@@ -90,11 +78,11 @@ helm install zelyo-policies oci://ghcr.io/zelyo-ai/charts/zelyo-policies \
   --set compliance.presets.hipaa=true
 ```
 
-| Profile | Severity Floor | Rules | Enforcement |
-|---|---|---|---|
-| `starter` | high | 4 core rules | warn only |
-| `standard` | medium | all 8 rules | enforce critical+high |
-| `strict` | low | all 8 rules | enforce all |
+| Profile      | Severity Floor | Rules        | Enforcement           |
+| ------------ | -------------- | ------------ | --------------------- |
+| `starter`  | high           | 4 core rules | warn only             |
+| `standard` | medium         | all 8 rules  | enforce critical+high |
+| `strict`   | low            | all 8 rules  | enforce all           |
 
 Verify:
 
@@ -244,23 +232,23 @@ kubectl get cloudaccountconfigs -n zelyo-system
 kubectl get scanreports -n zelyo-system -l zelyo.ai/scan-type=cloud
 ```
 
-| Scan category | Count | Examples |
-|---|---|---|
-| `cspm` | 8 | Public S3, unencrypted EBS, CloudTrail disabled |
-| `ciem` | 8 | Overprivileged IAM, unused keys, MFA not enforced |
-| `network` | 8 | Open SSH/RDP, exposed DB ports, ALB without HTTPS |
-| `dspm` | 8 | Public S3 ACLs, unencrypted DynamoDB, public RDS |
-| `supply-chain` | 8 | ECR CVEs, stale images, unsigned images |
-| `cicd-pipeline` | 8 | Hardcoded secrets, overprivileged CodeBuild |
+| Scan category     | Count | Examples                                          |
+| ----------------- | ----- | ------------------------------------------------- |
+| `cspm`          | 8     | Public S3, unencrypted EBS, CloudTrail disabled   |
+| `ciem`          | 8     | Overprivileged IAM, unused keys, MFA not enforced |
+| `network`       | 8     | Open SSH/RDP, exposed DB ports, ALB without HTTPS |
+| `dspm`          | 8     | Public S3 ACLs, unencrypted DynamoDB, public RDS  |
+| `supply-chain`  | 8     | ECR CVEs, stale images, unsigned images           |
+| `cicd-pipeline` | 8     | Hardcoded secrets, overprivileged CodeBuild       |
 
-| Compliance framework | Config value |
-|---|---|
-| SOC 2 | `soc2` |
-| PCI-DSS | `pci-dss` |
-| HIPAA | `hipaa` |
-| CIS AWS | `cis-aws` |
-| NIST 800-53 | `nist-800-53` |
-| ISO 27001 | `iso-27001` |
+| Compliance framework | Config value    |
+| -------------------- | --------------- |
+| SOC 2                | `soc2`        |
+| PCI-DSS              | `pci-dss`     |
+| HIPAA                | `hipaa`       |
+| CIS AWS              | `cis-aws`     |
+| NIST 800-53          | `nist-800-53` |
+| ISO 27001            | `iso-27001`   |
 
 ---
 
@@ -406,10 +394,32 @@ kubectl port-forward -n zelyo-system svc/zelyo-operator 8080:8080
 
 ---
 
+## Optional: cert-manager for Webhook TLS
+
+By default, Zelyo Operator uses self-signed certificates for webhook TLS. If you prefer cert-manager managed certificates:
+
+```bash
+# Install cert-manager first
+helm install cert-manager oci://quay.io/jetstack/charts/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  --set crds.enabled=true
+
+# Then install Zelyo Operator with cert-manager enabled
+helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
+  --namespace zelyo-system \
+  --create-namespace \
+  --set webhook.certManager.enabled=true \
+  --set webhook.selfSigned=false
+```
+
+---
+
 ## Teardown
 
 ```bash
 helm uninstall zelyo-policies -n zelyo-system 2>/dev/null
 helm uninstall zelyo-operator -n zelyo-system
-helm uninstall cert-manager -n cert-manager
+# Only if you installed cert-manager:
+# helm uninstall cert-manager -n cert-manager
 ```

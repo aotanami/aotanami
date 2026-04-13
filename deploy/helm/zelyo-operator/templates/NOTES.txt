@@ -48,6 +48,10 @@
   {{- range .Values.ingress.hosts }}
     https://{{ .host }}{{ (index .paths 0).path }}
   {{- end }}
+  {{- else if .Values.httpRoute.enabled }}
+  {{- range .Values.httpRoute.hostnames }}
+    https://{{ . }}{{ $.Values.httpRoute.path | default "/" }}
+  {{- end }}
   {{- else }}
     kubectl port-forward -n {{ include "zelyo-operator.namespace" . }} svc/{{ include "zelyo-operator.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
     open http://localhost:{{ .Values.service.port }}
@@ -63,11 +67,24 @@
 
 {{- end }}
 
+{{- if .Values.config.llm.provider }}
+
+── ZelyoConfig ──────────────────────────────────────────────────
+
+  ZelyoConfig CR "zelyo" has been created automatically.
+
+  Mode:     {{ .Values.config.mode }}
+  Provider: {{ .Values.config.llm.provider }}
+  Model:    {{ .Values.config.llm.model }}
+
+{{- end }}
+
 {{- if and .Values.config.llm.apiKeySecret (ne .Values.config.llm.apiKeySecret "") }}
 
-── LLM Configuration ─────────────────────────────────────────────
+── LLM API Key ───────────────────────────────────────────────────
 
-  ⚠️  Create the LLM API key secret before the operator can use AI features:
+  The operator will enter Degraded phase until the LLM API key secret exists.
+  Create it now — the operator auto-activates within seconds:
 
   kubectl create secret generic {{ .Values.config.llm.apiKeySecret }} \
     --from-literal=api-key=YOUR_API_KEY \

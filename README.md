@@ -34,18 +34,18 @@ Zelyo is an open-source **Cloud-Native Application Protection Platform (CNAPP)**
 
 ### Capabilities
 
-| | |
-|---|---|
-| **56 Security Scanners** | 8 Kubernetes (RBAC, images, PodSecurity, secrets, network, privilege escalation, security context, resource limits) + 48 cloud (CSPM, CIEM, Network, DSPM, Supply Chain, CI/CD) |
-| **Multi-Cloud CNAPP** | Onboard AWS accounts via `CloudAccountConfig` CRD with IRSA, Pod Identity, or static credentials |
-| **AI Correlation** | LLM reasons over findings — overprivileged role + exposed service = attack chain |
-| **GitOps Remediation** | Auto-generates Kubernetes YAML patches and cloud IaC fixes (Terraform/CloudFormation), opens PRs |
-| **6 Compliance Frameworks** | CIS Kubernetes Benchmark, NIST 800-53, SOC 2, PCI-DSS, HIPAA, ISO 27001 |
-| **Anomaly Detection** | Builds statistical baselines for pod restarts, resource usage, and error rates |
-| **Drift Detection** | Compares live cluster state against your Git repo |
-| **Cost Optimization** | Detects idle workloads, recommends rightsizing |
-| **Notifications** | Slack, Teams, PagerDuty, Telegram, WhatsApp, webhooks, email |
-| **Production-Safe** | Read-only cluster access. Non-destructive by design. |
+|                                   |                                                                                                                                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **56 Security Scanners**    | 8 Kubernetes (RBAC, images, PodSecurity, secrets, network, privilege escalation, security context, resource limits) + 48 cloud (CSPM, CIEM, Network, DSPM, Supply Chain, CI/CD) |
+| **Multi-Cloud CNAPP**       | Onboard AWS accounts via `CloudAccountConfig` CRD with IRSA, Pod Identity, or static credentials                                                                              |
+| **AI Correlation**          | LLM reasons over findings — overprivileged role + exposed service = attack chain                                                                                               |
+| **GitOps Remediation**      | Auto-generates Kubernetes YAML patches and cloud IaC fixes (Terraform/CloudFormation), opens PRs                                                                                |
+| **6 Compliance Frameworks** | CIS Kubernetes Benchmark, NIST 800-53, SOC 2, PCI-DSS, HIPAA, ISO 27001                                                                                                         |
+| **Anomaly Detection**       | Builds statistical baselines for pod restarts, resource usage, and error rates                                                                                                  |
+| **Drift Detection**         | Compares live cluster state against your Git repo                                                                                                                               |
+| **Cost Optimization**       | Detects idle workloads, recommends rightsizing                                                                                                                                  |
+| **Notifications**           | Slack, Teams, PagerDuty, Telegram, WhatsApp, webhooks, email                                                                                                                    |
+| **Production-Safe**         | Read-only cluster access. Non-destructive by design.                                                                                                                            |
 
 ---
 
@@ -53,8 +53,6 @@ Zelyo is an open-source **Cloud-Native Application Protection Platform (CNAPP)**
 
 ```mermaid
 graph LR
-    accTitle: Zelyo Detect-Correlate-Fix pipeline
-    accDescr: How Zelyo autonomously detects, correlates, and fixes security issues
     SP["SecurityPolicy<br/>8 K8s Scanners"] -->|findings| C["Correlator<br/>Engine"]
     CAC["CloudAccountConfig<br/>48 Cloud Scanners"] -->|findings| CF["Compliance<br/>Framework"]
     MP["MonitoringPolicy<br/>Observer"] -->|pod metrics| AD["Anomaly<br/>Detector"]
@@ -75,47 +73,38 @@ graph LR
 
 ### Operating Modes
 
-| Mode | Behavior |
-|---|---|
-| **Audit** *(default)* | Detects, correlates, and alerts. No automated changes. |
-| **Protect** | Full pipeline. Opens GitOps PRs automatically when a `GitOpsRepository` is onboarded. |
+| Mode                          | Behavior                                                                                |
+| ----------------------------- | --------------------------------------------------------------------------------------- |
+| **Audit** *(default)* | Detects, correlates, and alerts. No automated changes.                                  |
+| **Protect**             | Full pipeline. Opens GitOps PRs automatically when a `GitOpsRepository` is onboarded. |
 
 ---
 
 ## Installation
 
 ```bash
-# 1. Install cert-manager (required for webhook TLS)
-helm install cert-manager oci://quay.io/jetstack/charts/cert-manager \
-  --namespace cert-manager \
-  --create-namespace \
-  --set crds.enabled=true
-kubectl wait --for=condition=Ready pods --all -n cert-manager --timeout=120s
-
-# 2. Install Zelyo Operator
+# 1. Install Zelyo Operator
 helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
   --namespace zelyo-system \
-  --create-namespace \
-  --set config.llm.provider=openrouter \
-  --set config.llm.model=anthropic/claude-sonnet-4-20250514 \
-  --set config.llm.apiKeySecret=zelyo-llm \
-  --set webhook.certManager.enabled=true
+  --create-namespace
 
-# 3. Add your LLM API key
+# 2. Add your LLM API key (operator auto-activates within seconds)
 kubectl create secret generic zelyo-llm \
   --namespace zelyo-system \
   --from-literal=api-key=<YOUR_API_KEY>
 
-# 4. Deploy default security policies
+# 3. Deploy default security policies
 helm install zelyo-policies oci://ghcr.io/zelyo-ai/charts/zelyo-policies \
   --namespace zelyo-system
 
-# 5. Verify
+# 4. Verify
 kubectl get pods -n zelyo-system
 kubectl get securitypolicies,clusterscans,monitoringpolicies -n zelyo-system
 ```
 
-Step 4 deploys the `zelyo-policies` chart with production-ready defaults: 3 tiered SecurityPolicies (production/staging/default), nightly + weekly ClusterScans, MonitoringPolicy with anomaly detection, and CIS compliance evaluation. Override the profile with `--set global.profile=strict` for regulated environments, or enable additional compliance frameworks with `--set compliance.presets.soc2=true`.
+Step 3 deploys the `zelyo-policies` chart with production-ready defaults: 3 tiered SecurityPolicies (production/staging/default), nightly + weekly ClusterScans, MonitoringPolicy with anomaly detection, and CIS compliance evaluation. Override the profile with `--set global.profile=strict` for regulated environments, or enable additional compliance frameworks with `--set compliance.presets.soc2=true`.
+
+Webhook TLS uses self-signed certificates by default. To use cert-manager instead, add `--set webhook.certManager.enabled=true` and install cert-manager first.
 
 Supported LLM providers: OpenRouter, OpenAI, Anthropic, Azure OpenAI, Ollama.
 
@@ -212,17 +201,17 @@ spec:
 
 Zelyo Operator uses **10 Custom Resource Definitions**:
 
-| CRD | Purpose |
-|---|---|
-| `ZelyoConfig` | Global config — LLM provider, API keys, operating mode, token budget |
-| `SecurityPolicy` | Kubernetes workload security rules and namespace targeting |
-| `CloudAccountConfig` | Cloud account onboarding (AWS) for multi-cloud scanning |
-| `ClusterScan` | Scheduled cluster-wide scans with history retention |
-| `ScanReport` | Immutable scan results (auto-created by ClusterScan / CloudAccountConfig) |
-| `MonitoringPolicy` | Real-time event monitoring and anomaly detection |
-| `RemediationPolicy` | Auto-remediation config — severity filter, dry-run, max PRs |
-| `GitOpsRepository` | Repository onboarding for drift detection and PR submission |
-| `CostPolicy` | Cost optimization — idle detection, rightsizing, budget alerts |
+| CRD                     | Purpose                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `ZelyoConfig`         | Global config — LLM provider, API keys, operating mode, token budget         |
+| `SecurityPolicy`      | Kubernetes workload security rules and namespace targeting                    |
+| `CloudAccountConfig`  | Cloud account onboarding (AWS) for multi-cloud scanning                       |
+| `ClusterScan`         | Scheduled cluster-wide scans with history retention                           |
+| `ScanReport`          | Immutable scan results (auto-created by ClusterScan / CloudAccountConfig)     |
+| `MonitoringPolicy`    | Real-time event monitoring and anomaly detection                              |
+| `RemediationPolicy`   | Auto-remediation config — severity filter, dry-run, max PRs                  |
+| `GitOpsRepository`    | Repository onboarding for drift detection and PR submission                   |
+| `CostPolicy`          | Cost optimization — idle detection, rightsizing, budget alerts               |
 | `NotificationChannel` | Alert routing — Slack, Teams, PagerDuty, Telegram, WhatsApp, webhooks, email |
 
 See [CRD Reference](docs/crd-reference.md) for complete field documentation.
@@ -233,52 +222,62 @@ See [CRD Reference](docs/crd-reference.md) for complete field documentation.
 
 ```mermaid
 graph TB
-    accTitle: Zelyo Operator architecture
-    accDescr: High-level system architecture showing observe, reason, and act phases
-    subgraph "Kubernetes Cluster — Read-Only Access"
-        Events[K8s Events]
-        Pods[Pod Workloads]
-        Metrics[Resource Metrics]
+    subgraph Kubernetes_Cluster
+        Events["K8s Events"]
+        Pods["Pod Workloads"]
+        Metrics["Resource Metrics"]
     end
 
-    subgraph "Cloud Accounts — Read-Only Access"
-        AWS[AWS APIs<br/>S3, EC2, IAM, RDS, ...]
+    subgraph Cloud_Accounts
+        AWS["AWS APIs<br/>S3, EC2, IAM, RDS, ..."]
     end
 
-    subgraph "Zelyo Operator"
-        subgraph "Observe"
-            Scanner[K8s Scanner<br/>8 rule types]
-            CloudScanner[Cloud Scanner<br/>48 checks]
-            Watcher[Real-Time Watcher]
-            CostEng[Cost Optimizer]
-        end
-        subgraph "Reason"
-            AnomalyDet[Anomaly Detector]
-            Correlator[Correlator Engine]
-            Compliance[Compliance Engine<br/>CIS · SOC2 · PCI-DSS · HIPAA]
-            DriftDet[Drift Detector]
-            LLM[LLM Reasoner]
-        end
-        subgraph "Act"
-            Remediation[Remediation Engine]
-            GitOps[GitHub Engine]
-            Notify[Notifier]
-        end
+    subgraph Observe
+        Scanner["K8s Scanner<br/>8 rule types"]
+        CloudScanner["Cloud Scanner<br/>48 checks"]
+        Watcher["Real-Time Watcher"]
+        CostEng["Cost Optimizer"]
+    end
+  
+    subgraph Reason
+        AnomalyDet["Anomaly Detector"]
+        Correlator["Correlator Engine"]
+        Compliance["Compliance Engine<br/>CIS · SOC2 · PCI-DSS · HIPAA"]
+        DriftDet["Drift Detector"]
+        LLM["LLM Reasoner"]
+    end
+  
+    subgraph Act
+        Remediation["Remediation Engine"]
+        GitOps["GitHub Engine"]
+        Notify["Notifier"]
     end
 
-    subgraph "Integrations"
-        GitRepo[Your GitOps Repo]
-        Alerts[Slack · Teams · PagerDuty]
-        Prom[Prometheus · Grafana]
-        ArgoFlux[ArgoCD / Flux]
+    subgraph Integrations
+        GitRepo["Your GitOps Repo"]
+        Alerts["Slack · Teams · PagerDuty"]
+        Prom["Prometheus · Grafana"]
+        ArgoFlux["ArgoCD / Flux"]
     end
 
-    Events & Pods & Metrics --> Watcher & Scanner
+    Events --> Watcher
+    Events --> Scanner
+    Pods --> Watcher
+    Pods --> Scanner
+    Metrics --> Watcher
+    Metrics --> Scanner
     AWS --> CloudScanner
     Watcher --> AnomalyDet
-    Scanner & CloudScanner --> Compliance & DriftDet
-    Scanner & CloudScanner & CostEng --> Correlator
-    AnomalyDet & DriftDet & Compliance --> Correlator
+    Scanner --> Compliance
+    Scanner --> DriftDet
+    CloudScanner --> Compliance
+    CloudScanner --> DriftDet
+    Scanner --> Correlator
+    CloudScanner --> Correlator
+    CostEng --> Correlator
+    AnomalyDet --> Correlator
+    DriftDet --> Correlator
+    Compliance --> Correlator
     Correlator --> LLM
     LLM --> Remediation
     Remediation -->|Protect Mode| GitOps
@@ -292,21 +291,21 @@ graph TB
 <details>
 <summary><strong>Internal Package Map</strong></summary>
 
-| Package | Role |
-|---|---|
-| `internal/scanner` | 8 Kubernetes security scanners + registry |
+| Package                   | Role                                                                                    |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| `internal/scanner`      | 8 Kubernetes security scanners + registry                                               |
 | `internal/cloudscanner` | 48 cloud scanners (CSPM, CIEM, Network, DSPM, Supply Chain, CI/CD) + AWS client factory |
-| `internal/anomaly` | Statistical baseline engine with sliding-window deviation detection |
-| `internal/correlator` | Time-windowed event correlation |
-| `internal/compliance` | Maps findings to CIS/NIST/SOC2/PCI-DSS/HIPAA/ISO27001 controls |
-| `internal/drift` | Live drift detector — cluster state vs Git |
-| `internal/remediation` | LLM-powered fix generation with structured JSON output |
-| `internal/llm` | Multi-provider LLM client with circuit breaker and token budgeting |
-| `internal/github` | GitHub App engine — JWT auth, PR lifecycle |
-| `internal/gitops` | GitOps engine interface + ArgoCD/Flux/Kustomize/Helm discovery |
-| `internal/notifier` | Multi-channel notifications with dedup and rate limiting |
-| `internal/monitor` | Real-time Kubernetes resource watcher |
-| `internal/controller` | 10 controllers orchestrating the Detect → Correlate → Fix pipeline |
+| `internal/anomaly`      | Statistical baseline engine with sliding-window deviation detection                     |
+| `internal/correlator`   | Time-windowed event correlation                                                         |
+| `internal/compliance`   | Maps findings to CIS/NIST/SOC2/PCI-DSS/HIPAA/ISO27001 controls                          |
+| `internal/drift`        | Live drift detector — cluster state vs Git                                             |
+| `internal/remediation`  | LLM-powered fix generation with structured JSON output                                  |
+| `internal/llm`          | Multi-provider LLM client with circuit breaker and token budgeting                      |
+| `internal/github`       | GitHub App engine — JWT auth, PR lifecycle                                             |
+| `internal/gitops`       | GitOps engine interface + ArgoCD/Flux/Kustomize/Helm discovery                          |
+| `internal/notifier`     | Multi-channel notifications with dedup and rate limiting                                |
+| `internal/monitor`      | Real-time Kubernetes resource watcher                                                   |
+| `internal/controller`   | 10 controllers orchestrating the Detect → Correlate → Fix pipeline                    |
 
 </details>
 
@@ -339,18 +338,18 @@ make docker-build IMG=ghcr.io/zelyo-ai/zelyo-operator:dev
 
 ## Documentation
 
-| Document | Description |
-|---|---|
-| [Quickstart](docs/quickstart.md) | Local cluster setup, all CRD recipes, cloud onboarding |
-| [Architecture](docs/architecture.md) | System design, controllers, data flow |
-| [Scanners](docs/scanners.md) | All 56 scanners — what they check, severity levels |
-| [CRD Reference](docs/crd-reference.md) | Complete field reference for all 10 CRDs |
-| [Compliance](docs/compliance.md) | Supported frameworks and control mappings |
-| [Metrics](docs/metrics.md) | Prometheus metrics, PromQL queries, alerting rules |
-| [LLM Configuration](docs/llm-configuration.md) | Provider setup and token budgets |
-| [GitOps Onboarding](docs/gitops-onboarding.md) | Repository connection for auto-remediation |
-| [Integrations](docs/integrations.md) | Notification channel setup (Slack, Teams, PagerDuty) |
-| [Supply Chain Security](docs/supply-chain-security.md) | Image signatures, SBOMs, provenance |
+| Document                                            | Description                                            |
+| --------------------------------------------------- | ------------------------------------------------------ |
+| [Quickstart](docs/quickstart.md)                       | Local cluster setup, all CRD recipes, cloud onboarding |
+| [Architecture](docs/architecture.md)                   | System design, controllers, data flow                  |
+| [Scanners](docs/scanners.md)                           | All 56 scanners — what they check, severity levels    |
+| [CRD Reference](docs/crd-reference.md)                 | Complete field reference for all 10 CRDs               |
+| [Compliance](docs/compliance.md)                       | Supported frameworks and control mappings              |
+| [Metrics](docs/metrics.md)                             | Prometheus metrics, PromQL queries, alerting rules     |
+| [LLM Configuration](docs/llm-configuration.md)         | Provider setup and token budgets                       |
+| [GitOps Onboarding](docs/gitops-onboarding.md)         | Repository connection for auto-remediation             |
+| [Integrations](docs/integrations.md)                   | Notification channel setup (Slack, Teams, PagerDuty)   |
+| [Supply Chain Security](docs/supply-chain-security.md) | Image signatures, SBOMs, provenance                    |
 
 ---
 

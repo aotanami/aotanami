@@ -5,9 +5,6 @@ metadata:
   name: zelyo
   labels:
     {{- include "zelyo-operator.labels" . | nindent 4 }}
-  annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "10"
 spec:
   mode: {{ .Values.config.mode | default "audit" }}
   llm:

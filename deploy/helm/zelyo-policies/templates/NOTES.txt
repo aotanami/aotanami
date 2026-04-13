@@ -1,3 +1,7 @@
+Prerequisite: zelyo-operator must be installed first.
+If this install failed with "no matches for kind", run:
+  helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
+    --namespace {{ include "zelyo-policies.namespace" . }} --create-namespace
 
 =============================================================
   Zelyo Policies deployed successfully!
