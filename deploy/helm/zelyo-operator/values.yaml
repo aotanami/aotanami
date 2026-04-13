@@ -301,6 +301,23 @@ ingress:
           pathType: Prefix
   tls: []
 
+# ── HTTPRoute (Gateway API) ───────────────────────────────────
+httpRoute:
+  # -- Enable Gateway API HTTPRoute for dashboard access
+  enabled: false
+  # -- HTTPRoute annotations
+  annotations: {}
+  # -- Parent gateway references
+  parentRefs: []
+  # - name: my-gateway
+  #   namespace: gateway-system
+  #   sectionName: https
+  # -- Hostnames to match
+  hostnames: []
+  # - zelyo-operator.example.com
+  # -- Path prefix for the route
+  path: "/"
+
 # ── Pod Disruption Budget ──────────────────────────────────────────────
 podDisruptionBudget:
   # -- Create a PodDisruptionBudget

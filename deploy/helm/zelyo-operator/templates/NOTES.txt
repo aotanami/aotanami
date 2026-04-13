@@ -48,6 +48,10 @@
   {{- range .Values.ingress.hosts }}
     https://{{ .host }}{{ (index .paths 0).path }}
   {{- end }}
+  {{- else if .Values.httpRoute.enabled }}
+  {{- range .Values.httpRoute.hostnames }}
+    https://{{ . }}{{ $.Values.httpRoute.path | default "/" }}
+  {{- end }}
   {{- else }}
     kubectl port-forward -n {{ include "zelyo-operator.namespace" . }} svc/{{ include "zelyo-operator.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
     open http://localhost:{{ .Values.service.port }}
