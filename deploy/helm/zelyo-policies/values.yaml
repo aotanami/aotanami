@@ -4,14 +4,25 @@
 # This chart deploys production-ready security policies that cover all 56
 # scanners (8 Kubernetes + 48 cloud) provided by Zelyo Operator.
 #
-# Quick start:
-#   helm install zelyo-policies ./zelyo-policies -n zelyo-system
+# IMPORTANT — OPT-IN BY DEFAULT
+# All scanning is disabled out of the box so a fresh `helm install` never
+# hammers a cluster. Enable the surfaces you want explicitly:
+#
+#   helm install zelyo-policies ./zelyo-policies -n zelyo-system \
+#     --set securityPolicies.enabled=true \
+#     --set clusterScans.enabled=true
+#
+# Even when `securityPolicies.enabled=true`, the catch-all `default`
+# environment (which targets every namespace) stays off unless you also set
+# `--set securityPolicies.environments.default.enabled=true`.
 #
 # Override the security profile:
-#   helm install zelyo-policies ./zelyo-policies -n zelyo-system --set global.profile=strict
+#   helm install zelyo-policies ./zelyo-policies -n zelyo-system \
+#     --set securityPolicies.enabled=true --set global.profile=strict
 #
 # Enable SOC 2 + HIPAA compliance:
 #   helm install zelyo-policies ./zelyo-policies -n zelyo-system \
+#     --set clusterScans.enabled=true \
 #     --set compliance.presets.soc2=true --set compliance.presets.hipaa=true
 # ============================================================================
 
@@ -37,8 +48,10 @@ global:
 # ---------------------------------------------------------------------------
 # Creates SecurityPolicy CRs targeting namespaces by environment tier.
 # Each environment can override the global profile.
+#
+# Disabled by default. Enable with `--set securityPolicies.enabled=true`.
 securityPolicies:
-  enabled: true
+  enabled: false
 
   environments:
     # -- Production: strictest scanning, frequent schedule
@@ -61,9 +74,13 @@ securityPolicies:
       schedule: "0 */2 * * *"
       notificationChannels: []
 
-    # -- Default: catch-all for remaining namespaces
+    # -- Default: catch-all for remaining namespaces.
+    # Disabled by default even when `securityPolicies.enabled=true`: an empty
+    # namespaces list resolves to *every* pod in the cluster, which can
+    # overwhelm the operator on first install. Enable deliberately with
+    # `--set securityPolicies.environments.default.enabled=true`.
     default:
-      enabled: true
+      enabled: false
       profile: ""                  # Uses global.profile
       namespaces: []               # Empty = all namespaces
       excludeNamespaces:
@@ -93,8 +110,9 @@ securityPolicies:
 # ---------------------------------------------------------------------------
 # Cluster Scans — scheduled full-cluster security evaluations
 # ---------------------------------------------------------------------------
+# Disabled by default. Enable with `--set clusterScans.enabled=true`.
 clusterScans:
-  enabled: true
+  enabled: false
 
   # Nightly scan — runs all K8s scanners every night at 2 AM.
   nightly:
@@ -140,8 +158,12 @@ compliance:
 # ---------------------------------------------------------------------------
 # Monitoring Policy — real-time event watching and anomaly detection
 # ---------------------------------------------------------------------------
+# Disabled by default. A single MonitoringPolicy with empty targetNamespaces
+# observes every pod in the cluster on a 5-minute cycle and runs regex log
+# scanning + anomaly detection, which can be expensive on large clusters.
+# Enable with `--set monitoring.enabled=true`.
 monitoring:
-  enabled: true
+  enabled: false
 
   targetNamespaces: []             # Empty = all namespaces
   excludeNamespaces:

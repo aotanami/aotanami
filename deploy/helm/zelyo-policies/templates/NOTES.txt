@@ -57,6 +57,25 @@ Remediation:      {{ if .Values.remediation.enabled }}enabled (dryRun={{ .Values
 Verify:
   kubectl get securitypolicies,clusterscans,monitoringpolicies,costpolicies,cloudaccountconfigs,notificationchannels,gitopsrepositories,remediationpolicies -n {{ include "zelyo-policies.namespace" . }}
 
+{{- if and (not .Values.securityPolicies.enabled) (not .Values.clusterScans.enabled) (not .Values.monitoring.enabled) }}
+
+-------------------------------------------------------------
+Heads up — scanning is OFF by default
+-------------------------------------------------------------
+This chart ships opt-in to avoid a scan storm on first install. No
+SecurityPolicy, ClusterScan, or MonitoringPolicy CRs were created.
+
+Enable the surfaces you need, for example:
+
+  helm upgrade {{ .Release.Name }} ./zelyo-policies -n {{ include "zelyo-policies.namespace" . }} \
+    --set securityPolicies.enabled=true \
+    --set clusterScans.enabled=true
+
+The catch-all `default` SecurityPolicy (which targets every namespace)
+stays off unless you also pass:
+    --set securityPolicies.environments.default.enabled=true
+{{- end }}
+
 {{- if not .Values.monitoring.notificationChannels }}
 {{- if not .Values.notifications.channels }}
 
