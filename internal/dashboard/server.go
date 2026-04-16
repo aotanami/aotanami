@@ -2,20 +2,26 @@
 Copyright 2026 Zelyo AI
 */
 
-// Package dashboard provides a REST API and Server-Sent Events (SSE) endpoint
-// for the Zelyo Operator real-time dashboard.
+// Package dashboard provides a REST API, Server-Sent Events (SSE) endpoint,
+// and an embedded single-page dashboard for the Zelyo Operator.
 package dashboard
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+//go:embed static
+var staticFiles embed.FS
 
 // Server is the dashboard HTTP server.
 type Server struct {
@@ -23,6 +29,7 @@ type Server struct {
 	log      logr.Logger
 	port     int
 	basePath string
+	client   client.Client
 
 	mu          sync.RWMutex
 	subscribers map[string]chan Event
@@ -35,33 +42,21 @@ type Event struct {
 	Timestamp time.Time   `json:"timestamp"`
 }
 
-// ClusterOverview summarizes the cluster security posture.
-type ClusterOverview struct {
-	SecurityScore       int        `json:"security_score"`
-	TotalPolicies       int        `json:"total_policies"`
-	TotalViolations     int        `json:"total_violations"`
-	CriticalViolations  int        `json:"critical_violations"`
-	LastScanTime        *time.Time `json:"last_scan_time,omitempty"`
-	ActiveIncidents     int        `json:"active_incidents"`
-	CompliancePct       float64    `json:"compliance_pct"`
-	CostSavingsEstimate string     `json:"cost_savings_estimate,omitempty"`
-	UpdatedAt           time.Time  `json:"updated_at"`
-}
-
 // Config configures the dashboard server.
 type Config struct {
 	Port     int    `json:"port"`
-	BasePath string `json:"base_path"`
+	BasePath string `json:"basePath"`
 	Enabled  bool   `json:"enabled"`
 }
 
 // NewServer creates a new dashboard server.
-func NewServer(cfg *Config, log logr.Logger) *Server {
+func NewServer(cfg *Config, k8sClient client.Client, log logr.Logger) *Server {
 	s := &Server{
 		mux:         http.NewServeMux(),
 		log:         log,
 		port:        cfg.Port,
 		basePath:    cfg.BasePath,
+		client:      k8sClient,
 		subscribers: make(map[string]chan Event),
 	}
 	s.registerRoutes()
@@ -73,26 +68,42 @@ func (s *Server) registerRoutes() {
 	if prefix == "/" {
 		prefix = ""
 	}
+
+	// API routes.
 	s.mux.HandleFunc(prefix+"/api/v1/health", s.handleHealth)
 	s.mux.HandleFunc(prefix+"/api/v1/overview", s.handleOverview)
+	s.mux.HandleFunc(prefix+"/api/v1/policies", s.handlePolicies)
+	s.mux.HandleFunc(prefix+"/api/v1/scans", s.handleScans)
+	s.mux.HandleFunc(prefix+"/api/v1/reports/", s.handleReport)
+	s.mux.HandleFunc(prefix+"/api/v1/scans/", s.handleScanReports)
+	s.mux.HandleFunc(prefix+"/api/v1/cloud", s.handleCloud)
+	s.mux.HandleFunc(prefix+"/api/v1/compliance", s.handleCompliance)
+	s.mux.HandleFunc(prefix+"/api/v1/settings", s.handleSettings)
 	s.mux.HandleFunc(prefix+"/api/v1/events", s.handleSSE)
+
+	// Embedded static files.
+	staticSub, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		s.log.Error(err, "Failed to create sub-filesystem for static files")
+		return
+	}
+	s.mux.Handle(prefix+"/static/", http.StripPrefix(prefix+"/static/", http.FileServer(http.FS(staticSub))))
+
+	// SPA catch-all — serve index.html for any unmatched path.
+	s.mux.HandleFunc(prefix+"/", s.handleSPA)
 }
 
-func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
-		s.log.Error(err, "Failed to encode health response")
+func (s *Server) handleSPA(w http.ResponseWriter, r *http.Request) {
+	// Let /api and /static fall through to their handlers.
+	indexHTML, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		http.Error(w, "dashboard not found", http.StatusInternalServerError)
+		return
 	}
-}
-
-func (s *Server) handleOverview(w http.ResponseWriter, _ *http.Request) {
-	overview := ClusterOverview{
-		SecurityScore: 0,
-		UpdatedAt:     time.Now(),
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(overview); err != nil {
-		s.log.Error(err, "Failed to encode overview response")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	if _, err = w.Write(indexHTML); err != nil {
+		s.log.Error(err, "Failed to write dashboard HTML")
 	}
 }
 
@@ -151,13 +162,30 @@ func (s *Server) Broadcast(event Event) {
 	}
 }
 
-// Start starts the dashboard HTTP server.
+// Start starts the dashboard HTTP server and the heartbeat goroutine.
 func (s *Server) Start(ctx context.Context) error {
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", s.port),
 		Handler:           s.mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+
+	// Heartbeat: broadcast overview.refresh every 30 seconds.
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.Broadcast(Event{
+					Type: "overview.refresh",
+					Data: map[string]string{"trigger": "heartbeat"},
+				})
+			}
+		}
+	}()
 
 	go func() {
 		<-ctx.Done()

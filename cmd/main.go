@@ -230,9 +230,9 @@ func setupControllers(mgr ctrl.Manager, deps *controllerDeps) error {
 }
 
 // startDashboard registers the dashboard HTTP server with the manager if enabled.
-func startDashboard(mgr ctrl.Manager) error {
+func startDashboard(mgr ctrl.Manager) (*dashboard.Server, error) {
 	if os.Getenv("ZELYO_OPERATOR_DASHBOARD_ENABLED") == "false" {
-		return nil
+		return nil, nil
 	}
 	dashPort := 8080
 	if p, err := strconv.Atoi(os.Getenv("ZELYO_OPERATOR_DASHBOARD_PORT")); err == nil && p > 0 {
@@ -246,12 +246,12 @@ func startDashboard(mgr ctrl.Manager) error {
 		Port:     dashPort,
 		BasePath: dashBasePath,
 		Enabled:  true,
-	}, ctrl.Log.WithName("dashboard"))
+	}, mgr.GetClient(), ctrl.Log.WithName("dashboard"))
 	if err := mgr.Add(dashSrv); err != nil {
-		return fmt.Errorf("adding dashboard server to manager: %w", err)
+		return nil, fmt.Errorf("adding dashboard server to manager: %w", err)
 	}
 	setupLog.Info("Dashboard server registered", "port", dashPort, "basePath", dashBasePath)
-	return nil
+	return dashSrv, nil
 }
 
 func main() {
@@ -319,7 +319,7 @@ func main() {
 		setupLog.Error(err, "Failed to set up health check")
 		os.Exit(1)
 	}
-	if err := startDashboard(mgr); err != nil {
+	if _, err := startDashboard(mgr); err != nil {
 		setupLog.Error(err, "Failed to start dashboard")
 		os.Exit(1)
 	}
