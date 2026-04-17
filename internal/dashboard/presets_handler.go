@@ -193,6 +193,10 @@ func (s *Server) handlePresetStatus(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "preset id required")
 		return
 	}
+	if FindPreset(id) == nil {
+		s.writeError(w, http.StatusNotFound, "preset not found")
+		return
+	}
 	s.writeJSON(w, DefaultPresetStore().get(id))
 }
 

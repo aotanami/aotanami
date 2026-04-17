@@ -316,23 +316,33 @@ function renderDrawerActions(presetID, status, canPR, repo) {
       </div>
     `;
   }
-  // not_enabled — primary action depends on GitOps availability.
-  const primary = canPR
-    ? `<button class="btn btn-primary preset-propose" data-preset-id="${escapeAttr(presetID)}">Propose via PR &rarr;</button>`
-    : `<button class="btn btn-primary preset-apply" data-preset-id="${escapeAttr(presetID)}">Apply directly &rarr;</button>`;
-  const secondary = canPR
-    ? `<button class="btn btn-ghost preset-apply" data-preset-id="${escapeAttr(presetID)}" title="Bypass GitOps review">or apply directly</button>`
-    : '';
+
+  // not_enabled — PR-only flow. Zelyo never applies policies directly to
+  // the cluster from the UI; every declarative change must flow through
+  // a reviewable GitOps PR. When no repo is connected, we gate the flow
+  // behind Settings → Connect GitOps rather than offering a bypass.
+  if (!canPR) {
+    return `
+      <div class="preset-actions preset-actions-blocked">
+        <div class="preset-action-hint">
+          No GitOps repository connected. Zelyo only ships policies via a
+          reviewable PR — connect a repo to enable this preset.
+        </div>
+        <div class="preset-actions-row">
+          <a class="btn btn-primary" href="#settings">Connect GitOps &rarr;</a>
+        </div>
+      </div>
+    `;
+  }
+
   return `
     <div class="preset-actions">
       <div class="preset-action-hint">
-        ${canPR
-          ? `Default: open a PR in <strong>${escapeHTML(repo || 'your GitOps repo')}</strong>. Merge to apply.`
-          : 'No GitOps repo connected — this will apply immediately. No PR review.'}
+        Opens a PR in <strong>${escapeHTML(repo || 'your GitOps repo')}</strong>.
+        Review &amp; merge to apply — Zelyo never writes directly to the cluster.
       </div>
       <div class="preset-actions-row">
-        ${primary}
-        ${secondary}
+        <button class="btn btn-primary preset-propose" data-preset-id="${escapeAttr(presetID)}">Propose via PR &rarr;</button>
       </div>
     </div>
   `;
@@ -366,18 +376,10 @@ async function triggerPropose(presetID) {
   }
 }
 
-async function triggerApply(presetID) {
-  if (!confirm('Apply this preset directly to the cluster without a PR?')) return;
-  try {
-    const s = await postJSON(`/api/v1/presets/${encodeURIComponent(presetID)}/apply`, {});
-    const v = _state.presets.find((x) => x.id === presetID);
-    if (v) v.status = s.status;
-    await openDrawer(presetID);
-    renderAll();
-  } catch (err) {
-    alert('Could not apply: ' + (err.message || err));
-  }
-}
+// triggerApply is intentionally not wired to any UI element. The /apply
+// backend endpoint is retained for admin/CLI use (e.g. bootstrapping a
+// cluster before a GitOps repo is onboarded), but Zelyo's UI contract is
+// PR-only: every declarative change surfaces as a reviewable PR.
 
 function updatePresetCardInPlace(presetID, status) {
   const v = _state.presets.find((x) => x.id === presetID);
@@ -415,15 +417,13 @@ function bindClicks() {
     const card = e.target.closest('[data-preset-id]');
     if (!card) return;
     // The drawer button clicks are handled by delegated listener below.
-    if (e.target.closest('.preset-propose') || e.target.closest('.preset-apply')) return;
+    if (e.target.closest('.preset-propose')) return;
     openDrawer(card.getAttribute('data-preset-id'));
   });
 
   _documentClickHandler = (e) => {
     const prop = e.target.closest('.preset-propose');
-    if (prop) { e.preventDefault(); triggerPropose(prop.getAttribute('data-preset-id')); return; }
-    const appl = e.target.closest('.preset-apply');
-    if (appl) { e.preventDefault(); triggerApply(appl.getAttribute('data-preset-id')); }
+    if (prop) { e.preventDefault(); triggerPropose(prop.getAttribute('data-preset-id')); }
   };
   document.addEventListener('click', _documentClickHandler);
 }

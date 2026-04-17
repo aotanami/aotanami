@@ -270,7 +270,10 @@ function buildExplainAttrs(e) {
 
 function eventFingerprint(e) {
   const p = eventExplainPayload(e) || {};
-  return `${p.rule || ''}|${(p.severity || '').toLowerCase()}|${p.resource || ''}`;
+  // Must match the backend cache key (rule|severity|resource|title) so a
+  // single client-side cache entry cannot collide between two findings
+  // that share rule+severity+resource but differ in title.
+  return `${p.rule || ''}|${(p.severity || '').toLowerCase()}|${p.resource || ''}|${p.title || ''}`;
 }
 
 function pulseStage(stageId) {
@@ -414,7 +417,8 @@ function renderFindingCard(f) {
 }
 
 function findingFingerprint(f) {
-  return `${f.rule || ''}|${(f.severity || '').toLowerCase()}|${f.resource || ''}`;
+  // Match the backend cache key (rule|severity|resource|title).
+  return `${f.rule || ''}|${(f.severity || '').toLowerCase()}|${f.resource || ''}|${f.title || ''}`;
 }
 
 function renderAfterStatus(ctx) {

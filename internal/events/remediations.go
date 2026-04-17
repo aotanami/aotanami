@@ -101,6 +101,13 @@ func (s *remediationStore) Upsert(ctx *RemediationContext) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// If this PR was upserted before, drop its old index references first
+	// so a re-upsert with a different ScanRef / Findings doesn't leave
+	// stale keys in scanToKeys / resourceToKeys.
+	if _, exists := s.byKey[stored.Key]; exists {
+		s.removeLocked(stored.Key)
+	}
+
 	s.byKey[stored.Key] = stored
 	if stored.ScanRef != "" {
 		s.scanToKeys[stored.ScanRef] = appendUnique(s.scanToKeys[stored.ScanRef], stored.Key)
@@ -245,6 +252,10 @@ func appendUnique(in []string, v string) []string {
 
 func copyCtx(v *RemediationContext) *RemediationContext {
 	out := *v
+	if v.MergedAt != nil {
+		mergedAt := *v.MergedAt
+		out.MergedAt = &mergedAt
+	}
 	out.Findings = append([]RemediationItem(nil), v.Findings...)
 	out.FilesChanged = append([]string(nil), v.FilesChanged...)
 	out.ResolvedKeys = map[string]struct{}{}

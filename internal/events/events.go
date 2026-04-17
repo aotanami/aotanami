@@ -175,6 +175,9 @@ func (b *Bus) Subscribe() (events <-chan Event, cancel func()) {
 
 // Recent returns up to `limit` most-recent events matching the optional
 // stage filter. An empty stage returns events from all stages.
+//
+// The returned events contain deep-copied Meta maps so callers cannot
+// mutate the buffered history through a returned value.
 func (b *Bus) Recent(stage Stage, limit int) []Event {
 	if limit <= 0 {
 		limit = 100
@@ -187,7 +190,15 @@ func (b *Bus) Recent(stage Stage, limit int) []Event {
 		if stage != "" && b.buffer[i].Stage != stage {
 			continue
 		}
-		out = append(out, b.buffer[i])
+		ev := b.buffer[i]
+		if ev.Meta != nil {
+			cp := make(map[string]string, len(ev.Meta))
+			for k, v := range ev.Meta {
+				cp[k] = v
+			}
+			ev.Meta = cp
+		}
+		out = append(out, ev)
 	}
 	return out
 }
