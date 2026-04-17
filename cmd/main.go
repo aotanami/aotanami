@@ -44,6 +44,7 @@ import (
 	"github.com/zelyo-ai/zelyo-operator/internal/controller"
 	"github.com/zelyo-ai/zelyo-operator/internal/correlator"
 	"github.com/zelyo-ai/zelyo-operator/internal/dashboard"
+	"github.com/zelyo-ai/zelyo-operator/internal/events"
 	gitopscontroller "github.com/zelyo-ai/zelyo-operator/internal/gitops/controller"
 	"github.com/zelyo-ai/zelyo-operator/internal/gitops/source"
 	_ "github.com/zelyo-ai/zelyo-operator/internal/metrics" // Auto-register custom Prometheus metrics.
@@ -328,8 +329,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx := ctrl.SetupSignalHandler()
+
+	// Demo mode: synthesize a realistic Scan→Correlate→Fix→Verify stream on
+	// the pipeline event bus so the dashboard Pipeline view is never empty.
+	// Real controller events interleave with these on the same bus.
+	if os.Getenv("ZELYO_DEMO_MODE") == "true" {
+		setupLog.Info("ZELYO_DEMO_MODE=true — starting synthetic pipeline event generator")
+		go events.RunDemoSynthesizer(ctx)
+	}
+
 	setupLog.Info("Starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "Failed to run manager")
 		os.Exit(1)
 	}

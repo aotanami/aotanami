@@ -18,6 +18,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/zelyo-ai/zelyo-operator/internal/events"
 )
 
 //go:embed static
@@ -80,6 +82,11 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc(prefix+"/api/v1/compliance", s.handleCompliance)
 	s.mux.HandleFunc(prefix+"/api/v1/settings", s.handleSettings)
 	s.mux.HandleFunc(prefix+"/api/v1/events", s.handleSSE)
+	s.mux.HandleFunc(prefix+"/api/v1/pipeline", s.handlePipeline)
+	s.mux.HandleFunc(prefix+"/api/v1/remediations", s.handleRemediations)
+	s.mux.HandleFunc(prefix+"/api/v1/explain", s.handleExplain)
+	s.mux.HandleFunc(prefix+"/api/v1/presets", s.handlePresets)
+	s.mux.HandleFunc(prefix+"/api/v1/presets/", s.dispatchPresetRoute)
 
 	// Embedded static files.
 	staticSub, err := fs.Sub(staticFiles, "static")
@@ -187,6 +194,10 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}()
 
+	// Pipeline bridge: forward events from the in-process bus to SSE
+	// subscribers. Runs until ctx is canceled.
+	go s.bridgePipelineEvents(ctx)
+
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -202,3 +213,26 @@ func (s *Server) Start(ctx context.Context) error {
 
 // NeedLeaderElection returns false so the dashboard runs on all replicas.
 func (s *Server) NeedLeaderElection() bool { return false }
+
+// bridgePipelineEvents subscribes to the pipeline event bus and forwards each
+// event to SSE subscribers tagged with its type (scan.started, finding.detected, ...).
+func (s *Server) bridgePipelineEvents(ctx context.Context) {
+	ch, cancel := events.Default().Subscribe()
+	defer cancel()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev, ok := <-ch:
+			if !ok {
+				return
+			}
+			s.Broadcast(Event{
+				Type:      ev.Type,
+				Data:      ev,
+				Timestamp: ev.Timestamp,
+			})
+		}
+	}
+}

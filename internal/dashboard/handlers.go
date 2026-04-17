@@ -7,7 +7,10 @@ package dashboard
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
+
+	"github.com/zelyo-ai/zelyo-operator/internal/events"
 )
 
 func (s *Server) writeJSON(w http.ResponseWriter, data interface{}) {
@@ -124,6 +127,102 @@ func (s *Server) handleCompliance(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.log.Error(err, "Failed to fetch compliance data")
 		s.writeError(w, http.StatusInternalServerError, "failed to fetch compliance data")
+		return
+	}
+	s.writeJSON(w, resp)
+}
+
+// handlePipeline returns the ring-buffer of recent pipeline events.
+// Query params: limit (default 200), stage (optional: scan|correlate|fix|verify).
+func (s *Server) handlePipeline(w http.ResponseWriter, r *http.Request) {
+	limit := 200
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 1000 {
+			limit = n
+		}
+	}
+	stage := events.Stage(r.URL.Query().Get("stage"))
+	recent := events.Default().Recent(stage, limit)
+
+	// Reverse so oldest-first is cheap for the UI to append without sorting.
+	for i, j := 0, len(recent)-1; i < j; i, j = i+1, j-1 {
+		recent[i], recent[j] = recent[j], recent[i]
+	}
+
+	counts := map[events.Stage]int{}
+	all := events.Default().Recent("", 1000)
+	for i := range all {
+		counts[all[i].Stage]++
+	}
+
+	s.writeJSON(w, map[string]interface{}{
+		"events": recent,
+		"counts": map[string]int{
+			"scan":      counts[events.StageScan],
+			"correlate": counts[events.StageCorrelate],
+			"fix":       counts[events.StageFix],
+			"verify":    counts[events.StageVerify],
+		},
+	})
+}
+
+// handleRemediations returns either a single remediation context (when
+// `url` is provided) or a list of recent remediations. This backs the
+// Pipeline page's Before/Diff/After side panel.
+func (s *Server) handleRemediations(w http.ResponseWriter, r *http.Request) {
+	store := events.DefaultRemediationStore()
+
+	if u := r.URL.Query().Get("url"); u != "" {
+		ctx := store.Get(u)
+		if ctx == nil {
+			s.writeError(w, http.StatusNotFound, "remediation not found")
+			return
+		}
+		s.writeJSON(w, ctx)
+		return
+	}
+
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 500 {
+			limit = n
+		}
+	}
+	s.writeJSON(w, map[string]interface{}{
+		"remediations": store.List(limit),
+	})
+}
+
+// handleExplain returns a plain-English explanation for a security finding.
+// Accepts POST with a JSON body (preferred) or GET with query params.
+func (s *Server) handleExplain(w http.ResponseWriter, r *http.Request) {
+	req := &ExplainRequest{}
+	switch r.Method {
+	case http.MethodPost:
+		if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+			s.writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+	case http.MethodGet:
+		q := r.URL.Query()
+		req.Rule = q.Get("rule")
+		req.Severity = q.Get("severity")
+		req.Resource = q.Get("resource")
+		req.Title = q.Get("title")
+	default:
+		s.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	if req.Rule == "" {
+		s.writeError(w, http.StatusBadRequest, "rule is required")
+		return
+	}
+
+	resp, err := getExplainer().Explain(r.Context(), req)
+	if err != nil {
+		s.log.Error(err, "Failed to generate explanation", "rule", req.Rule)
+		s.writeError(w, http.StatusInternalServerError, "failed to generate explanation")
 		return
 	}
 	s.writeJSON(w, resp)

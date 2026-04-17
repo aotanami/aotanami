@@ -29,6 +29,7 @@ import (
 
 	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
+	"github.com/zelyo-ai/zelyo-operator/internal/events"
 	zelyometrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
 )
 
@@ -75,6 +76,7 @@ func (r *ScanReportReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, fmt.Errorf("updating ScanReport status: %w", err)
 		}
 		zelyometrics.ReconcileTotal.WithLabelValues("scanreport", "success").Inc()
+		events.EmitReportCreated(report.Name, report.Spec.ScanRef, report.Spec.Summary.TotalFindings)
 	}
 
 	return ctrl.Result{}, nil

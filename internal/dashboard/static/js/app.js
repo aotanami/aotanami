@@ -22,13 +22,27 @@ function initSSE() {
       dispatchSSE(event.type, event);
     } catch (_) { /* ignore parse errors */ }
   };
-  const eventTypes = ['policy.updated', 'scan.updated', 'cloud.updated', 'config.updated', 'overview.refresh', 'report.created'];
+  const eventTypes = [
+    'policy.updated', 'scan.updated', 'cloud.updated', 'config.updated', 'overview.refresh',
+    // Pipeline events (emitted by internal/events bus).
+    'scan.started', 'scan.completed', 'finding.detected', 'report.created',
+    'correlation.grouped', 'remediation.drafted', 'pr.opened', 'pr.merged',
+    'finding.resolved',
+    'config.pr.drafted', 'config.applied',
+  ];
+  // Only these events are important enough to warrant a toast. The rest
+  // stream into the Pipeline view and don't need to interrupt the user.
+  const TOAST_WHITELIST = new Set([
+    'pr.merged',
+    'config.pr.drafted',
+    'config.applied',
+  ]);
   eventTypes.forEach(type => {
     sseSource.addEventListener(type, (e) => {
       try {
         const data = JSON.parse(e.data);
         dispatchSSE(type, data);
-        showToast(type, data);
+        if (TOAST_WHITELIST.has(type)) showToast(type, data);
       } catch (_) { /* ignore */ }
     });
   });
@@ -50,26 +64,68 @@ function offSSE(type, handler) {
 }
 
 // --- Toast notifications ---
-function showToast(type, data) {
+const TOAST_MAX = 3;
+const TOAST_DUR = 2600;
+
+function showToast(type, payload) {
   const container = document.getElementById('toast-container');
   if (!container) return;
+
+  // Cap concurrent toasts — drop oldest.
+  while (container.children.length >= TOAST_MAX) {
+    container.firstChild.remove();
+  }
+
+  const info = describeToast(type, payload);
   const toast = document.createElement('div');
-  toast.className = 'toast';
-  const label = type.replace('.', ' ').replace(/\b\w/g, l => l.toUpperCase());
-  toast.innerHTML = `<span class="toast-icon">${getEventIcon(type)}</span><span class="toast-text">${label}</span>`;
+  toast.className = `toast toast-${info.tone}`;
+  toast.innerHTML = `
+    <span class="toast-dot"></span>
+    <div class="toast-body">
+      <div class="toast-title">${escapeAttr(info.title)}</div>
+      ${info.detail ? `<div class="toast-detail">${escapeAttr(info.detail)}</div>` : ''}
+    </div>
+    <button class="toast-close" aria-label="Dismiss">${toastCloseIcon()}</button>
+    <span class="toast-progress"></span>
+  `;
   container.appendChild(toast);
+
+  const close = () => {
+    if (toast._closed) return;
+    toast._closed = true;
+    toast.classList.add('toast-exit');
+    setTimeout(() => toast.remove(), 180);
+  };
+  toast.querySelector('.toast-close').addEventListener('click', close);
+
   requestAnimationFrame(() => toast.classList.add('show'));
-  setTimeout(() => {
-    toast.classList.remove('show');
-    setTimeout(() => toast.remove(), 300);
-  }, 4000);
+  setTimeout(close, TOAST_DUR);
 }
 
-function getEventIcon(type) {
-  if (type.startsWith('policy')) return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
-  if (type.startsWith('scan')) return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>';
-  if (type.startsWith('cloud')) return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>';
-  return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>';
+function describeToast(type, payload) {
+  // SSE envelope: { type, data: <events.Event>, timestamp }.
+  const ev = (payload && payload.data) || {};
+  const title = ev.title || humanizeType(type);
+  const detail = ev.detail || '';
+  let tone = 'info';
+  if (type === 'pr.merged' || ev.level === 'success') tone = 'success';
+  else if (type === 'config.applied' || ev.level === 'warning') tone = 'warn';
+  else if (ev.level === 'error') tone = 'error';
+  return { title, detail, tone };
+}
+
+function humanizeType(type) {
+  return type.replace(/\./g, ' · ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function toastCloseIcon() {
+  return '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 1l8 8M9 1l-8 8"/></svg>';
+}
+
+function escapeAttr(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
 }
 
 // --- Time formatting ---
@@ -189,6 +245,7 @@ function formatNumber(n) {
 // --- Router ---
 const routes = {
   'overview':   () => import('./pages/overview.js'),
+  'pipeline':   () => import('./pages/pipeline.js'),
   'policies':   () => import('./pages/policies.js'),
   'scans':      () => import('./pages/scans.js'),
   'cloud':      () => import('./pages/cloud.js'),
