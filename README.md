@@ -82,9 +82,15 @@ graph LR
 
 ## Installation
 
+> **Pin a chart version.** The charts are published to an OCI registry, which has no "latest" alias — `helm install` requires `--version`. Find the current tag at [github.com/zelyo-ai/zelyo-operator/releases](https://github.com/zelyo-ai/zelyo-operator/releases) and substitute it below.
+
 ```bash
+# Use the latest release tag from https://github.com/zelyo-ai/zelyo-operator/releases
+ZELYO_VERSION=1.0.0-alpha3
+
 # 1. Install Zelyo Operator
 helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
+  --version "$ZELYO_VERSION" \
   --namespace zelyo-system \
   --create-namespace \
   --set config.llm.provider=openrouter \
@@ -98,6 +104,7 @@ kubectl create secret generic zelyo-llm \
 
 # 3. Deploy default security policies
 helm install zelyo-policies oci://ghcr.io/zelyo-ai/charts/zelyo-policies \
+  --version "$ZELYO_VERSION" \
   --namespace zelyo-system
 
 # 4. Verify

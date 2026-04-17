@@ -16,12 +16,20 @@ kubectl cluster-info && helm version
 
 > **Note:** Webhook TLS certificates are self-signed by default. If you prefer cert-manager managed certificates, see [Optional: cert-manager for Webhook TLS](#optional-cert-manager-for-webhook-tls) below.
 
+> **Pin a chart version.** The charts are published to an OCI registry, which has no "latest" alias — every `helm install` below needs `--version`. Find the current tag at [github.com/zelyo-ai/zelyo-operator/releases](https://github.com/zelyo-ai/zelyo-operator/releases) and export it before running the commands:
+>
+> ```bash
+> # Use the latest release tag from https://github.com/zelyo-ai/zelyo-operator/releases
+> export ZELYO_VERSION=1.0.0-alpha3
+> ```
+
 ---
 
 ## 1. Install Zelyo Operator
 
 ```bash
 helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
+  --version "$ZELYO_VERSION" \
   --namespace zelyo-system \
   --create-namespace \
   --set config.llm.provider=openrouter \
@@ -57,6 +65,7 @@ The `zelyo-policies` Helm chart deploys production-ready security policies cover
 
 ```bash
 helm install zelyo-policies oci://ghcr.io/zelyo-ai/charts/zelyo-policies \
+  --version "$ZELYO_VERSION" \
   --namespace zelyo-system
 ```
 
@@ -71,11 +80,13 @@ Override the security profile globally or per-environment:
 ```bash
 # Strict profile for regulated environments
 helm install zelyo-policies oci://ghcr.io/zelyo-ai/charts/zelyo-policies \
+  --version "$ZELYO_VERSION" \
   --namespace zelyo-system \
   --set global.profile=strict
 
 # Enable SOC 2 + HIPAA compliance evaluation
 helm install zelyo-policies oci://ghcr.io/zelyo-ai/charts/zelyo-policies \
+  --version "$ZELYO_VERSION" \
   --namespace zelyo-system \
   --set compliance.presets.soc2=true \
   --set compliance.presets.hipaa=true
@@ -410,6 +421,7 @@ helm install cert-manager oci://quay.io/jetstack/charts/cert-manager \
 
 # Then install Zelyo Operator with cert-manager enabled
 helm install zelyo-operator oci://ghcr.io/zelyo-ai/charts/zelyo-operator \
+  --version "$ZELYO_VERSION" \
   --namespace zelyo-system \
   --create-namespace \
   --set webhook.certManager.enabled=true \
