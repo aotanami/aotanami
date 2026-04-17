@@ -55,7 +55,7 @@ webhooks:
       service:
         name: {{ $svc }}
         namespace: {{ $ns }}
-        path: /validate-zelyo-operator-zelyo-ai-v1alpha1-securitypolicy
+        path: /validate-zelyo-ai-v1alpha1-securitypolicy
         port: 443
       {{- if $useSelfSigned }}
       caBundle: {{ $caBundle }}
@@ -92,7 +92,7 @@ webhooks:
       service:
         name: {{ $svc }}
         namespace: {{ $ns }}
-        path: /mutate-zelyo-operator-zelyo-ai-v1alpha1-securitypolicy
+        path: /mutate-zelyo-ai-v1alpha1-securitypolicy
         port: 443
       {{- if $useSelfSigned }}
       caBundle: {{ $caBundle }}

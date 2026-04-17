@@ -10,7 +10,7 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /mutate-zelyo-operator-zelyo-ai-v1alpha1-securitypolicy
+      path: /mutate-zelyo-ai-v1alpha1-securitypolicy
   failurePolicy: Fail
   name: msecuritypolicy-v1alpha1.kb.io
   rules:
@@ -36,7 +36,7 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-zelyo-operator-zelyo-ai-v1alpha1-securitypolicy
+      path: /validate-zelyo-ai-v1alpha1-securitypolicy
   failurePolicy: Fail
   name: vsecuritypolicy-v1alpha1.kb.io
   rules:

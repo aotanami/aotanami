@@ -41,7 +41,7 @@ func SetupSecurityPolicyWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// +kubebuilder:webhook:path=/mutate-zelyo-operator-zelyo-ai-v1alpha1-securitypolicy,mutating=true,failurePolicy=fail,sideEffects=None,groups=zelyo.ai,resources=securitypolicies,verbs=create;update,versions=v1alpha1,name=msecuritypolicy-v1alpha1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-zelyo-ai-v1alpha1-securitypolicy,mutating=true,failurePolicy=fail,sideEffects=None,groups=zelyo.ai,resources=securitypolicies,verbs=create;update,versions=v1alpha1,name=msecuritypolicy-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // SecurityPolicyCustomDefaulter sets default values on SecurityPolicy resources
 // when they are created or updated.
@@ -87,7 +87,7 @@ var validSeverities = map[string]bool{
 	zelyov1alpha1.SeverityInfo:     true,
 }
 
-// +kubebuilder:webhook:path=/validate-zelyo-operator-zelyo-ai-v1alpha1-securitypolicy,mutating=false,failurePolicy=fail,sideEffects=None,groups=zelyo.ai,resources=securitypolicies,verbs=create;update,versions=v1alpha1,name=vsecuritypolicy-v1alpha1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-zelyo-ai-v1alpha1-securitypolicy,mutating=false,failurePolicy=fail,sideEffects=None,groups=zelyo.ai,resources=securitypolicies,verbs=create;update,versions=v1alpha1,name=vsecuritypolicy-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // SecurityPolicyCustomValidator validates SecurityPolicy resources
 // when they are created, updated, or deleted.
