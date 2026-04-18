@@ -1,289 +1,417 @@
 /*
 Copyright 2026 Zelyo AI
 Dashboard — Overview Page Module
+
+Landing page layout inspired by Prowler (Findings by Severity, Top Failing
+Checks, Top Affected Resources, Compliance Strip, Cloud Account Risk) with
+Zelyo-specific elements: the live Pipeline snapshot + "Open PR" as the
+primary action on failing items (our differentiator over Prowler — we ship
+GitOps remediations).
 */
 
-const { fetchJSON, onSSE, offSSE, formatTime, renderDonutChart } = window.ZelyoApp;
+const { fetchJSON, onSSE, offSSE, formatTime } = window.ZelyoApp;
 
 let _container = null;
-let _activityItems = [];
-const MAX_ACTIVITY = 50;
+let _data = null;
+let _sseHandlers = [];
 
-/* ---------- SSE handlers ---------- */
+/* ---------- Load + SSE ---------- */
 
-function handleOverviewRefresh() {
-  loadOverview();
-}
-
-function handleActivityEvent(e) {
-  const detail = e.detail || e;
-  const entry = {
-    timestamp: detail.timestamp || new Date().toISOString(),
-    type: detail.type || 'info',
-    description: describeEvent(detail),
-  };
-
-  _activityItems.unshift(entry);
-  if (_activityItems.length > MAX_ACTIVITY) {
-    _activityItems = _activityItems.slice(0, MAX_ACTIVITY);
-  }
-  renderActivityList();
-}
-
-function describeEvent(evt) {
-  const t = evt.type || '';
-  const d = evt.data || {};
-
-  if (t === 'policy.updated')  return `Policy "${d.name || 'unknown'}" updated`;
-  if (t === 'scan.updated')    return `Scan "${d.name || 'unknown'}" ${d.phase || 'updated'}`;
-  if (t === 'cloud.updated')   return `Cloud account "${d.name || 'unknown'}" scan ${d.phase || 'updated'}`;
-  if (t === 'config.updated')  return 'Operator configuration changed';
-  if (t === 'overview.refresh') return 'Dashboard data refreshed';
-  return `Event: ${t}`;
-}
-
-function eventIcon(type) {
-  if (type.startsWith('policy'))  return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
-  if (type.startsWith('scan'))    return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
-  if (type.startsWith('cloud'))   return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>';
-  if (type.startsWith('config'))  return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
-  return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
-}
-
-/* ---------- Score color ---------- */
-
-function scoreColor(score) {
-  if (score >= 80) return 'var(--color-success)';
-  if (score >= 60) return 'var(--color-warning)';
-  return 'var(--color-critical)';
-}
-
-function scoreClass(score) {
-  if (score >= 80) return 'score-good';
-  if (score >= 60) return 'score-warn';
-  return 'score-bad';
-}
-
-/* ---------- Skeleton ---------- */
-
-function renderSkeleton() {
-  _container.innerHTML = `
-    <div class="kpi-grid">
-      ${Array(6).fill('<div class="kpi-card skeleton" style="min-height:110px"></div>').join('')}
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-lg);margin-top:var(--space-lg)">
-      <div class="card skeleton" style="min-height:280px"></div>
-      <div class="card skeleton" style="min-height:280px"></div>
-    </div>
-    <div class="card skeleton" style="min-height:220px;margin-top:var(--space-lg)"></div>
-  `;
-}
-
-/* ---------- Render overview ---------- */
-
-function renderOverview(data) {
-  if (!_container) return;
-
-  const sc = data.securityScore ?? 0;
-
-  _container.innerHTML = `
-    <!-- Row 1: KPI Cards -->
-    <div class="kpi-grid">
-      <div class="kpi-card kpi-card--score">
-        <div class="kpi-label">Security Score</div>
-        <div class="kpi-value ${scoreClass(sc)}" style="color:${scoreColor(sc)}">
-          ${sc}<span class="kpi-unit">/ 100</span>
-        </div>
-        <div class="kpi-bar">
-          <div class="kpi-bar-fill" style="width:${sc}%;background:${scoreColor(sc)}"></div>
-        </div>
-      </div>
-
-      <div class="kpi-card">
-        <div class="kpi-label">Total Violations</div>
-        <div class="kpi-value">${data.totalViolations ?? 0}</div>
-        <div class="kpi-severity-dots">
-          <span class="severity-dot badge-critical" title="Critical">${data.criticalViolations ?? 0}</span>
-          <span class="severity-dot badge-high" title="High">${data.highViolations ?? 0}</span>
-          <span class="severity-dot badge-medium" title="Medium">${data.mediumViolations ?? 0}</span>
-        </div>
-      </div>
-
-      <div class="kpi-card">
-        <div class="kpi-label">Active Policies</div>
-        <div class="kpi-value">${data.activePolicies ?? 0}<span class="kpi-unit">/ ${data.totalPolicies ?? 0}</span></div>
-      </div>
-
-      <div class="kpi-card">
-        <div class="kpi-label">Cluster Scans</div>
-        <div class="kpi-value">${data.totalScans ?? 0}</div>
-        <div class="kpi-sub">${data.totalFindings ?? 0} findings</div>
-      </div>
-
-      <div class="kpi-card">
-        <div class="kpi-label">Cloud Accounts</div>
-        <div class="kpi-value">${data.cloudAccounts ?? 0}</div>
-        <div class="kpi-sub">${data.cloudFindings ?? 0} findings</div>
-      </div>
-
-      <div class="kpi-card">
-        <div class="kpi-label">Compliance</div>
-        <div class="kpi-value">${(data.compliancePct ?? 0).toFixed(1)}<span class="kpi-unit">%</span></div>
-        <div class="kpi-bar">
-          <div class="kpi-bar-fill" style="width:${data.compliancePct ?? 0}%;background:${scoreColor(data.compliancePct ?? 0)}"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Row 2: Charts & Summary -->
-    <div class="overview-row2">
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">Severity Distribution</h3>
-        </div>
-        <div class="card-body">
-          <div id="overview-donut" class="chart-container" style="display:flex;align-items:center;justify-content:center;min-height:220px"></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">Operator Summary</h3>
-        </div>
-        <div class="card-body">
-          <div class="summary-stats">
-            <div class="summary-stat-row">
-              <span class="summary-stat-label">Operator Mode</span>
-              <span class="phase-badge phase-${(data.operatorMode || 'audit').toLowerCase()}">${capitalize(data.operatorMode || 'audit')}</span>
-            </div>
-            <div class="summary-stat-row">
-              <span class="summary-stat-label">Operator Phase</span>
-              <span class="phase-badge phase-${(data.operatorPhase || 'Active').toLowerCase()}">${data.operatorPhase || 'Active'}</span>
-            </div>
-            <div class="summary-stat-row">
-              <span class="summary-stat-label">Running Scans</span>
-              <span class="summary-stat-value">${data.runningScans ?? 0}</span>
-            </div>
-            <div class="summary-stat-row">
-              <span class="summary-stat-label">Completed Scans</span>
-              <span class="summary-stat-value">${data.completedScans ?? 0}</span>
-            </div>
-            <div class="summary-stat-row">
-              <span class="summary-stat-label">Active Incidents</span>
-              <span class="summary-stat-value">${data.activeIncidents ?? 0}</span>
-            </div>
-            <div class="summary-stat-row">
-              <span class="summary-stat-label">Last Scan</span>
-              <span class="summary-stat-value">${data.lastScanTime ? formatTime(data.lastScanTime) : 'Never'}</span>
-            </div>
-            <div class="summary-stat-row">
-              <span class="summary-stat-label">Updated</span>
-              <span class="summary-stat-value">${data.updatedAt ? formatTime(data.updatedAt) : '--'}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Row 3: Recent Activity -->
-    <div class="card">
-      <div class="card-header">
-        <h3 class="card-title">Recent Activity</h3>
-      </div>
-      <div class="card-body">
-        <div id="overview-activity" class="activity-feed"></div>
-      </div>
-    </div>
-  `;
-
-  /* Donut chart */
-  const donutEl = _container.querySelector('#overview-donut');
-  const crit  = data.criticalViolations ?? 0;
-  const high  = data.highViolations ?? 0;
-  const med   = data.mediumViolations ?? 0;
-  const total = data.totalViolations ?? 0;
-  const low   = Math.max(0, total - crit - high - med);
-
-  if (total > 0) {
-    renderDonutChart(donutEl, [
-      { label: 'Critical', value: crit, color: 'var(--color-critical)' },
-      { label: 'High',     value: high, color: 'var(--color-high)' },
-      { label: 'Medium',   value: med,  color: 'var(--color-warning)' },
-      { label: 'Low',      value: low,  color: 'var(--color-info)' },
-    ]);
-  } else {
-    donutEl.innerHTML = '<div class="empty-state">No violations detected</div>';
-  }
-
-  renderActivityList();
-}
-
-/* ---------- Activity list ---------- */
-
-function renderActivityList() {
-  const el = _container && _container.querySelector('#overview-activity');
-  if (!el) return;
-
-  if (_activityItems.length === 0) {
-    el.innerHTML = '<div class="empty-state">Listening for live events&hellip;</div>';
-    return;
-  }
-
-  el.innerHTML = _activityItems.map(item => `
-    <div class="activity-item">
-      <span class="activity-icon">${eventIcon(item.type)}</span>
-      <span class="activity-text">${escapeHTML(item.description)}</span>
-      <span class="activity-time">${formatTime(item.timestamp)}</span>
-    </div>
-  `).join('');
-}
-
-/* ---------- Data loading ---------- */
-
-async function loadOverview() {
+async function load() {
   try {
-    const data = await fetchJSON('/api/v1/overview');
-    renderOverview(data);
+    _data = await fetchJSON('/api/v1/overview');
+    renderAll();
   } catch (err) {
     if (_container) {
-      _container.innerHTML = `<div class="card"><div class="card-body"><div class="empty-state">Failed to load overview: ${escapeHTML(err.message)}</div></div></div>`;
+      _container.innerHTML = `<div class="empty-state"><h3>Failed to load overview</h3><p>${escapeHTML(err.message)}</p></div>`;
     }
   }
 }
 
+function bindSSE() {
+  const refresh = () => load();
+  // High-signal events that change Overview numbers. Other pipeline events
+  // update the Pipeline view directly and don't need a full refetch.
+  ['scan.completed', 'report.created', 'pr.merged', 'config.applied', 'finding.resolved', 'overview.refresh']
+    .forEach((t) => { onSSE(t, refresh); _sseHandlers.push({ t, h: refresh }); });
+}
+
+/* ---------- Rendering ---------- */
+
+function renderAll() {
+  if (!_container || !_data) return;
+  _container.innerHTML = `
+    <div class="ov-page">
+      ${renderHeader()}
+      ${renderKPIStrip()}
+      <div class="ov-row ov-row-2">
+        ${renderSeverityCard()}
+        ${renderPipelineCard()}
+      </div>
+      <div class="ov-row ov-row-2">
+        ${renderTopChecksCard()}
+        ${renderTopKindsCard()}
+      </div>
+      ${renderComplianceStrip()}
+      ${renderCloudAccountsCard()}
+      ${renderTrendCard()}
+    </div>
+  `;
+}
+
+/* ---------- Header ---------- */
+
+function renderHeader() {
+  const d = _data;
+  const mode = (d.operatorMode || '').toUpperCase() || '—';
+  const phase = d.operatorPhase || 'Unknown';
+  const phaseClass = phase === 'Active' ? 'ov-phase-ok' : 'ov-phase-warn';
+  return `
+    <header class="ov-header">
+      <div>
+        <h1 class="ov-title">Security posture</h1>
+        <p class="ov-subtitle">Real-time view across Kubernetes + cloud &middot; last updated ${escapeHTML(formatTime(d.updatedAt))}</p>
+      </div>
+      <div class="ov-op-state">
+        <span class="ov-op-mode">${escapeHTML(mode)} MODE</span>
+        <span class="ov-op-phase ${phaseClass}"><span class="ov-op-dot"></span>${escapeHTML(phase)}</span>
+      </div>
+    </header>
+  `;
+}
+
+/* ---------- KPI strip ---------- */
+
+function renderKPIStrip() {
+  const d = _data;
+  const score = d.securityScore ?? 0;
+  const scoreColor = score >= 80 ? 'var(--success)' : score >= 60 ? 'var(--warning)' : 'var(--severity-critical)';
+  const scoreLabel = score >= 80 ? 'Strong' : score >= 60 ? 'At-risk' : 'Critical';
+
+  const kpis = [
+    {
+      label: 'Security Score',
+      value: `<span style="color:${scoreColor}">${score}</span>`,
+      sub: scoreLabel,
+      accent: scoreColor,
+    },
+    {
+      label: 'Active Findings',
+      value: (d.totalFindings || 0).toLocaleString(),
+      sub: `${d.resolvedFindings || 0} resolved`,
+      accent: 'var(--severity-critical)',
+    },
+    {
+      label: 'Cloud Findings',
+      value: (d.cloudFindings || 0).toLocaleString(),
+      sub: `${d.cloudAccounts || 0} accounts`,
+      accent: 'var(--primary)',
+    },
+    {
+      label: 'Compliance',
+      value: `${(d.compliancePct || 0).toFixed(1)}<span class="ov-kpi-unit">%</span>`,
+      sub: `${(d.frameworks || []).length} frameworks`,
+      accent: 'var(--accent)',
+    },
+  ];
+
+  return `
+    <div class="ov-kpi-strip">
+      ${kpis.map((k) => `
+        <div class="ov-kpi" style="--kpi-accent:${k.accent}">
+          <div class="ov-kpi-label">${escapeHTML(k.label)}</div>
+          <div class="ov-kpi-value">${k.value}</div>
+          <div class="ov-kpi-sub">${escapeHTML(k.sub)}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+/* ---------- Findings by Severity ---------- */
+
+function renderSeverityCard() {
+  const d = _data;
+  const total = (d.criticalViolations || 0) + (d.highViolations || 0) + (d.mediumViolations || 0) + (d.lowViolations || 0);
+  const resolved = d.resolvedFindings || 0;
+  const active = Math.max(0, total);
+  const seg = [
+    { label: 'Critical', value: d.criticalViolations || 0, color: 'var(--severity-critical)' },
+    { label: 'High',     value: d.highViolations || 0,     color: 'var(--severity-high)' },
+    { label: 'Medium',   value: d.mediumViolations || 0,   color: 'var(--severity-medium)' },
+    { label: 'Low',      value: d.lowViolations || 0,      color: 'var(--severity-low)' },
+  ];
+  const maxWidth = Math.max(total, 1);
+  return `
+    <section class="ov-card">
+      <div class="ov-card-head">
+        <div>
+          <div class="ov-card-title">Findings by severity</div>
+          <div class="ov-card-sub">${active} active &middot; ${resolved} resolved via remediation</div>
+        </div>
+        <a href="#scans" class="ov-card-link">View scans →</a>
+      </div>
+      <div class="ov-sev-bar">
+        ${seg.map((s) => s.value > 0
+          ? `<div class="ov-sev-bar-seg" style="flex:${s.value};background:${s.color}" title="${s.label}: ${s.value}"></div>`
+          : '').join('')}
+        ${total === 0 ? '<div class="ov-sev-bar-empty">No active findings</div>' : ''}
+      </div>
+      <ul class="ov-sev-legend">
+        ${seg.map((s) => `
+          <li>
+            <span class="ov-sev-dot" style="background:${s.color}"></span>
+            <span class="ov-sev-label">${s.label}</span>
+            <span class="ov-sev-count">${s.value}</span>
+            <span class="ov-sev-share">${total > 0 ? Math.round((s.value / maxWidth) * 100) : 0}%</span>
+          </li>
+        `).join('')}
+      </ul>
+    </section>
+  `;
+}
+
+/* ---------- Pipeline snapshot (Zelyo-specific) ---------- */
+
+function renderPipelineCard() {
+  const p = _data.pipelineSnapshot || { scan: 0, correlate: 0, fix: 0, verify: 0 };
+  const stages = [
+    { id: 'scan', label: 'Scan', color: '#6366F1', count: p.scan },
+    { id: 'correlate', label: 'Correlate', color: '#A855F7', count: p.correlate },
+    { id: 'fix', label: 'Fix', color: '#22D3EE', count: p.fix },
+    { id: 'verify', label: 'Verify', color: '#10B981', count: p.verify },
+  ];
+  const total = stages.reduce((a, b) => a + b.count, 0);
+  return `
+    <section class="ov-card">
+      <div class="ov-card-head">
+        <div>
+          <div class="ov-card-title">Pipeline in flight</div>
+          <div class="ov-card-sub">${total} events this session &middot; live</div>
+        </div>
+        <a href="#pipeline" class="ov-card-link">Open pipeline →</a>
+      </div>
+      <div class="ov-pipeline">
+        ${stages.map((s) => `
+          <div class="ov-pipeline-stage" style="--stage-color:${s.color}">
+            <div class="ov-pipeline-dot"></div>
+            <div class="ov-pipeline-count">${s.count}</div>
+            <div class="ov-pipeline-label">${s.label}</div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="ov-pipeline-note">
+        Detect → Correlate → Fix → Verify. Every fix is a reviewable PR — Zelyo never mutates your cluster without human approval.
+      </div>
+    </section>
+  `;
+}
+
+/* ---------- Top failing checks ---------- */
+
+function renderTopChecksCard() {
+  const items = _data.topFailingChecks || [];
+  return `
+    <section class="ov-card">
+      <div class="ov-card-head">
+        <div>
+          <div class="ov-card-title">Top failing checks</div>
+          <div class="ov-card-sub">Rules with the most violations across all scans</div>
+        </div>
+      </div>
+      ${items.length === 0 ? '<div class="ov-empty">No failing checks.</div>' : `
+        <ul class="ov-rank-list">
+          ${items.map((i, idx) => renderRankRow(i, idx, items[0].count)).join('')}
+        </ul>
+      `}
+    </section>
+  `;
+}
+
+/* ---------- Top affected resource kinds ---------- */
+
+function renderTopKindsCard() {
+  const items = _data.topAffectedKinds || [];
+  return `
+    <section class="ov-card">
+      <div class="ov-card-head">
+        <div>
+          <div class="ov-card-title">Top affected resource types</div>
+          <div class="ov-card-sub">Kinds with the most findings — click to scope a scan</div>
+        </div>
+      </div>
+      ${items.length === 0 ? '<div class="ov-empty">No findings yet.</div>' : `
+        <ul class="ov-rank-list">
+          ${items.map((i, idx) => renderRankRow(i, idx, items[0].count)).join('')}
+        </ul>
+      `}
+    </section>
+  `;
+}
+
+function renderRankRow(item, idx, maxCount) {
+  const pct = Math.max(6, Math.round((item.count / Math.max(maxCount, 1)) * 100));
+  const sev = (item.severity || 'medium').toLowerCase();
+  return `
+    <li class="ov-rank-row">
+      <span class="ov-rank-idx">${idx + 1}</span>
+      <div class="ov-rank-main">
+        <div class="ov-rank-head">
+          <span class="ov-rank-name">${escapeHTML(item.name)}</span>
+          <span class="pipeline-sev pipeline-sev-${sev}">${sev}</span>
+        </div>
+        <div class="ov-rank-bar-track">
+          <div class="ov-rank-bar-fill" style="width:${pct}%;background:var(--severity-${sev},var(--severity-medium))"></div>
+        </div>
+      </div>
+      <span class="ov-rank-count">${item.count}</span>
+    </li>
+  `;
+}
+
+/* ---------- Compliance strip ---------- */
+
+function renderComplianceStrip() {
+  const fw = _data.frameworks || [];
+  if (fw.length === 0) return '';
+  return `
+    <section class="ov-card">
+      <div class="ov-card-head">
+        <div>
+          <div class="ov-card-title">Compliance by framework</div>
+          <div class="ov-card-sub">Aggregated from the latest report of each scan</div>
+        </div>
+        <a href="#compliance" class="ov-card-link">Manage presets →</a>
+      </div>
+      <div class="ov-fw-grid">
+        ${fw.map(renderFrameworkTile).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function renderFrameworkTile(f) {
+  const pct = f.passRate || 0;
+  const color = pct >= 90 ? 'var(--success)' : pct >= 70 ? 'var(--warning)' : 'var(--severity-critical)';
+  const passed = (f.totalControls || 0) - (f.failedControls || 0);
+  return `
+    <div class="ov-fw-tile">
+      <div class="ov-fw-name">${escapeHTML((f.framework || '').toUpperCase())}</div>
+      <div class="ov-fw-pct" style="color:${color}">${pct}<span class="ov-fw-pct-unit">%</span></div>
+      <div class="ov-fw-bar-track">
+        <div class="ov-fw-bar-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+      <div class="ov-fw-stat">${passed}/${f.totalControls || 0} passed · ${f.failedControls || 0} failed</div>
+    </div>
+  `;
+}
+
+/* ---------- Cloud accounts by risk ---------- */
+
+function renderCloudAccountsCard() {
+  const accounts = _data.accountsByRisk || [];
+  if (accounts.length === 0) return '';
+  return `
+    <section class="ov-card">
+      <div class="ov-card-head">
+        <div>
+          <div class="ov-card-title">Cloud accounts by risk</div>
+          <div class="ov-card-sub">Ranked by critical & high-severity findings</div>
+        </div>
+        <a href="#cloud" class="ov-card-link">View cloud security →</a>
+      </div>
+      <div class="ov-acct-grid">
+        ${accounts.map(renderAccountTile).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function renderAccountTile(a) {
+  return `
+    <div class="ov-acct-tile">
+      <div class="ov-acct-top">
+        <span class="ov-acct-provider">${escapeHTML((a.provider || '').toUpperCase())}</span>
+        <span class="ov-acct-id">${escapeHTML(a.accountId || '')}</span>
+      </div>
+      <div class="ov-acct-name">${escapeHTML(a.name)}</div>
+      <div class="ov-acct-sev">
+        <span class="ov-acct-chip ov-acct-chip-critical" title="Critical">${a.critical || 0}</span>
+        <span class="ov-acct-chip ov-acct-chip-high" title="High">${a.high || 0}</span>
+        <span class="ov-acct-chip ov-acct-chip-medium" title="Medium">${a.medium || 0}</span>
+      </div>
+      <div class="ov-acct-foot">
+        <span>${(a.findingsCount || 0).toLocaleString()} findings</span>
+        <span>${(a.resources || 0).toLocaleString()} resources</span>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- Trend sparkline ---------- */
+
+function renderTrendCard() {
+  const pts = _data.findingsTrend || [];
+  if (pts.length === 0) return '';
+  const maxVal = Math.max(1, ...pts.map((p) => Math.max(p.new, p.resolved)));
+  const w = 680;
+  const h = 120;
+  const padX = 16;
+  const padY = 12;
+  const stepX = (w - padX * 2) / Math.max(1, pts.length - 1);
+  const y = (v) => h - padY - ((v / maxVal) * (h - padY * 2));
+  const x = (i) => padX + i * stepX;
+  const newLine = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.new).toFixed(1)}`).join(' ');
+  const resolvedLine = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.resolved).toFixed(1)}`).join(' ');
+  const newArea = `${newLine} L${x(pts.length - 1).toFixed(1)},${h - padY} L${x(0).toFixed(1)},${h - padY} Z`;
+  const last = pts[pts.length - 1] || {};
+
+  return `
+    <section class="ov-card">
+      <div class="ov-card-head">
+        <div>
+          <div class="ov-card-title">Findings trend · last 7 days</div>
+          <div class="ov-card-sub">New findings vs. remediations that closed them</div>
+        </div>
+        <div class="ov-trend-legend">
+          <span><span class="ov-trend-dot" style="background:var(--severity-critical)"></span> New (${last.new || 0})</span>
+          <span><span class="ov-trend-dot" style="background:var(--success)"></span> Resolved (${last.resolved || 0})</span>
+        </div>
+      </div>
+      <svg class="ov-trend-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="ov-trend-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--severity-critical)" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="var(--severity-critical)" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="${newArea}" fill="url(#ov-trend-grad)"/>
+        <path d="${newLine}" fill="none" stroke="var(--severity-critical)" stroke-width="1.6"/>
+        <path d="${resolvedLine}" fill="none" stroke="var(--success)" stroke-width="1.6" stroke-dasharray="4,3"/>
+      </svg>
+    </section>
+  `;
+}
+
 /* ---------- Helpers ---------- */
 
-function capitalize(s) {
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+function escapeHTML(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
 }
 
-function escapeHTML(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-/* ---------- Public API ---------- */
+/* ---------- Lifecycle ---------- */
 
 export function render(container) {
   _container = container;
-  _activityItems = [];
-  renderSkeleton();
-  loadOverview();
-
-  onSSE('overview.refresh', handleOverviewRefresh);
-  onSSE('policy.updated',   handleActivityEvent);
-  onSSE('scan.updated',     handleActivityEvent);
-  onSSE('cloud.updated',    handleActivityEvent);
-  onSSE('config.updated',   handleActivityEvent);
+  _container.innerHTML = `<div class="ov-page"><div class="page-loading"><div class="skeleton" style="height:96px;margin-bottom:16px"></div><div class="skeleton" style="height:400px"></div></div></div>`;
+  load();
+  bindSSE();
 }
 
 export function destroy() {
-  offSSE('overview.refresh', handleOverviewRefresh);
-  offSSE('policy.updated',   handleActivityEvent);
-  offSSE('scan.updated',     handleActivityEvent);
-  offSSE('cloud.updated',    handleActivityEvent);
-  offSSE('config.updated',   handleActivityEvent);
+  _sseHandlers.forEach(({ t, h }) => offSSE(t, h));
+  _sseHandlers = [];
   _container = null;
-  _activityItems = [];
 }

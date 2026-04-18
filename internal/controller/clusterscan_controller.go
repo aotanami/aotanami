@@ -36,6 +36,7 @@ import (
 	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 	"github.com/zelyo-ai/zelyo-operator/internal/compliance"
 	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
+	"github.com/zelyo-ai/zelyo-operator/internal/events"
 	zelyometrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
 	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
 )
@@ -127,6 +128,8 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// ── Run the scan ──
 	r.Recorder.Event(scan, corev1.EventTypeNormal, zelyov1alpha1.EventReasonScanStarted,
 		fmt.Sprintf("Starting cluster scan with %d scanners", len(scan.Spec.Scanners)))
+	events.EmitScanStarted(scan.Name, scan.Namespace, scan.Spec.Scanners)
+	scanStartedAt := time.Now()
 
 	scan.Status.Phase = zelyov1alpha1.PhaseRunning
 	conditions.MarkUnknown(&scan.Status.Conditions, zelyov1alpha1.ConditionReady,
@@ -152,6 +155,20 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := r.enforceHistoryLimit(ctx, scan); err != nil {
 		log.Error(err, "Failed to enforce history limit")
 	}
+
+	events.EmitScanCompleted(&events.ScanCompletion{
+		Name:       scan.Name,
+		Namespace:  scan.Namespace,
+		ReportName: reportName,
+		Total:      sr.summary.TotalFindings,
+		Critical:   sr.summary.Critical,
+		High:       sr.summary.High,
+		Medium:     sr.summary.Medium,
+		Low:        sr.summary.Low,
+		Info:       sr.summary.Info,
+		DurationMs: time.Since(scanStartedAt).Milliseconds(),
+		HasErrors:  len(sr.scanErrors) > 0,
+	})
 
 	return r.updateFinalStatus(ctx, scan, sr, reportName)
 }
@@ -267,6 +284,17 @@ func (r *ClusterScanReconciler) executeScan(ctx context.Context, scan *zelyov1al
 				sr.summary.Low++
 			case zelyov1alpha1.SeverityInfo:
 				sr.summary.Info++
+			}
+
+			// Surface high-signal findings to the live pipeline feed.
+			if f.Severity == zelyov1alpha1.SeverityCritical || f.Severity == zelyov1alpha1.SeverityHigh {
+				events.EmitFindingDetected(
+					scan.Name,
+					f.RuleType,
+					f.Severity,
+					fmt.Sprintf("%s/%s/%s", f.ResourceKind, f.ResourceNamespace, f.ResourceName),
+					f.Title,
+				)
 			}
 		}
 	}
