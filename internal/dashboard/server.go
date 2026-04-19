@@ -254,10 +254,10 @@ func (s *Server) Start(ctx context.Context) error {
 func (s *Server) NeedLeaderElection() bool { return false }
 
 // backgroundContext returns the server-lifecycle context set by Start(),
-// or a pre-cancelled context when Start has not yet been called (test
+// or a pre-canceled context when Start has not yet been called (test
 // paths, direct handler invocations). Returning context.Background() there
 // would silently re-introduce the exact long-lived-goroutine leak the
-// startCtx plumbing is meant to close — so instead we return a cancelled
+// startCtx plumbing is meant to close — so instead we return a canceled
 // context and let sleepCtx-style goroutines bail out on their first check.
 func (s *Server) backgroundContext() context.Context {
 	s.startCtxMu.RLock()

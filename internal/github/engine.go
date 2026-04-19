@@ -149,9 +149,9 @@ func (e *GitHubEngine) GetFile(ctx context.Context, owner, repo, path, ref strin
 
 // ListOpenPRs implements gitops.Engine.ListOpenPRs.
 func (e *GitHubEngine) ListOpenPRs(ctx context.Context, owner, repo string) ([]gitops.PullRequestResult, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/pulls?state=open&per_page=100", e.baseURL, owner, repo)
+	reqURL := fmt.Sprintf("%s/repos/%s/%s/pulls?state=open&per_page=100", e.baseURL, owner, repo)
 
-	body, err := e.doRequest(ctx, http.MethodGet, url, nil)
+	body, err := e.doRequest(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("listing open PRs: %w", err)
 	}
@@ -205,8 +205,8 @@ func (e *GitHubEngine) Close() error {
 // ── Internal GitHub API helpers ──
 
 func (e *GitHubEngine) getRef(ctx context.Context, owner, repo, ref string) (string, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/git/ref/%s", e.baseURL, owner, repo, ref)
-	body, err := e.doRequest(ctx, http.MethodGet, url, nil)
+	reqURL := fmt.Sprintf("%s/repos/%s/%s/git/ref/%s", e.baseURL, owner, repo, ref)
+	body, err := e.doRequest(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return "", err
 	}
@@ -222,9 +222,9 @@ func (e *GitHubEngine) getRef(ctx context.Context, owner, repo, ref string) (str
 }
 
 func (e *GitHubEngine) createRef(ctx context.Context, owner, repo, ref, sha string) error {
-	url := fmt.Sprintf("%s/repos/%s/%s/git/refs", e.baseURL, owner, repo)
+	reqURL := fmt.Sprintf("%s/repos/%s/%s/git/refs", e.baseURL, owner, repo)
 	payload := map[string]string{"ref": ref, "sha": sha}
-	_, err := e.doRequest(ctx, http.MethodPost, url, payload)
+	_, err := e.doRequest(ctx, http.MethodPost, reqURL, payload)
 	return err
 }
 
@@ -291,7 +291,7 @@ func (e *GitHubEngine) deleteFile(ctx context.Context, owner, repo, path, branch
 }
 
 func (e *GitHubEngine) openPR(ctx context.Context, pr *gitops.PullRequest) (*gitops.PullRequestResult, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/pulls", e.baseURL, pr.RepoOwner, pr.RepoName)
+	reqURL := fmt.Sprintf("%s/repos/%s/%s/pulls", e.baseURL, pr.RepoOwner, pr.RepoName)
 	payload := map[string]interface{}{
 		"title": pr.Title,
 		"body":  pr.Body,
@@ -299,7 +299,7 @@ func (e *GitHubEngine) openPR(ctx context.Context, pr *gitops.PullRequest) (*git
 		"base":  pr.BaseBranch,
 	}
 
-	body, err := e.doRequest(ctx, http.MethodPost, url, payload)
+	body, err := e.doRequest(ctx, http.MethodPost, reqURL, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -322,14 +322,14 @@ func (e *GitHubEngine) openPR(ctx context.Context, pr *gitops.PullRequest) (*git
 }
 
 func (e *GitHubEngine) addLabels(ctx context.Context, owner, repo string, prNumber int, labels []string) error {
-	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/labels", e.baseURL, owner, repo, prNumber)
+	reqURL := fmt.Sprintf("%s/repos/%s/%s/issues/%d/labels", e.baseURL, owner, repo, prNumber)
 	payload := map[string]interface{}{"labels": labels}
-	_, err := e.doRequest(ctx, http.MethodPost, url, payload)
+	_, err := e.doRequest(ctx, http.MethodPost, reqURL, payload)
 	return err
 }
 
 // doRequest performs an authenticated HTTP request and returns the response body.
-func (e *GitHubEngine) doRequest(ctx context.Context, method, url string, payload interface{}) ([]byte, error) {
+func (e *GitHubEngine) doRequest(ctx context.Context, method, reqURL string, payload interface{}) ([]byte, error) {
 	var bodyReader io.Reader
 	if payload != nil {
 		jsonBody, err := json.Marshal(payload)
@@ -339,7 +339,7 @@ func (e *GitHubEngine) doRequest(ctx context.Context, method, url string, payloa
 		bodyReader = bytes.NewReader(jsonBody)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
