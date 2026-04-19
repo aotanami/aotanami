@@ -188,8 +188,17 @@ func (e *Engine) GeneratePlan(ctx context.Context, finding *scanner.Finding) (*P
 		CreatedAt: time.Now(),
 	}
 
-	// Parse fixes from LLM response (structured JSON or fallback to raw text).
+	// Parse fixes from LLM response. extractFixes enforces the strict JSON
+	// schema + per-fix validation (path safety, operation allowlist, size
+	// caps) and drops anything unsafe. If NOTHING survives, the plan has
+	// no remediation to apply — treat that as an error so the caller keeps
+	// the incident open for retry/manual triage. The previous behavior
+	// returned an empty plan with nil error, which led processIncidents
+	// to ResolveIncident() and silently close the case with nothing done.
 	fixes, analysis, llmRisk := extractFixes(resp.Content, finding)
+	if len(fixes) == 0 {
+		return nil, fmt.Errorf("remediation: no valid fixes produced from LLM response (analysis=%q)", truncateString(analysis, 200))
+	}
 	plan.Fixes = fixes
 	plan.LLMAnalysis = analysis
 
@@ -201,6 +210,16 @@ func (e *Engine) GeneratePlan(ctx context.Context, finding *scanner.Finding) (*P
 	}
 
 	return plan, nil
+}
+
+// truncateString is a small byte-length truncation used only for keeping
+// error messages bounded. Error strings don't need rune-safety; they're
+// not re-used downstream as identifiers.
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // ApplyPlan executes a remediation plan according to the configured strategy.

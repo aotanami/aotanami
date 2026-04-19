@@ -5,11 +5,29 @@ Copyright 2026 Zelyo AI
 package remediation
 
 import (
+	"context"
 	"testing"
 
+	"github.com/go-logr/logr"
+
 	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
+	"github.com/zelyo-ai/zelyo-operator/internal/llm"
 	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
 )
+
+// fakeLLMClient implements llm.Client for tests — returns a pre-canned
+// response string and records the request count.
+type fakeLLMClient struct {
+	response string
+	calls    int
+}
+
+func (f *fakeLLMClient) Complete(_ context.Context, _ llm.Request) (*llm.Response, error) {
+	f.calls++
+	return &llm.Response{Content: f.response, Model: "fake"}, nil
+}
+func (f *fakeLLMClient) Provider() llm.Provider { return "fake" }
+func (f *fakeLLMClient) Close() error           { return nil }
 
 func TestExtractFixes_StructuredJSON(t *testing.T) {
 	llmResponse := `{
@@ -227,5 +245,54 @@ func TestEstimateRisk(t *testing.T) {
 			t.Errorf("estimateRisk(severity=%s, fixes=%d) = %d, want [%d, %d]",
 				tt.severity, tt.fixCount, risk, tt.expectedLo, tt.expectedHi)
 		}
+	}
+}
+
+// TestGeneratePlan_ZeroValidatedFixes_ReturnsError verifies that when the
+// LLM response passes through extractFixes with zero surviving fixes —
+// whether because it was unstructured prose, or because every proposed
+// fix was filtered out as unsafe — GeneratePlan surfaces an error so the
+// caller (processIncidents) does NOT resolve the incident. Silent
+// zero-fix plans were how unsafe/malformed LLM output could close
+// incidents with no remediation applied.
+func TestGeneratePlan_ZeroValidatedFixes_ReturnsError(t *testing.T) {
+	cases := []struct {
+		name     string
+		response string
+	}{
+		{
+			name:     "unstructured prose",
+			response: "Just describe the fix in natural language.",
+		},
+		{
+			name: "all fixes filtered — path traversal",
+			response: `{
+				"analysis": "Try these.",
+				"fixes": [
+					{"file_path": "../etc/passwd", "description": "bad", "patch": "x", "operation": "delete"},
+					{"file_path": "/root/.ssh/authorized_keys", "description": "bad", "patch": "x", "operation": "delete"}
+				]
+			}`,
+		},
+		{
+			name: "all fixes filtered — unknown operation",
+			response: `{
+				"analysis": "Try this.",
+				"fixes": [{"file_path": "k8s/a.yaml", "description": "x", "patch": "x", "operation": "patch"}]
+			}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := NewEngine(&fakeLLMClient{response: tc.response}, nil,
+				EngineConfig{Strategy: StrategyDryRun}, logr.Discard())
+			plan, err := engine.GeneratePlan(context.Background(), &scanner.Finding{RuleType: "test", Title: "t"})
+			if err == nil {
+				t.Fatalf("expected error for zero validated fixes, got plan=%+v", plan)
+			}
+			if plan != nil {
+				t.Errorf("expected nil plan when fixes are rejected, got %+v", plan)
+			}
+		})
 	}
 }

@@ -5,6 +5,9 @@ Copyright 2026 Zelyo AI
 package correlator
 
 import (
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -199,4 +202,70 @@ func TestHighestSeverity(t *testing.T) {
 	if s := highestSeverity(events); s != "critical" {
 		t.Errorf("Expected critical, got %q", s)
 	}
+}
+
+// TestEngine_ConcurrentIngestIsRaceFree drives many concurrent Ingests at
+// the same (namespace, resource) so the inner loop keeps appending to the
+// same Incident.Events slice, while a parallel GetOpenIncidents reader
+// walks each incident's Events. The onIncident callback also touches
+// incident state. Under the previous implementation the callback was
+// dispatched post-unlock with a copyIncident(notify) that read the
+// internal incident.Events slice while a concurrent Ingest was appending
+// to it — a data race. With the snapshot-before-unlock fix the body is
+// clean under `go test -race`.
+func TestEngine_ConcurrentIngestIsRaceFree(t *testing.T) {
+	var callbacks atomic.Int64
+	engine := NewEngine(&Config{
+		CorrelationWindow: 5 * time.Minute,
+		OnIncident: func(inc *Incident) {
+			// Read incident state the way a real callback would.
+			_ = inc.ID
+			_ = len(inc.Events)
+			callbacks.Add(1)
+		},
+	})
+
+	const workers = 16
+	const perWorker = 50
+	var wg sync.WaitGroup
+
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for i := 0; i < perWorker; i++ {
+				incident := engine.Ingest(&Event{
+					Type:      EventSecurityViolation,
+					Severity:  "high",
+					Namespace: "default",
+					Resource:  "nginx", // same resource so they correlate
+					Message:   fmt.Sprintf("w=%d i=%d", id, i),
+				})
+				// Walk returned events. Under the old code this aliased
+				// engine-internal state and concurrent Ingests appended
+				// mid-iteration.
+				if incident != nil {
+					for _, ev := range incident.Events {
+						_ = ev.Message
+					}
+				}
+			}
+		}(w)
+	}
+
+	// Concurrent reader via GetOpenIncidents, walking each incident's
+	// Events slice. Exercises the same aliasing path from a different
+	// entrypoint.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		deadline := time.Now().Add(500 * time.Millisecond)
+		for time.Now().Before(deadline) {
+			for _, inc := range engine.GetOpenIncidents() {
+				_ = len(inc.Events)
+			}
+		}
+	}()
+
+	wg.Wait()
 }

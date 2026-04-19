@@ -86,11 +86,12 @@ func NewEngine(cfg *Config) *Engine {
 //
 // The onIncident callback is invoked OUTSIDE the engine lock so callbacks
 // that call back into the engine (ResolveIncident, GetOpenIncidents) do
-// not deadlock. The returned *Incident is a copy of the internal record
-// so callers can safely range over Events without racing with future
-// Ingest calls appending to the underlying slice.
+// not deadlock. Both the callback payload and the returned *Incident are
+// independent copies snapshotted WHILE the lock is held — a concurrent
+// Ingest must not be able to append to incident.Events between our
+// snapshot and the callback/return.
 func (e *Engine) Ingest(event *Event) *Incident {
-	var notify *Incident
+	var notifySnapshot *Incident
 	var result *Incident
 
 	e.mu.Lock()
@@ -111,7 +112,7 @@ func (e *Engine) Ingest(event *Event) *Incident {
 			if severityOrder(event.Severity) > severityOrder(incident.Severity) {
 				incident.Severity = event.Severity
 			}
-			notify = incident
+			notifySnapshot = copyIncident(incident)
 			result = copyIncident(incident)
 			break
 		}
@@ -132,15 +133,15 @@ func (e *Engine) Ingest(event *Event) *Incident {
 				UpdatedAt: time.Now(),
 			}
 			e.incidents[incident.ID] = incident
-			notify = incident
+			notifySnapshot = copyIncident(incident)
 			result = copyIncident(incident)
 		}
 	}
 	cb := e.onIncident
 	e.mu.Unlock()
 
-	if notify != nil && cb != nil {
-		cb(copyIncident(notify))
+	if notifySnapshot != nil && cb != nil {
+		cb(notifySnapshot)
 	}
 	return result
 }
