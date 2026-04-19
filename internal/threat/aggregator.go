@@ -101,12 +101,18 @@ func NewAggregator(feeds []Feed, cacheTTL time.Duration) *Aggregator {
 }
 
 // LookupImage queries all feeds for threats related to an image.
+//
+// The cache stores and returns COPIES of ImageThreat: the previous
+// implementation aliased one *ImageThreat across the cache and every
+// caller, so a caller appending to .CVEs or reading during a concurrent
+// refresh observed torn data.
 func (a *Aggregator) LookupImage(ctx context.Context, image string) (*ImageThreat, error) {
 	// Check cache first.
 	a.mu.RLock()
 	if cached, ok := a.cache[image]; ok && time.Since(cached.LastScanned) < a.ttl {
+		result := cloneImageThreat(cached)
 		a.mu.RUnlock()
-		return cached, nil
+		return result, nil
 	}
 	a.mu.RUnlock()
 
@@ -132,12 +138,26 @@ func (a *Aggregator) LookupImage(ctx context.Context, image string) (*ImageThrea
 
 	merged.RiskScore = calculateRiskScore(merged)
 
-	// Update cache.
+	// Store a copy in the cache, return a different copy to the caller,
+	// so neither can mutate the other.
 	a.mu.Lock()
-	a.cache[image] = merged
+	a.cache[image] = cloneImageThreat(merged)
 	a.mu.Unlock()
 
 	return merged, nil
+}
+
+// cloneImageThreat returns a deep copy of the ImageThreat with an
+// independent CVEs slice so cache and caller can't alias each other.
+func cloneImageThreat(t *ImageThreat) *ImageThreat {
+	if t == nil {
+		return nil
+	}
+	cp := *t
+	if len(t.CVEs) > 0 {
+		cp.CVEs = append([]CVE(nil), t.CVEs...)
+	}
+	return &cp
 }
 
 // RefreshAll refreshes all feeds.

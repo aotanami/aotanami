@@ -83,10 +83,17 @@ func NewEngine(cfg *Config) *Engine {
 }
 
 // Ingest adds an event and attempts to correlate it.
+//
+// The onIncident callback is invoked OUTSIDE the engine lock so callbacks
+// that call back into the engine (ResolveIncident, GetOpenIncidents) do
+// not deadlock. The returned *Incident is a copy of the internal record
+// so callers can safely range over Events without racing with future
+// Ingest calls appending to the underlying slice.
 func (e *Engine) Ingest(event *Event) *Incident {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	var notify *Incident
+	var result *Incident
 
+	e.mu.Lock()
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
@@ -94,7 +101,7 @@ func (e *Engine) Ingest(event *Event) *Incident {
 	e.events = append(e.events, event)
 	e.pruneOldEvents()
 
-	for id, incident := range e.incidents {
+	for _, incident := range e.incidents {
 		if incident.Resolved {
 			continue
 		}
@@ -104,37 +111,44 @@ func (e *Engine) Ingest(event *Event) *Incident {
 			if severityOrder(event.Severity) > severityOrder(incident.Severity) {
 				incident.Severity = event.Severity
 			}
-			if e.onIncident != nil {
-				e.onIncident(incident)
+			notify = incident
+			result = copyIncident(incident)
+			break
+		}
+	}
+
+	if result == nil {
+		related := e.findRelated(event)
+		if len(related) >= 2 {
+			e.incidentSeq++
+			incident := &Incident{
+				ID:        fmt.Sprintf("INC-%06d", e.incidentSeq),
+				Severity:  highestSeverity(related),
+				Title:     fmt.Sprintf("Correlated incident on %s/%s", event.Namespace, event.Resource),
+				Events:    related,
+				Namespace: event.Namespace,
+				Resource:  event.Resource,
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
 			}
-			return e.incidents[id]
+			e.incidents[incident.ID] = incident
+			notify = incident
+			result = copyIncident(incident)
 		}
 	}
+	cb := e.onIncident
+	e.mu.Unlock()
 
-	related := e.findRelated(event)
-	if len(related) >= 2 {
-		e.incidentSeq++
-		incident := &Incident{
-			ID:        fmt.Sprintf("INC-%06d", e.incidentSeq),
-			Severity:  highestSeverity(related),
-			Title:     fmt.Sprintf("Correlated incident on %s/%s", event.Namespace, event.Resource),
-			Events:    related,
-			Namespace: event.Namespace,
-			Resource:  event.Resource,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
-		e.incidents[incident.ID] = incident
-		if e.onIncident != nil {
-			e.onIncident(incident)
-		}
-		return incident
+	if notify != nil && cb != nil {
+		cb(copyIncident(notify))
 	}
-
-	return nil
+	return result
 }
 
-// GetOpenIncidents returns all unresolved incidents.
+// GetOpenIncidents returns copies of all unresolved incidents. Returning
+// copies keeps the internal *Incident records from being aliased into
+// caller code, where a concurrent Ingest appending to incident.Events
+// would race with a range-loop reader.
 func (e *Engine) GetOpenIncidents() []*Incident {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -142,10 +156,27 @@ func (e *Engine) GetOpenIncidents() []*Incident {
 	result := make([]*Incident, 0)
 	for _, inc := range e.incidents {
 		if !inc.Resolved {
-			result = append(result, inc)
+			result = append(result, copyIncident(inc))
 		}
 	}
 	return result
+}
+
+// copyIncident returns a shallow-deep copy of the incident: a new
+// *Incident with a new Events slice header containing the same *Event
+// pointers. Events themselves are treated as immutable once ingested;
+// cloning the slice header is sufficient to shield callers from future
+// `append`s mutating the engine's backing array.
+func copyIncident(inc *Incident) *Incident {
+	if inc == nil {
+		return nil
+	}
+	cp := *inc
+	if len(inc.Events) > 0 {
+		cp.Events = make([]*Event, len(inc.Events))
+		copy(cp.Events, inc.Events)
+	}
+	return &cp
 }
 
 // ResolveIncident marks an incident as resolved.

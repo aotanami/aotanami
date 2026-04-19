@@ -145,7 +145,10 @@ func (d *Detector) Observe(key string, value float64) *Anomaly {
 	}
 }
 
-// GetBaseline returns the current baseline for a key, or nil if not found.
+// GetBaseline returns a copy of the current baseline for key, or nil if
+// not found. The Values slice is deep-copied: the previous shallow struct
+// copy aliased the backing array, so a caller iterating Values raced with
+// the next Observe() `append` mutating the same memory.
 func (d *Detector) GetBaseline(key string) *Baseline {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -154,6 +157,9 @@ func (d *Detector) GetBaseline(key string) *Baseline {
 		return nil
 	}
 	result := *b
+	if len(b.Values) > 0 {
+		result.Values = append([]float64(nil), b.Values...)
+	}
 	return &result
 }
 
