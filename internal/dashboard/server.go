@@ -161,7 +161,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				// Skip this event rather than emitting "data: null" which
 				// poisons the stream for clients that parse strictly.
-				s.log.V(1).Info("skipping SSE event with unmarshalable Data", "type", event.Type)
+				s.log.V(1).Info("skipping SSE event: json.Marshal failed", "type", event.Type, "error", err)
 				continue
 			}
 			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, data)
