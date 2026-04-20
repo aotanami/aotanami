@@ -152,6 +152,43 @@ func TestExtractFixes_UnsafeFilePathDropped(t *testing.T) {
 	}
 }
 
+func TestExtractFixes_EmptyPatchForCreateUpdateDropped(t *testing.T) {
+	// A create or update with empty patch content would land as a commit
+	// that blanks out the target manifest. Only delete legitimately has
+	// no patch body. The validator drops the empty-patch create/update
+	// fixes and keeps a legitimate delete (which has empty patch by design).
+	llmResponse := `{
+		"analysis": "Mixed fixes.",
+		"fixes": [
+			{"file_path": "k8s/a.yaml", "description": "blank create", "patch": "",   "operation": "create"},
+			{"file_path": "k8s/b.yaml", "description": "blank update", "patch": "   ", "operation": "update"},
+			{"file_path": "k8s/c.yaml", "description": "legit delete", "patch": "",   "operation": "delete"},
+			{"file_path": "k8s/d.yaml", "description": "legit update", "patch": "apiVersion: v1", "operation": "update"}
+		]
+	}`
+	finding := &scanner.Finding{RuleType: "test"}
+	fixes, _, _ := extractFixes(llmResponse, finding)
+	if len(fixes) != 2 {
+		t.Fatalf("expected 2 surviving fixes (delete + non-blank update), got %d", len(fixes))
+	}
+	var seen = map[string]gitops.FileOp{}
+	for _, f := range fixes {
+		seen[f.FilePath] = f.Operation
+	}
+	if seen["k8s/c.yaml"] != gitops.FileOpDelete {
+		t.Errorf("expected delete for k8s/c.yaml, got %s", seen["k8s/c.yaml"])
+	}
+	if seen["k8s/d.yaml"] != gitops.FileOpUpdate {
+		t.Errorf("expected update for k8s/d.yaml, got %s", seen["k8s/d.yaml"])
+	}
+	if _, ok := seen["k8s/a.yaml"]; ok {
+		t.Errorf("blank-patch create should have been dropped")
+	}
+	if _, ok := seen["k8s/b.yaml"]; ok {
+		t.Errorf("blank-patch update should have been dropped")
+	}
+}
+
 func TestExtractFixes_UnknownOperationDropped(t *testing.T) {
 	// Unknown operations previously defaulted to "update" silently — we now
 	// drop the fix rather than invent an operation the LLM never asked for.

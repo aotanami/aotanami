@@ -195,9 +195,16 @@ func (e *Engine) GeneratePlan(ctx context.Context, finding *scanner.Finding) (*P
 	// the incident open for retry/manual triage. The previous behavior
 	// returned an empty plan with nil error, which led processIncidents
 	// to ResolveIncident() and silently close the case with nothing done.
+	//
+	// The error message deliberately does NOT include the raw LLM analysis:
+	// the controller emits GeneratePlan errors as Kubernetes Events
+	// (remediationpolicy_controller.go), and model output may echo secrets
+	// or large manifest snippets that must not land on a cluster-visible
+	// sink. The full analysis stays in the operator-level log via whatever
+	// log.Error wrapper the caller chooses.
 	fixes, analysis, llmRisk := extractFixes(resp.Content, finding)
 	if len(fixes) == 0 {
-		return nil, fmt.Errorf("remediation: no valid fixes produced from LLM response (analysis=%q)", truncateString(analysis, 200))
+		return nil, fmt.Errorf("remediation: no valid fixes produced from LLM response (analysis omitted)")
 	}
 	plan.Fixes = fixes
 	plan.LLMAnalysis = analysis
@@ -210,16 +217,6 @@ func (e *Engine) GeneratePlan(ctx context.Context, finding *scanner.Finding) (*P
 	}
 
 	return plan, nil
-}
-
-// truncateString is a small byte-length truncation used only for keeping
-// error messages bounded. Error strings don't need rune-safety; they're
-// not re-used downstream as identifiers.
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
 }
 
 // ApplyPlan executes a remediation plan according to the configured strategy.
@@ -420,6 +417,12 @@ func extractFixes(llmContent string, finding *scanner.Finding) (fixes []Fix, ana
 			continue
 		}
 		if len(f.Patch) > maxFixPatchBytes {
+			continue
+		}
+		// A create/update with empty content would land as a commit that
+		// blanks out the target file. Only delete legitimately has no
+		// patch body — the operation carries the intent by itself.
+		if op != gitops.FileOpDelete && strings.TrimSpace(f.Patch) == "" {
 			continue
 		}
 		desc := f.Description

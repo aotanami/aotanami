@@ -245,7 +245,12 @@ func (s *Server) Start(ctx context.Context) error {
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			s.log.Error(err, "Dashboard server shutdown error")
 		}
-		<-serveErr // wait for ListenAndServe to return after Shutdown.
+		// Drain ListenAndServe's return; a real startup failure (bind
+		// error, cert load failure, ...) can race ctx.Done() and would
+		// otherwise be silently discarded on this branch.
+		if err := <-serveErr; err != nil && err != http.ErrServerClosed {
+			return err
+		}
 		return nil
 	}
 }

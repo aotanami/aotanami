@@ -115,7 +115,7 @@ func (e *GitHubEngine) CreatePullRequest(ctx context.Context, pr *gitops.PullReq
 func (e *GitHubEngine) GetFile(ctx context.Context, owner, repo, path, ref string) ([]byte, error) {
 	escaped, err := safeRepoPath(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validating repository path for get %q: %w", path, err)
 	}
 	reqURL := fmt.Sprintf("%s/repos/%s/%s/contents/%s?ref=%s", e.baseURL, owner, repo, escaped, url.QueryEscape(ref))
 
@@ -231,7 +231,7 @@ func (e *GitHubEngine) createRef(ctx context.Context, owner, repo, ref, sha stri
 func (e *GitHubEngine) createOrUpdateFile(ctx context.Context, owner, repo, path, content, branch string) error {
 	escaped, err := safeRepoPath(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("validating repository path for upsert %q: %w", path, err)
 	}
 	reqURL := fmt.Sprintf("%s/repos/%s/%s/contents/%s", e.baseURL, owner, repo, escaped)
 
@@ -264,7 +264,7 @@ func (e *GitHubEngine) createOrUpdateFile(ctx context.Context, owner, repo, path
 func (e *GitHubEngine) deleteFile(ctx context.Context, owner, repo, path, branch string) error {
 	escaped, err := safeRepoPath(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("validating repository path for delete %q: %w", path, err)
 	}
 	reqURL := fmt.Sprintf("%s/repos/%s/%s/contents/%s", e.baseURL, owner, repo, escaped)
 

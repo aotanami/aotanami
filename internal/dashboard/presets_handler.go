@@ -87,6 +87,11 @@ func (s *Server) resolveConfigStatus(ctx context.Context) ConfigStatus {
 		return cfg
 	}
 	if len(repos.Items) == 0 {
+		// Live state is the source of truth. If the list is empty, the
+		// badge must read "not connected" even if the store snapshot
+		// (SetConfigStatus, or any future seed) carried stale values.
+		cfg.GitOpsConfigured = false
+		cfg.GitOpsRepo = ""
 		return cfg
 	}
 	cfg.GitOpsConfigured = true
