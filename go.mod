@@ -11,7 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/codebuild v1.68.14
 	github.com/aws/aws-sdk-go-v2/service/codepipeline v1.46.22
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.57.2
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.297.1
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.298.0
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.57.1
 	github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2 v1.54.11
 	github.com/aws/aws-sdk-go-v2/service/iam v1.53.8
