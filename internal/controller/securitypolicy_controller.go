@@ -189,13 +189,14 @@ func (r *SecurityPolicyReconciler) ingestFindingsToCorrelator(ctx context.Contex
 	for i := range findings {
 		f := &findings[i]
 		r.CorrelatorEngine.Ingest(&correlator.Event{
-			Type:         correlator.EventSecurityViolation,
-			Source:       fmt.Sprintf("securitypolicy/%s", policy.Name),
-			Severity:     f.Severity,
-			Namespace:    f.ResourceNamespace,
-			Resource:     f.ResourceName,
-			ResourceKind: f.ResourceKind,
-			Message:      f.Title,
+			Type:           correlator.EventSecurityViolation,
+			Source:         fmt.Sprintf("securitypolicy/%s", policy.Name),
+			SecurityPolicy: policy.Name,
+			Severity:       f.Severity,
+			Namespace:      f.ResourceNamespace,
+			Resource:       f.ResourceName,
+			ResourceKind:   f.ResourceKind,
+			Message:        f.Title,
 		})
 	}
 	log.Info("Ingested findings into correlator", "count", len(findings))

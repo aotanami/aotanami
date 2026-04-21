@@ -193,6 +193,16 @@ func (r *RemediationPolicyReconciler) processIncidents(
 
 	log.Info("Found open incidents", "count", len(incidents))
 
+	// Build target-policy allowlist. Empty spec.targetPolicies means "all
+	// SecurityPolicies apply" — skip the scope filter entirely.
+	var targetSet map[string]struct{}
+	if len(policy.Spec.TargetPolicies) > 0 {
+		targetSet = make(map[string]struct{}, len(policy.Spec.TargetPolicies))
+		for _, name := range policy.Spec.TargetPolicies {
+			targetSet[name] = struct{}{}
+		}
+	}
+
 	// Determine severity threshold.
 	severityFilter := policy.Spec.SeverityFilter
 	if severityFilter == "" {
@@ -233,61 +243,111 @@ func (r *RemediationPolicyReconciler) processIncidents(
 			log.Info("MaxConcurrentPRs limit reached", "limit", maxPRs)
 			break
 		}
-
-		// Filter by severity.
-		incSev, ok := severityOrder[incident.Severity]
-		if !ok {
+		if !r.incidentInScope(incident, targetSet, minSev) {
 			continue
 		}
-		if incSev > minSev {
-			continue // Incident severity is below threshold.
+		if r.remediateIncident(ctx, policy, incident, repoOwner, repoName) {
+			prsCreated++
 		}
-
-		// Convert incident to a scanner.Finding for the remediation engine.
-		finding := incidentToFinding(incident)
-
-		// Generate remediation plan.
-		plan, err := r.RemediationEngine.GeneratePlan(ctx, finding)
-		if err != nil {
-			log.Error(err, "Failed to generate remediation plan",
-				"incident", incident.ID,
-				"resource", fmt.Sprintf("%s/%s", incident.Namespace, incident.Resource))
-			r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
-				fmt.Sprintf("LLM plan generation failed for incident %s: %v", incident.ID, err))
-			continue
-		}
-
-		log.Info("Generated remediation plan",
-			"incident", incident.ID,
-			"fixes", len(plan.Fixes),
-			"riskScore", plan.RiskScore,
-			"dryRun", policy.Spec.DryRun)
-
-		// Apply the plan (strategy is configured on the remediation engine).
-		result, err := r.RemediationEngine.ApplyPlan(ctx, plan, repoOwner, repoName)
-		if err != nil {
-			log.Error(err, "Failed to apply remediation plan",
-				"incident", incident.ID)
-			r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
-				fmt.Sprintf("Failed to apply fix for incident %s: %v", incident.ID, err))
-			continue
-		}
-
-		if result != nil {
-			log.Info("Remediation PR created",
-				"incident", incident.ID,
-				"prURL", result.URL)
-			r.Recorder.Event(policy, corev1.EventTypeNormal, "RemediationPRCreated",
-				fmt.Sprintf("Created PR %s for incident %s (risk=%d)",
-					result.URL, incident.ID, plan.RiskScore))
-		}
-
-		// Resolve the incident after successful remediation.
-		r.CorrelatorEngine.ResolveIncident(incident.ID)
-		prsCreated++
 	}
 
 	return prsCreated
+}
+
+// incidentInScope applies the RemediationPolicy's scope gates (target
+// SecurityPolicies and severity threshold) to a single incident. Both
+// gates MUST pass for the incident to be remediated. Extracted from
+// processIncidents to keep that function within the gocyclo budget.
+func (r *RemediationPolicyReconciler) incidentInScope(
+	incident *correlator.Incident,
+	targetSet map[string]struct{},
+	minSev int,
+) bool {
+	if targetSet != nil && !incidentMatchesTargets(incident, targetSet) {
+		return false
+	}
+	incSev, ok := severityOrder[incident.Severity]
+	if !ok {
+		return false
+	}
+	return incSev <= minSev
+}
+
+// remediateIncident runs the plan/apply pipeline for a single in-scope
+// incident and returns whether a PR-producing cycle completed (so the
+// caller can count it against MaxConcurrentPRs). Extracted from
+// processIncidents both for readability and to keep the outer loop within
+// the gocyclo budget.
+func (r *RemediationPolicyReconciler) remediateIncident(
+	ctx context.Context,
+	policy *zelyov1alpha1.RemediationPolicy,
+	incident *correlator.Incident,
+	repoOwner, repoName string,
+) bool {
+	log := logf.FromContext(ctx)
+
+	finding := incidentToFinding(incident)
+
+	plan, err := r.RemediationEngine.GeneratePlan(ctx, finding)
+	if err != nil {
+		log.Error(err, "Failed to generate remediation plan",
+			"incident", incident.ID,
+			"resource", fmt.Sprintf("%s/%s", incident.Namespace, incident.Resource))
+		r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
+			fmt.Sprintf("LLM plan generation failed for incident %s: %v", incident.ID, err))
+		return false
+	}
+
+	log.Info("Generated remediation plan",
+		"incident", incident.ID,
+		"fixes", len(plan.Fixes),
+		"riskScore", plan.RiskScore,
+		"dryRun", policy.Spec.DryRun)
+
+	result, err := r.RemediationEngine.ApplyPlan(ctx, plan, repoOwner, repoName)
+	if err != nil {
+		log.Error(err, "Failed to apply remediation plan", "incident", incident.ID)
+		r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
+			fmt.Sprintf("Failed to apply fix for incident %s: %v", incident.ID, err))
+		return false
+	}
+
+	if result != nil {
+		log.Info("Remediation PR created",
+			"incident", incident.ID,
+			"prURL", result.URL)
+		r.Recorder.Event(policy, corev1.EventTypeNormal, "RemediationPRCreated",
+			fmt.Sprintf("Created PR %s for incident %s (risk=%d)",
+				result.URL, incident.ID, plan.RiskScore))
+	}
+
+	// Resolve the incident after the remediation cycle completes without
+	// error — whether or not a PR was actually produced (dry-run and
+	// report strategies return result=nil with err=nil).
+	r.CorrelatorEngine.ResolveIncident(incident.ID)
+	return true
+}
+
+// incidentMatchesTargets reports whether the incident carries at least one
+// event from a SecurityPolicy in the given allowlist. An incident may be a
+// correlation of events from multiple SecurityPolicies on the same
+// resource; if any one of them is targeted, the RemediationPolicy applies.
+// Events without a SecurityPolicy (e.g. anomalies, deployments) never
+// satisfy the scope gate on their own — only SecurityPolicy-originated
+// events do.
+func incidentMatchesTargets(incident *correlator.Incident, targets map[string]struct{}) bool {
+	if incident == nil || len(targets) == 0 {
+		return false
+	}
+	for _, ev := range incident.Events {
+		if ev == nil || ev.SecurityPolicy == "" {
+			continue
+		}
+		if _, ok := targets[ev.SecurityPolicy]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // incidentToFinding converts a correlator incident to a scanner finding for the

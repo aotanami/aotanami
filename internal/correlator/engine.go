@@ -28,15 +28,24 @@ const (
 
 // Event represents a single observable event in the cluster.
 type Event struct {
-	Type         EventType         `json:"type"`
-	Source       string            `json:"source"`
-	Severity     string            `json:"severity"`
-	Namespace    string            `json:"namespace"`
-	Resource     string            `json:"resource"`
-	ResourceKind string            `json:"resource_kind"`
-	Message      string            `json:"message"`
-	Timestamp    time.Time         `json:"timestamp"`
-	Metadata     map[string]string `json:"metadata,omitempty"`
+	Type EventType `json:"type"`
+	// Source is a free-form origin label (e.g. "securitypolicy/foo"). Kept
+	// for human-readable logging/debug; do NOT parse it to derive the
+	// triggering SecurityPolicy — use SecurityPolicy instead.
+	Source   string `json:"source"`
+	Severity string `json:"severity"`
+	// SecurityPolicy is the name of the SecurityPolicy CR whose scan
+	// produced this event, if any. Populated for EventSecurityViolation;
+	// other event types (anomaly, config_change, etc.) leave it empty.
+	// Consumers filter incidents by this field — see
+	// RemediationPolicy.spec.targetPolicies.
+	SecurityPolicy string            `json:"security_policy,omitempty"`
+	Namespace      string            `json:"namespace"`
+	Resource       string            `json:"resource"`
+	ResourceKind   string            `json:"resource_kind"`
+	Message        string            `json:"message"`
+	Timestamp      time.Time         `json:"timestamp"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
 }
 
 // Incident represents a correlated group of events.
