@@ -162,7 +162,15 @@ Look for these conditions:
 
 ## Step 4: Enable Protect Mode
 
-Create a RemediationPolicy to start receiving fix PRs:
+Two objects are required to actually open PRs — `ZelyoConfig.spec.mode: protect` alone does nothing without a `RemediationPolicy`:
+
+**4a. Switch the global mode to `protect`.** This flips the remediation engine's strategy from `dry-run` to `gitops-pr`:
+
+```bash
+kubectl patch zelyoconfig zelyo -n zelyo-system --type=merge -p '{"spec":{"mode":"protect"}}'
+```
+
+**4b. Create a `RemediationPolicy` pointed at the `GitOpsRepository` from Step 2.** This is the controller that actually queries the correlator for open incidents, generates fix plans, and submits PRs:
 
 ```yaml
 apiVersion: zelyo.ai/v1alpha1
@@ -171,13 +179,22 @@ metadata:
   name: auto-remediate
   namespace: zelyo-system
 spec:
-  gitOpsRepository: production-manifests
-  severityFilter: high
+  gitOpsRepository: production-manifests   # must match a GitOpsRepository CR
+  severityFilter: high                     # critical | high | medium | low
+  maxConcurrentPRs: 3
+  # targetPolicies: []                     # optional — restrict to specific SecurityPolicy names
   prTemplate:
     titlePrefix: "[Zelyo Operator]"
     labels: ["auto-fix", "security"]
-  maxConcurrentPRs: 3
 ```
+
+No PRs? Check all three:
+
+- `kubectl get zelyoconfig zelyo -n zelyo-system -o jsonpath='{.spec.mode}'` → `protect`
+- `kubectl get gitopsrepository <name> -n zelyo-system` → phase `Synced`
+- `kubectl describe remediationpolicy <name> -n zelyo-system` → phase `Active`, `ObservedGeneration` up to date
+
+To preview plans without writing any PRs, leave `ZelyoConfig.spec.mode` at `audit` — the engine stays in its `dry-run` strategy and every `RemediationPolicy` logs the plan without submitting it.
 
 ## Supported Repository Structures
 

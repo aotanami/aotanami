@@ -75,8 +75,10 @@ graph LR
 
 | Mode                          | Behavior                                                                                |
 | ----------------------------- | --------------------------------------------------------------------------------------- |
-| **Audit** *(default)* | Detects, correlates, and alerts. No automated changes.                                  |
-| **Protect**             | Full pipeline. Opens GitOps PRs automatically when a `GitOpsRepository` is onboarded. |
+| **Audit** *(default)* | Detects, correlates, and alerts. The remediation engine runs in `dry-run` — fix plans are logged but no PRs are opened. |
+| **Protect**             | Switches the remediation engine to the `gitops-pr` strategy. PRs are opened only when at least one `RemediationPolicy` CR points at a configured `GitOpsRepository`; the policy's `severityFilter`, `maxConcurrentPRs`, and `targetPolicies` fields decide which incidents actually become PRs. |
+
+> **Note:** `ZelyoConfig.spec.mode: protect` by itself does not produce any PRs — it only authorizes the pipeline. See [Enable GitOps Remediation](docs/quickstart.md#enable-gitops-remediation) for the full `GitOpsRepository` + `RemediationPolicy` setup.
 
 ---
 

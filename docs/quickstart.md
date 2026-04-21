@@ -317,7 +317,21 @@ spec:
 
 ## Enable GitOps Remediation
 
-Have Zelyo open GitHub PRs to fix detected issues automatically.
+Have Zelyo open GitHub PRs to fix detected issues automatically. This is what "Protect mode" actually means end-to-end: the `ZelyoConfig` mode switches the engine strategy to `gitops-pr`, and a `RemediationPolicy` pointed at a `GitOpsRepository` drives the PR creation.
+
+All three pieces are required — skipping any one of them means no PRs:
+
+| Piece | Role |
+| --- | --- |
+| `ZelyoConfig.spec.mode: protect` | Flips the remediation engine from `dry-run` to `gitops-pr`. Without this, plans are logged but never submitted. |
+| `GitOpsRepository` | Tells Zelyo which repo, branch, and paths to write fixes into, and provides Git auth. |
+| `RemediationPolicy` | The only controller that calls `GeneratePlan` + `ApplyPlan`. Gates which incidents produce PRs via `severityFilter`, `targetPolicies`, and `maxConcurrentPRs`. |
+
+**0. Switch `ZelyoConfig` to Protect mode:**
+
+```bash
+kubectl patch zelyoconfig zelyo -n zelyo-system --type=merge -p '{"spec":{"mode":"protect"}}'
+```
 
 **1. Create a GitHub token secret:**
 
@@ -365,7 +379,7 @@ spec:
   autoMerge: false
 ```
 
-Set `dryRun: true` to preview fix plans without opening PRs.
+To preview fix plans without opening any PRs, leave `ZelyoConfig.spec.mode: audit`. The remediation engine stays in its `dry-run` strategy and every `RemediationPolicy` logs the plan without submitting it — regardless of per-policy flags.
 
 ---
 
