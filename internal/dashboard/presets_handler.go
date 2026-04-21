@@ -475,6 +475,18 @@ func (s *Server) applyPresetFilesToCluster(ctx context.Context, p *Preset) (int,
 	if s.client == nil {
 		return 0, fmt.Errorf("dashboard has no k8s client")
 	}
+	// Preset catalog YAMLs (internal/dashboard/presets.go) intentionally
+	// omit metadata.namespace so the same preset can be rendered into
+	// whatever operator namespace the install uses. All of Zelyo's CRDs
+	// are namespaced, so decode → create without a namespace fails with
+	// "the namespace of the object (...) does not match the namespace on
+	// the request". Default to the operator namespace (ZELYO_OPERATOR_NAMESPACE
+	// env, falling back to zelyo-system) — matches the convention the
+	// ZelyoConfig controller uses when resolving its own Secret.
+	ns := os.Getenv("ZELYO_OPERATOR_NAMESPACE")
+	if ns == "" {
+		ns = "zelyo-system"
+	}
 	applied := 0
 	for _, f := range p.Files {
 		obj := &unstructured.Unstructured{}
@@ -483,6 +495,9 @@ func (s *Server) applyPresetFilesToCluster(ctx context.Context, p *Preset) (int,
 		}
 		if obj.GetKind() == "" {
 			return applied, fmt.Errorf("parsing %s: empty or non-object YAML", f.Path)
+		}
+		if obj.GetNamespace() == "" {
+			obj.SetNamespace(ns)
 		}
 		// client.Apply is deprecated in favor of Client.Apply, but the new
 		// API requires a typed runtime.ApplyConfiguration. Preset files
