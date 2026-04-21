@@ -36,6 +36,7 @@ import (
 	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
 	"github.com/zelyo-ai/zelyo-operator/internal/correlator"
 	"github.com/zelyo-ai/zelyo-operator/internal/github"
+	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
 	zelyometrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
 	"github.com/zelyo-ai/zelyo-operator/internal/remediation"
 	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
@@ -227,67 +228,116 @@ func (r *RemediationPolicyReconciler) processIncidents(
 	// Parse repo owner/name from URL for PR submission.
 	repoOwner, repoName := parseRepoURL(repo.Spec.URL)
 
+	// One-shot dedup: snapshot the set of branches already backing an open
+	// Zelyo-authored PR, so we don't open a second PR for a finding whose
+	// last reconcile already produced one. This is the fix for "excessive
+	// PRs" — without it, every reconcile tick regenerated incidents for the
+	// same unfixed resource and opened another PR.
+	existingBranches := map[string]string{}
+	if ge := r.RemediationEngine.GitOpsEngineForRepo(repoOwner, repoName); ge != nil {
+		open, listErr := ge.ListOpenPRs(ctx, repoOwner, repoName)
+		if listErr != nil {
+			// A ListOpenPRs failure is not fatal for reconcile — fall back
+			// to no-dedup but log so operators can see why PRs may stack.
+			log.Info("PR dedup skipped: ListOpenPRs failed", "error", listErr.Error())
+		} else {
+			for _, pr := range open {
+				existingBranches[pr.Branch] = pr.URL
+			}
+		}
+	}
+
 	var prsCreated int32
 	for _, incident := range incidents {
 		if prsCreated >= maxPRs {
 			log.Info("MaxConcurrentPRs limit reached", "limit", maxPRs)
 			break
 		}
-
-		// Filter by severity.
-		incSev, ok := severityOrder[incident.Severity]
-		if !ok {
-			continue
+		opened := r.remediateIncident(ctx, policy, repo, incident,
+			minSev, repoOwner, repoName, existingBranches)
+		if opened {
+			prsCreated++
 		}
-		if incSev > minSev {
-			continue // Incident severity is below threshold.
-		}
-
-		// Convert incident to a scanner.Finding for the remediation engine.
-		finding := incidentToFinding(incident)
-
-		// Generate remediation plan.
-		plan, err := r.RemediationEngine.GeneratePlan(ctx, finding)
-		if err != nil {
-			log.Error(err, "Failed to generate remediation plan",
-				"incident", incident.ID,
-				"resource", fmt.Sprintf("%s/%s", incident.Namespace, incident.Resource))
-			r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
-				fmt.Sprintf("LLM plan generation failed for incident %s: %v", incident.ID, err))
-			continue
-		}
-
-		log.Info("Generated remediation plan",
-			"incident", incident.ID,
-			"fixes", len(plan.Fixes),
-			"riskScore", plan.RiskScore,
-			"dryRun", policy.Spec.DryRun)
-
-		// Apply the plan (strategy is configured on the remediation engine).
-		result, err := r.RemediationEngine.ApplyPlan(ctx, plan, repoOwner, repoName)
-		if err != nil {
-			log.Error(err, "Failed to apply remediation plan",
-				"incident", incident.ID)
-			r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
-				fmt.Sprintf("Failed to apply fix for incident %s: %v", incident.ID, err))
-			continue
-		}
-
-		if result != nil {
-			log.Info("Remediation PR created",
-				"incident", incident.ID,
-				"prURL", result.URL)
-			r.Recorder.Event(policy, corev1.EventTypeNormal, "RemediationPRCreated",
-				fmt.Sprintf("Created PR %s for incident %s (risk=%d)",
-					result.URL, incident.ID, plan.RiskScore))
-		}
-
-		// Resolve the incident after successful remediation.
-		r.CorrelatorEngine.ResolveIncident(incident.ID)
-		prsCreated++
 	}
 
 	return prsCreated
+}
+
+// remediateIncident handles the full severity-check → dedup →
+// GeneratePlan → ApplyPlan → resolve flow for a single incident. Returns
+// true if a new PR was opened (so the caller can tally against
+// MaxConcurrentPRs). Factored out of processIncidents to keep each unit
+// under the gocyclo threshold.
+func (r *RemediationPolicyReconciler) remediateIncident(
+	ctx context.Context,
+	policy *zelyov1alpha1.RemediationPolicy,
+	repo *zelyov1alpha1.GitOpsRepository,
+	incident *correlator.Incident,
+	minSev int,
+	repoOwner, repoName string,
+	existingBranches map[string]string,
+) bool {
+	log := logf.FromContext(ctx)
+
+	// Severity filter.
+	incSev, ok := severityOrder[incident.Severity]
+	if !ok || incSev > minSev {
+		return false
+	}
+
+	finding := incidentToFinding(incident)
+
+	// Dedup: compute the branch name the PR would land on and skip if a
+	// PR is already open for it. The remediation engine uses the same
+	// BranchName helper so the keys line up.
+	branch := gitops.BranchName(finding.ResourceName, finding.ResourceNamespace, finding.Title)
+	if existingURL, exists := existingBranches[branch]; exists {
+		log.Info("Skipping remediation — open PR already exists",
+			"incident", incident.ID, "branch", branch, "prURL", existingURL)
+		// Still mark the incident resolved so we don't loop on it; a
+		// future scan will regenerate the incident if the PR is closed
+		// without merging and the finding remains.
+		r.CorrelatorEngine.ResolveIncident(incident.ID)
+		return false
+	}
+
+	plan, err := r.RemediationEngine.GeneratePlan(ctx, finding, repo.Spec.Paths)
+	if err != nil {
+		log.Error(err, "Failed to generate remediation plan",
+			"incident", incident.ID,
+			"resource", fmt.Sprintf("%s/%s", incident.Namespace, incident.Resource))
+		r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
+			fmt.Sprintf("LLM plan generation failed for incident %s: %v", incident.ID, err))
+		return false
+	}
+
+	log.Info("Generated remediation plan",
+		"incident", incident.ID,
+		"fixes", len(plan.Fixes),
+		"riskScore", plan.RiskScore,
+		"dryRun", policy.Spec.DryRun)
+
+	result, err := r.RemediationEngine.ApplyPlan(ctx, plan, repoOwner, repoName)
+	if err != nil {
+		log.Error(err, "Failed to apply remediation plan",
+			"incident", incident.ID)
+		r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
+			fmt.Sprintf("Failed to apply fix for incident %s: %v", incident.ID, err))
+		return false
+	}
+
+	if result != nil {
+		log.Info("Remediation PR created",
+			"incident", incident.ID,
+			"prURL", result.URL)
+		r.Recorder.Event(policy, corev1.EventTypeNormal, "RemediationPRCreated",
+			fmt.Sprintf("Created PR %s for incident %s (risk=%d)",
+				result.URL, incident.ID, plan.RiskScore))
+		existingBranches[branch] = result.URL
+	}
+
+	r.CorrelatorEngine.ResolveIncident(incident.ID)
+	return true
 }
 
 // incidentToFinding converts a correlator incident to a scanner finding for the

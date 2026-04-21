@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/zelyo-ai/zelyo-operator/internal/events"
 )
 
 // EventType classifies events for correlation.
@@ -93,6 +95,7 @@ func NewEngine(cfg *Config) *Engine {
 func (e *Engine) Ingest(event *Event) *Incident {
 	var notifySnapshot *Incident
 	var result *Incident
+	var newIncidentEventCount int // non-zero only when a brand-new incident forms
 
 	e.mu.Lock()
 	if event.Timestamp.IsZero() {
@@ -135,6 +138,7 @@ func (e *Engine) Ingest(event *Event) *Incident {
 			e.incidents[incident.ID] = incident
 			notifySnapshot = copyIncident(incident)
 			result = copyIncident(incident)
+			newIncidentEventCount = len(related)
 		}
 	}
 	cb := e.onIncident
@@ -142,6 +146,15 @@ func (e *Engine) Ingest(event *Event) *Incident {
 
 	if notifySnapshot != nil && cb != nil {
 		cb(notifySnapshot)
+	}
+	// Emit pipeline event when a new incident forms. Previously the
+	// Correlate column in the dashboard Pipeline view stayed empty unless
+	// ZELYO_DEMO_MODE fired synthetic events — the real correlator never
+	// spoke to the event bus. scanRef is empty here because incidents can
+	// aggregate across multiple scans; the dashboard treats that as "no
+	// scan attribution" which matches the UX.
+	if notifySnapshot != nil && newIncidentEventCount > 0 {
+		events.EmitCorrelationGrouped(newIncidentEventCount, 1, "")
 	}
 	return result
 }
@@ -237,9 +250,9 @@ func severityOrder(s string) int {
 	}
 }
 
-func highestSeverity(events []*Event) string {
+func highestSeverity(evs []*Event) string {
 	highest := "info"
-	for _, ev := range events {
+	for _, ev := range evs {
 		if severityOrder(ev.Severity) > severityOrder(highest) {
 			highest = ev.Severity
 		}

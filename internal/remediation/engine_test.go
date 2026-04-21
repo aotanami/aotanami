@@ -323,7 +323,7 @@ func TestGeneratePlan_ZeroValidatedFixes_ReturnsError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			engine := NewEngine(&fakeLLMClient{response: tc.response}, nil,
 				EngineConfig{Strategy: StrategyDryRun}, logr.Discard())
-			plan, err := engine.GeneratePlan(context.Background(), &scanner.Finding{RuleType: "test", Title: "t"})
+			plan, err := engine.GeneratePlan(context.Background(), &scanner.Finding{RuleType: "test", Title: "t"}, nil)
 			if err == nil {
 				t.Fatalf("expected error for zero validated fixes, got plan=%+v", plan)
 			}

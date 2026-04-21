@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,9 +30,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 	"github.com/zelyo-ai/zelyo-operator/internal/compliance"
@@ -122,7 +125,7 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Status().Update(ctx, scan); err != nil {
 			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 		}
-		return ctrl.Result{RequeueAfter: defaultScanInterval}, nil
+		return ctrl.Result{RequeueAfter: scanRequeueInterval(scan)}, nil
 	}
 
 	// ── Run the scan ──
@@ -183,7 +186,7 @@ func (r *ClusterScanReconciler) handleTargetResolutionError(ctx context.Context,
 	if statusErr := r.Status().Update(ctx, scan); statusErr != nil {
 		return ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
 	}
-	return ctrl.Result{RequeueAfter: defaultScanInterval}, nil
+	return ctrl.Result{RequeueAfter: scanRequeueInterval(scan)}, nil
 }
 
 // updateFinalStatus writes the scan result into the ClusterScan status and records metrics.
@@ -228,7 +231,7 @@ func (r *ClusterScanReconciler) updateFinalStatus(ctx context.Context, scan *zel
 	zelyometrics.ResourcesScannedTotal.WithLabelValues("clusterscan").Add(float64(sr.summary.ResourcesScanned))
 	zelyometrics.ReconcileTotal.WithLabelValues("clusterscan", "success").Inc()
 
-	return ctrl.Result{RequeueAfter: defaultScanInterval}, nil
+	return ctrl.Result{RequeueAfter: scanRequeueInterval(scan)}, nil
 }
 
 // executeScan runs all requested scanners against the target pods and returns
@@ -510,12 +513,55 @@ func (r *ClusterScanReconciler) enforceHistoryLimit(ctx context.Context, scan *z
 }
 
 // SetupWithManager sets up the controller with the Manager.
+//
+// GenerationChangedPredicate is critical: the Reconcile loop writes the
+// ClusterScan status on every run (Phase=Running, Phase=Complete,
+// LastScheduleTime), which otherwise retriggers Reconcile immediately in
+// a tight loop — the scanner runs again → status writes again → Reconcile
+// again. With the predicate the controller only re-runs on spec changes,
+// owned-resource events, and the explicit RequeueAfter interval.
 func (r *ClusterScanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&zelyov1alpha1.ClusterScan{}).
+		For(&zelyov1alpha1.ClusterScan{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&zelyov1alpha1.ScanReport{}).
 		Named("clusterscan").
 		Complete(r)
+}
+
+// scanRequeueInterval returns the next-tick interval derived from the
+// scan's schedule. We only understand the common "*/N * * * *" form (run
+// every N minutes); anything else falls back to defaultScanInterval.
+// The minimum bound is 1 minute — a misconfigured "*/0" or "*/1 *" won't
+// collapse into a scan-per-second hot-loop. The GenerationChangedPredicate
+// plus this bounded RequeueAfter together prevent the runaway reconcile
+// we observed pre-fix, where status writes re-triggered Reconcile.
+func scanRequeueInterval(scan *zelyov1alpha1.ClusterScan) time.Duration {
+	if scan == nil {
+		return defaultScanInterval
+	}
+	sch := strings.TrimSpace(scan.Spec.Schedule)
+	if sch == "" {
+		return defaultScanInterval
+	}
+	fields := strings.Fields(sch)
+	if len(fields) != 5 {
+		return defaultScanInterval
+	}
+	// Only attempt to parse the minute field of the form "*/N".
+	minute := fields[0]
+	if !strings.HasPrefix(minute, "*/") {
+		return defaultScanInterval
+	}
+	nStr := strings.TrimPrefix(minute, "*/")
+	n, err := strconv.Atoi(nStr)
+	if err != nil || n < 1 {
+		return defaultScanInterval
+	}
+	if n > 60*24 { // clamp to <= 1 day per tick
+		n = 60 * 24
+	}
+	return time.Duration(n) * time.Minute
 }
 
 // truncateRunes returns s truncated to at most maxRunes runes. Slicing a

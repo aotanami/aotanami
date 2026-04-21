@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	"github.com/zelyo-ai/zelyo-operator/internal/events"
 	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
 	"github.com/zelyo-ai/zelyo-operator/internal/llm"
 	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
@@ -126,6 +127,13 @@ func (e *Engine) getGitOpsEngine(owner, repo string) gitops.Engine {
 	return e.gitopsEngine
 }
 
+// GitOpsEngineForRepo is the public accessor callers (RemediationPolicy
+// controller) use to consult the gitops engine for read-only calls like
+// ListOpenPRs — needed for PR dedup before ApplyPlan.
+func (e *Engine) GitOpsEngineForRepo(owner, repo string) gitops.Engine {
+	return e.getGitOpsEngine(owner, repo)
+}
+
 // SetLLMClient updates the LLM client used by the engine.
 func (e *Engine) SetLLMClient(client llm.Client) {
 	e.mu.Lock()
@@ -151,12 +159,20 @@ func (e *Engine) SetConfig(cfg EngineConfig) {
 }
 
 // GeneratePlan uses the LLM to analyze a finding and produce fix recommendations.
-func (e *Engine) GeneratePlan(ctx context.Context, finding *scanner.Finding) (*Plan, error) {
+//
+// allowedPaths, when non-empty, constrains the LLM's file_path choice to
+// repo-relative paths under one of those prefixes. This is how we stop
+// the LLM from inventing arbitrary paths like "demo-app/redis.yaml" when
+// the GitOpsRepository's configured paths are ["helm/zelyo-demo"]. Paths
+// that don't fall under an allowed prefix are dropped in extractFixes;
+// if all fixes get dropped, GeneratePlan returns the same zero-fix error
+// it returns for any other filtered-to-empty plan.
+func (e *Engine) GeneratePlan(ctx context.Context, finding *scanner.Finding, allowedPaths []string) (*Plan, error) {
 	var prompt string
 	if isCloudFinding(finding.RuleType) {
-		prompt = buildCloudRemediationPrompt(finding)
+		prompt = buildCloudRemediationPrompt(finding, allowedPaths)
 	} else {
-		prompt = buildRemediationPrompt(finding)
+		prompt = buildRemediationPrompt(finding, allowedPaths)
 	}
 
 	e.mu.RLock()
@@ -203,6 +219,9 @@ func (e *Engine) GeneratePlan(ctx context.Context, finding *scanner.Finding) (*P
 	// sink. The full analysis stays in the operator-level log via whatever
 	// log.Error wrapper the caller chooses.
 	fixes, analysis, llmRisk := extractFixes(resp.Content, finding)
+	if len(allowedPaths) > 0 {
+		fixes = filterFixesToAllowedPaths(fixes, allowedPaths)
+	}
 	if len(fixes) == 0 {
 		return nil, fmt.Errorf("remediation: no valid fixes produced from LLM response (analysis omitted)")
 	}
@@ -284,6 +303,44 @@ func (e *Engine) createPR(ctx context.Context, plan *Plan, owner, repo string) (
 		"finding", plan.Finding.Title,
 		"risk_score", plan.RiskScore)
 
+	// Emit pipeline events so the dashboard Pipeline view shows real
+	// remediation activity. Previously only the Compliance preset flow
+	// emitted these, so the real Fix column stayed empty even while
+	// remediation was running. We populate the remediation store too so
+	// clicking the PR card in the Pipeline opens a Before/Diff/After
+	// panel with the LLM analysis, the same panel the preset flow uses.
+	repoSlug := fmt.Sprintf("%s/%s", owner, repo)
+	items := make([]events.RemediationItem, 0, len(plan.Fixes))
+	for _, fix := range plan.Fixes {
+		items = append(items, events.RemediationItem{
+			ResourceKey: plan.Finding.ResourceNamespace + "/" + plan.Finding.ResourceName,
+			Resource:    fix.FilePath,
+			Rule:        plan.Finding.RuleType,
+			Severity:    plan.Finding.Severity,
+			Title:       fix.Description,
+		})
+	}
+	filesChanged := make([]string, 0, len(plan.Fixes))
+	diffB := strings.Builder{}
+	for _, fix := range plan.Fixes {
+		filesChanged = append(filesChanged, fix.FilePath)
+		diffB.WriteString(fmt.Sprintf("--- a/%s\n+++ b/%s\n", fix.FilePath, fix.FilePath))
+		diffB.WriteString(fix.Patch)
+		diffB.WriteString("\n")
+	}
+	events.DefaultRemediationStore().Upsert(&events.RemediationContext{
+		ScanRef:      plan.Finding.RuleType,
+		Namespace:    plan.Finding.ResourceNamespace,
+		Repo:         repoSlug,
+		PRURL:        result.URL,
+		Summary:      plan.Finding.Title,
+		Findings:     items,
+		Diff:         diffB.String(),
+		FilesChanged: filesChanged,
+	})
+	events.EmitRemediationDrafted(plan.Finding.RuleType, plan.Finding.Title, len(plan.Fixes))
+	events.EmitPullRequestOpened(result.URL, repoSlug, len(plan.Fixes))
+
 	return result, nil
 }
 
@@ -327,7 +384,7 @@ func isCloudFinding(ruleType string) bool {
 	return false
 }
 
-func buildCloudRemediationPrompt(f *scanner.Finding) string {
+func buildCloudRemediationPrompt(f *scanner.Finding, allowedPaths []string) string {
 	return fmt.Sprintf(`Analyze this cloud security finding and provide an Infrastructure-as-Code fix as JSON:
 
 **Rule Type:** %s
@@ -343,13 +400,14 @@ Provide a fix using one of these IaC formats:
 3. AWS CLI remediation command (for immediate manual fix)
 
 Use the same JSON response schema from the system prompt.
-Set file_path to the Terraform module path (e.g., "terraform/modules/s3/main.tf") or
-CloudFormation template path. Include both the IaC fix and the equivalent AWS CLI command
-in the analysis field.`, f.RuleType, f.Severity, f.Title, f.Description,
-		f.ResourceKind, f.ResourceNamespace, f.ResourceName, f.Recommendation)
+%s
+Include both the IaC fix and the equivalent AWS CLI command in the analysis field.`,
+		f.RuleType, f.Severity, f.Title, f.Description,
+		f.ResourceKind, f.ResourceNamespace, f.ResourceName, f.Recommendation,
+		pathConstraintsPromptFragment(allowedPaths))
 }
 
-func buildRemediationPrompt(f *scanner.Finding) string {
+func buildRemediationPrompt(f *scanner.Finding, allowedPaths []string) string {
 	return fmt.Sprintf(`Analyze this Kubernetes security finding and provide a fix as JSON:
 
 **Rule Type:** %s
@@ -359,8 +417,62 @@ func buildRemediationPrompt(f *scanner.Finding) string {
 **Resource:** %s %s/%s
 **Recommendation:** %s
 
-Respond with the JSON object as specified in the system prompt.`, f.RuleType, f.Severity, f.Title, f.Description,
-		f.ResourceKind, f.ResourceNamespace, f.ResourceName, f.Recommendation)
+%s
+Respond with the JSON object as specified in the system prompt.`,
+		f.RuleType, f.Severity, f.Title, f.Description,
+		f.ResourceKind, f.ResourceNamespace, f.ResourceName, f.Recommendation,
+		pathConstraintsPromptFragment(allowedPaths))
+}
+
+// pathConstraintsPromptFragment injects the GitOpsRepository's configured
+// path prefixes into the LLM prompt so the model doesn't hallucinate file
+// locations. Without this the LLM invents paths from the resource name
+// (e.g. "demo-app/redis.yaml") that land at repo root instead of under
+// the configured manifest directory.
+func pathConstraintsPromptFragment(allowedPaths []string) string {
+	if len(allowedPaths) == 0 {
+		return ""
+	}
+	quoted := make([]string, 0, len(allowedPaths))
+	for _, p := range allowedPaths {
+		quoted = append(quoted, fmt.Sprintf("%q", strings.TrimSuffix(p, "/")))
+	}
+	return fmt.Sprintf(
+		"**Repository layout constraint:** All file_path values in the response MUST be repo-relative paths that begin with one of: %s. Do NOT invent paths outside these directories — the GitOps repo is only watched under these prefixes.\n",
+		strings.Join(quoted, ", "),
+	)
+}
+
+// filterFixesToAllowedPaths drops any fix whose FilePath doesn't fall
+// under one of the GitOpsRepository's configured paths. This is the
+// post-LLM belt-and-braces check complementing the prompt constraint —
+// even if the model ignores the prompt we never commit outside the
+// allowed directory set.
+func filterFixesToAllowedPaths(fixes []Fix, allowedPaths []string) []Fix {
+	if len(allowedPaths) == 0 {
+		return fixes
+	}
+	prefixes := make([]string, 0, len(allowedPaths))
+	for _, p := range allowedPaths {
+		p = strings.TrimPrefix(strings.TrimSuffix(p, "/"), "/")
+		if p == "" {
+			// An allowed path of "" or "/" means "the whole repo" — any
+			// path is valid; don't apply prefix filtering at all.
+			return fixes
+		}
+		prefixes = append(prefixes, p+"/")
+	}
+	out := make([]Fix, 0, len(fixes))
+	for _, f := range fixes {
+		fp := strings.TrimPrefix(f.FilePath, "/")
+		for _, pref := range prefixes {
+			if strings.HasPrefix(fp+"/", pref) || fp == strings.TrimSuffix(pref, "/") {
+				out = append(out, f)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // llmResponse is the expected JSON structure from the LLM.
