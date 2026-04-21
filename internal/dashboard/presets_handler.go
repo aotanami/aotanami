@@ -353,7 +353,10 @@ func (s *Server) openPresetPR(ctx context.Context, p *Preset, repo *zelyov1alpha
 		Title:      fmt.Sprintf("[Zelyo] Enable %s (%s)", p.Name, p.Framework),
 		Body:       fmt.Sprintf("Enables the **%s** compliance preset.\n\n%s\n\n_Drafted by Zelyo Operator Compliance page._", p.Name, p.Description),
 		BaseBranch: baseBranch,
-		HeadBranch: fmt.Sprintf("zelyo-operator/preset/%s-%d", p.ID, time.Now().Unix()),
+		// Deterministic branch name keyed only on preset ID so dedup
+		// (ListOpenPRs lookup against this branch) still works across
+		// operator restarts and idempotent re-proposes.
+		HeadBranch: fmt.Sprintf("zelyo-operator/preset/%s", p.ID),
 		Labels:     []string{"zelyo-operator", "compliance", p.Framework},
 		Files:      changes,
 	}
@@ -462,17 +465,18 @@ func (s *Server) handlePresetApply(w http.ResponseWriter, r *http.Request) {
 }
 
 // applyPresetFilesToCluster decodes each preset file as Kubernetes YAML
-// and creates the resource via the controller-runtime client. If an
-// object already exists, this returns the error — the caller surfaces it.
-// Previously handlePresetApply only mutated in-memory state and the
-// "Applied directly to cluster" message was false.
+// and Server-Side-Applies it via the controller-runtime client. SSA is
+// idempotent: re-applying the same preset (or one whose resources were
+// partially applied earlier) converges the declared state without the
+// AlreadyExists errors a plain Create would raise. Zelyo owns its own
+// fields via the "zelyo-operator" field manager so manual overrides
+// stick around on re-apply.
 func (s *Server) applyPresetFilesToCluster(ctx context.Context, p *Preset) (int, error) {
 	if s.client == nil {
 		return 0, fmt.Errorf("dashboard has no k8s client")
 	}
 	applied := 0
 	for _, f := range p.Files {
-		// Each preset file may contain a single YAML document.
 		obj := &unstructured.Unstructured{}
 		if err := yaml.Unmarshal([]byte(f.Content), &obj.Object); err != nil {
 			return applied, fmt.Errorf("parsing %s: %w", f.Path, err)
@@ -480,8 +484,15 @@ func (s *Server) applyPresetFilesToCluster(ctx context.Context, p *Preset) (int,
 		if obj.GetKind() == "" {
 			return applied, fmt.Errorf("parsing %s: empty or non-object YAML", f.Path)
 		}
-		if err := s.client.Create(ctx, obj); err != nil {
-			return applied, fmt.Errorf("creating %s/%s (%s): %w",
+		// client.Apply is deprecated in favor of Client.Apply, but the new
+		// API requires a typed runtime.ApplyConfiguration. Preset files
+		// are arbitrary user YAML decoded as *unstructured.Unstructured —
+		// there's no typed apply path for unstructured, so the
+		// Patch+client.Apply idiom is still the correct one here.
+		//nolint:staticcheck // SSA for unstructured objects legitimately needs client.Apply PatchType.
+		if err := s.client.Patch(ctx, obj, client.Apply,
+			client.ForceOwnership, client.FieldOwner("zelyo-operator")); err != nil {
+			return applied, fmt.Errorf("applying %s/%s (%s): %w",
 				obj.GetNamespace(), obj.GetName(), obj.GetKind(), err)
 		}
 		applied++

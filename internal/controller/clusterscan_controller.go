@@ -20,9 +20,10 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/robfig/cron/v3"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -530,12 +531,14 @@ func (r *ClusterScanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // scanRequeueInterval returns the next-tick interval derived from the
-// scan's schedule. We only understand the common "*/N * * * *" form (run
-// every N minutes); anything else falls back to defaultScanInterval.
-// The minimum bound is 1 minute — a misconfigured "*/0" or "*/1 *" won't
-// collapse into a scan-per-second hot-loop. The GenerationChangedPredicate
-// plus this bounded RequeueAfter together prevent the runaway reconcile
-// we observed pre-fix, where status writes re-triggered Reconcile.
+// scan's schedule. Uses robfig/cron/v3's standard parser so any valid
+// 5-field cron expression works ("*/10 * * * *", "0 * * * *",
+// "0 0 * * *", "30 2 * * 1-5", ...). We compute the interval from now
+// to the parser's next-trigger, clamp to [1m, 24h] to stop misconfig
+// from collapsing into a scan-per-second hot-loop (the
+// GenerationChangedPredicate also guards this), and fall back to
+// defaultScanInterval if the expression is empty or doesn't parse.
+// Unparseable expressions are logged at the caller's discretion.
 func scanRequeueInterval(scan *zelyov1alpha1.ClusterScan) time.Duration {
 	if scan == nil {
 		return defaultScanInterval
@@ -544,24 +547,20 @@ func scanRequeueInterval(scan *zelyov1alpha1.ClusterScan) time.Duration {
 	if sch == "" {
 		return defaultScanInterval
 	}
-	fields := strings.Fields(sch)
-	if len(fields) != 5 {
+	expr, err := cron.ParseStandard(sch)
+	if err != nil {
 		return defaultScanInterval
 	}
-	// Only attempt to parse the minute field of the form "*/N".
-	minute := fields[0]
-	if !strings.HasPrefix(minute, "*/") {
-		return defaultScanInterval
+	now := time.Now()
+	next := expr.Next(now)
+	interval := next.Sub(now)
+	if interval < time.Minute {
+		interval = time.Minute
 	}
-	nStr := strings.TrimPrefix(minute, "*/")
-	n, err := strconv.Atoi(nStr)
-	if err != nil || n < 1 {
-		return defaultScanInterval
+	if interval > 24*time.Hour {
+		interval = 24 * time.Hour
 	}
-	if n > 60*24 { // clamp to <= 1 day per tick
-		n = 60 * 24
-	}
-	return time.Duration(n) * time.Minute
+	return interval
 }
 
 // truncateRunes returns s truncated to at most maxRunes runes. Slicing a

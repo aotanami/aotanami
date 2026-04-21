@@ -310,23 +310,24 @@ func (e *Engine) createPR(ctx context.Context, plan *Plan, owner, repo string) (
 	// clicking the PR card in the Pipeline opens a Before/Diff/After
 	// panel with the LLM analysis, the same panel the preset flow uses.
 	repoSlug := fmt.Sprintf("%s/%s", owner, repo)
+	resourceKey := events.ResourceKey(
+		plan.Finding.ResourceKind,
+		plan.Finding.ResourceNamespace,
+		plan.Finding.ResourceName,
+	)
 	items := make([]events.RemediationItem, 0, len(plan.Fixes))
+	filesChanged := make([]string, 0, len(plan.Fixes))
 	for _, fix := range plan.Fixes {
 		items = append(items, events.RemediationItem{
-			ResourceKey: plan.Finding.ResourceNamespace + "/" + plan.Finding.ResourceName,
+			// Canonical kind/namespace/name key so the dashboard's
+			// MarkResolved lookup after a clean re-scan matches.
+			ResourceKey: resourceKey,
 			Resource:    fix.FilePath,
 			Rule:        plan.Finding.RuleType,
 			Severity:    plan.Finding.Severity,
 			Title:       fix.Description,
 		})
-	}
-	filesChanged := make([]string, 0, len(plan.Fixes))
-	diffB := strings.Builder{}
-	for _, fix := range plan.Fixes {
 		filesChanged = append(filesChanged, fix.FilePath)
-		diffB.WriteString(fmt.Sprintf("--- a/%s\n+++ b/%s\n", fix.FilePath, fix.FilePath))
-		diffB.WriteString(fix.Patch)
-		diffB.WriteString("\n")
 	}
 	events.DefaultRemediationStore().Upsert(&events.RemediationContext{
 		ScanRef:      plan.Finding.RuleType,
@@ -335,7 +336,7 @@ func (e *Engine) createPR(ctx context.Context, plan *Plan, owner, repo string) (
 		PRURL:        result.URL,
 		Summary:      plan.Finding.Title,
 		Findings:     items,
-		Diff:         diffB.String(),
+		Diff:         buildFixPlanDiff(plan.Fixes),
 		FilesChanged: filesChanged,
 	})
 	events.EmitRemediationDrafted(plan.Finding.RuleType, plan.Finding.Title, len(plan.Fixes))
@@ -664,4 +665,25 @@ func estimateRisk(finding *scanner.Finding, fixes []Fix) int {
 	}
 	// Each additional file change adds risk.
 	return min(baseRisk+len(fixes)*5, 100)
+}
+
+// buildFixPlanDiff renders the LLM fix plan as a valid unified diff.
+// Zelyo's system prompt instructs the model to return the FULL intended
+// file content in `patch` (not a raw diff fragment), so at the
+// remediation-engine boundary we're always producing "create-or-replace"
+// diffs: /dev/null → +++ b/<path>, one hunk per file, every content line
+// prefixed with '+'. Mirrors buildPresetDiff in the dashboard so the
+// Before/Diff/After panel renders identically for both preset- and
+// AI-authored changes. The previous body ("--- a/<p>\n+++ b/<p>\n<content>")
+// was NOT a valid unified diff and broke that panel.
+func buildFixPlanDiff(fixes []Fix) string {
+	var b strings.Builder
+	for _, f := range fixes {
+		lines := strings.Split(f.Patch, "\n")
+		fmt.Fprintf(&b, "--- /dev/null\n+++ b/%s\n@@ +0,0 +1,%d @@\n", f.FilePath, len(lines))
+		for _, line := range lines {
+			fmt.Fprintf(&b, "+%s\n", line)
+		}
+	}
+	return b.String()
 }
