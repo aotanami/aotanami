@@ -201,22 +201,7 @@ func (r *RemediationPolicyReconciler) processIncidents(
 	minSev := severityOrder[severityFilter]
 
 	// ── Step 3: Initialize GitOps Engine from Secret ──
-	if repo.Spec.AuthSecret != "" {
-		secret := &corev1.Secret{}
-		secretKey := types.NamespacedName{Name: repo.Spec.AuthSecret, Namespace: repo.Namespace}
-		if err := r.Get(ctx, secretKey, secret); err == nil {
-			token := string(secret.Data["token"])
-			if token == "" {
-				token = string(secret.Data["api-key"])
-			}
-			if token != "" {
-				ghClient := github.NewPATClient(token, "")
-				ghEngine := github.NewEngine(ghClient, log.WithName("github-engine"))
-				r.RemediationEngine.SetGitOpsEngine(ghEngine)
-				log.Info("Successfully initialized GitOps engine for remediation", "repo", repo.Name)
-			}
-		}
-	}
+	r.maybeSetGitOpsEngineFromSecret(ctx, repo)
 
 	// Respect MaxConcurrentPRs limit.
 	maxPRs := policy.Spec.MaxConcurrentPRs
@@ -301,6 +286,38 @@ func (r *RemediationPolicyReconciler) processIncidents(
 	}
 
 	return prsCreated
+}
+
+// maybeSetGitOpsEngineFromSecret wires a PAT-backed GitHub engine into the
+// remediation engine when the repo's auth secret is present and carries a
+// usable token (either `token` or `api-key`). It is a silent no-op when the
+// secret is missing or empty — the remediation engine keeps its
+// previously-configured default. Extracted from processIncidents to keep
+// that function under the gocyclo threshold.
+func (r *RemediationPolicyReconciler) maybeSetGitOpsEngineFromSecret(
+	ctx context.Context,
+	repo *zelyov1alpha1.GitOpsRepository,
+) {
+	if repo.Spec.AuthSecret == "" {
+		return
+	}
+	log := logf.FromContext(ctx)
+	secret := &corev1.Secret{}
+	secretKey := types.NamespacedName{Name: repo.Spec.AuthSecret, Namespace: repo.Namespace}
+	if err := r.Get(ctx, secretKey, secret); err != nil {
+		return
+	}
+	token := string(secret.Data["token"])
+	if token == "" {
+		token = string(secret.Data["api-key"])
+	}
+	if token == "" {
+		return
+	}
+	ghClient := github.NewPATClient(token, "")
+	ghEngine := github.NewEngine(ghClient, log.WithName("github-engine"))
+	r.RemediationEngine.SetGitOpsEngine(ghEngine)
+	log.Info("Successfully initialized GitOps engine for remediation", "repo", repo.Name)
 }
 
 // incidentToFinding converts a correlator incident to a scanner finding for the
