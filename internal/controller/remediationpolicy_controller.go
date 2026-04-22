@@ -212,10 +212,17 @@ func (r *RemediationPolicyReconciler) processIncidents(
 	// Parse repo owner/name from URL for PR submission.
 	repoOwner, repoName := parseRepoURL(repo.Spec.URL)
 
-	var prsCreated int32
+	// processed counts every incident that reaches GeneratePlan, whether
+	// it ultimately opens a PR or is previewed under dryRun. prsCreated
+	// only counts real PRs and drives the status counter. The per-cycle
+	// ceiling must apply to BOTH paths — otherwise a dryRun policy with
+	// N open incidents would fire N LLM calls per reconcile regardless of
+	// maxConcurrentPRs, burning tokens and pushing the reconcile toward
+	// its timeout.
+	var prsCreated, processed int32
 	for _, incident := range incidents {
-		if prsCreated >= maxPRs {
-			log.Info("MaxConcurrentPRs limit reached", "limit", maxPRs)
+		if processed >= maxPRs {
+			log.Info("MaxConcurrentPRs limit reached", "limit", maxPRs, "dryRun", policy.Spec.DryRun)
 			break
 		}
 
@@ -230,6 +237,11 @@ func (r *RemediationPolicyReconciler) processIncidents(
 
 		// Convert incident to a scanner.Finding for the remediation engine.
 		finding := incidentToFinding(incident)
+
+		// Increment the per-cycle budget BEFORE the LLM call so plan
+		// failures still count — otherwise a cluster where every plan
+		// fails to validate would hit the LLM once per open incident.
+		processed++
 
 		// Generate remediation plan.
 		plan, err := r.RemediationEngine.GeneratePlan(ctx, finding)
