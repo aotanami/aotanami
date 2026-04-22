@@ -127,9 +127,11 @@ func (e *Engine) getGitOpsEngine(owner, repo string) gitops.Engine {
 	return e.gitopsEngine
 }
 
-// GitOpsEngineForRepo is the public accessor callers (RemediationPolicy
-// controller) use to consult the gitops engine for read-only calls like
-// ListOpenPRs — needed for PR dedup before ApplyPlan.
+// GitOpsEngineForRepo is the public accessor the RemediationPolicy controller
+// uses to consult the gitops engine for read-only calls (ListOpenPRs) — needed
+// both for PR dedup before ApplyPlan and for counting open PRs toward the
+// maxConcurrentPRs cap. Falls back to the default engine when no repo-specific
+// engine is registered; returns nil when nothing is configured.
 func (e *Engine) GitOpsEngineForRepo(owner, repo string) gitops.Engine {
 	return e.getGitOpsEngine(owner, repo)
 }

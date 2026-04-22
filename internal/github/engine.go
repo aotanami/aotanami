@@ -147,54 +147,77 @@ func (e *GitHubEngine) GetFile(ctx context.Context, owner, repo, path, ref strin
 	return decoded[:n], nil
 }
 
-// ListOpenPRs implements gitops.Engine.ListOpenPRs.
+// ListOpenPRs implements gitops.Engine.ListOpenPRs by paginating over
+// GitHub's list-PRs endpoint. A single page is 100 PRs (the endpoint's max);
+// we keep requesting successive pages until a page comes back short or we
+// hit listOpenPRsMaxPages. The cap guards against runaway calls if the
+// provider ever misbehaves — at 100/page × 10 pages, callers see up to
+// 1000 open PRs before the count saturates, which is far beyond any sane
+// MaxConcurrentPRs configuration.
 func (e *GitHubEngine) ListOpenPRs(ctx context.Context, owner, repo string) ([]gitops.PullRequestResult, error) {
-	reqURL := fmt.Sprintf("%s/repos/%s/%s/pulls?state=open&per_page=100", e.baseURL, owner, repo)
-
-	body, err := e.doRequest(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("listing open PRs: %w", err)
-	}
-
-	var prs []struct {
-		Number  int    `json:"number"`
-		HTMLURL string `json:"html_url"`
-		Head    struct {
-			Ref string `json:"ref"`
-		} `json:"head"`
-		CreatedAt time.Time `json:"created_at"`
-		Labels    []struct {
-			Name string `json:"name"`
-		} `json:"labels"`
-	}
-	if err := json.Unmarshal(body, &prs); err != nil {
-		return nil, fmt.Errorf("decoding PRs response: %w", err)
-	}
-
-	// Filter to Zelyo Operator-created PRs.
 	var results []gitops.PullRequestResult
-	for _, pr := range prs {
-		isZelyoOperator := strings.HasPrefix(pr.Head.Ref, "zelyo-operator/")
-		if !isZelyoOperator {
-			for _, l := range pr.Labels {
-				if l.Name == "zelyo-operator" {
-					isZelyoOperator = true
-					break
+	for page := 1; page <= listOpenPRsMaxPages; page++ {
+		reqURL := fmt.Sprintf("%s/repos/%s/%s/pulls?state=open&per_page=%d&page=%d",
+			e.baseURL, owner, repo, listOpenPRsPageSize, page)
+
+		body, err := e.doRequest(ctx, http.MethodGet, reqURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("listing open PRs (page %d): %w", page, err)
+		}
+
+		var prs []struct {
+			Number  int    `json:"number"`
+			HTMLURL string `json:"html_url"`
+			Head    struct {
+				Ref string `json:"ref"`
+			} `json:"head"`
+			CreatedAt time.Time `json:"created_at"`
+			Labels    []struct {
+				Name string `json:"name"`
+			} `json:"labels"`
+		}
+		if err := json.Unmarshal(body, &prs); err != nil {
+			return nil, fmt.Errorf("decoding PRs response (page %d): %w", page, err)
+		}
+
+		// Filter to Zelyo Operator-created PRs.
+		for _, pr := range prs {
+			isZelyoOperator := strings.HasPrefix(pr.Head.Ref, "zelyo-operator/")
+			if !isZelyoOperator {
+				for _, l := range pr.Labels {
+					if l.Name == "zelyo-operator" {
+						isZelyoOperator = true
+						break
+					}
 				}
 			}
+			if isZelyoOperator {
+				results = append(results, gitops.PullRequestResult{
+					Number:    pr.Number,
+					URL:       pr.HTMLURL,
+					Branch:    pr.Head.Ref,
+					CreatedAt: pr.CreatedAt,
+				})
+			}
 		}
-		if isZelyoOperator {
-			results = append(results, gitops.PullRequestResult{
-				Number:    pr.Number,
-				URL:       pr.HTMLURL,
-				Branch:    pr.Head.Ref,
-				CreatedAt: pr.CreatedAt,
-			})
+
+		// Short page → we've drained results. Full page → try the next one.
+		if len(prs) < listOpenPRsPageSize {
+			return results, nil
+		}
+		if page == listOpenPRsMaxPages {
+			e.log.Info("ListOpenPRs page cap reached — count may be an undercount",
+				"owner", owner, "repo", repo,
+				"maxPages", listOpenPRsMaxPages, "pageSize", listOpenPRsPageSize)
 		}
 	}
-
 	return results, nil
 }
+
+const (
+	listOpenPRsPageSize = 100 // GitHub's max page size for list-PRs.
+	listOpenPRsMaxPages = 10  // Safety cap: 100 × 10 = 1000 PRs.
+)
 
 // Close implements gitops.Engine.Close.
 func (e *GitHubEngine) Close() error {

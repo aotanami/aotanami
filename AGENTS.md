@@ -186,7 +186,7 @@ Setting `ZelyoConfig.spec.mode: protect` only flips the remediation engine's str
 Only then does the full loop fire:
 
 1. Correlator emits an incident
-2. `RemediationPolicy` controller filters open incidents by `spec.severityFilter` and caps PR submissions per reconcile cycle via `spec.maxConcurrentPRs`
+2. `RemediationPolicy` controller filters open incidents by `spec.severityFilter` and caps the number of open PRs via `spec.maxConcurrentPRs` — already-open Zelyo PRs on the target repo count against the budget, so new PRs only open when existing ones merge or close
 3. Remediation engine asks the LLM for a structured JSON fix plan and scores the risk
 4. GitHub engine creates a branch, commits the fix, and opens a PR (skipped globally when `ZelyoConfig.spec.mode: audit`, which leaves the engine in `dry-run`)
 5. Human team reviews and merges the PR

@@ -154,6 +154,112 @@ func TestGitHubEngine_ListOpenPRs(t *testing.T) {
 	}
 }
 
+// TestGitHubEngine_ListOpenPRs_Paginates asserts that ListOpenPRs walks
+// successive pages until a short page arrives. Without pagination, the
+// maxConcurrentPRs cap silently under-counts once a repo has >100 open
+// Zelyo PRs — letting the controller exceed the cap. This guards against
+// regressing to single-page behavior.
+func TestGitHubEngine_ListOpenPRs_Paginates(t *testing.T) {
+	mux := http.NewServeMux()
+	var requests []string
+
+	// Pages: 100, 100, 37. 237 PRs total, all Zelyo-branched.
+	pages := [][]map[string]interface{}{
+		makePRPage(1, 100),
+		makePRPage(101, 100),
+		makePRPage(201, 37),
+	}
+
+	mux.HandleFunc("GET /repos/o/r/pulls", func(w http.ResponseWriter, req *http.Request) {
+		requests = append(requests, req.URL.RawQuery)
+		pageParam := req.URL.Query().Get("page")
+		idx := 0
+		if pageParam != "" {
+			fmt.Sscanf(pageParam, "%d", &idx) //nolint:errcheck
+			idx--
+		}
+		if idx < 0 || idx >= len(pages) {
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(pages[idx])
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	engine := &GitHubEngine{
+		http:    server.Client(),
+		log:     logr.Discard(),
+		baseURL: server.URL,
+	}
+
+	prs, err := engine.ListOpenPRs(context.Background(), "o", "r")
+	if err != nil {
+		t.Fatalf("ListOpenPRs failed: %v", err)
+	}
+	if len(prs) != 237 {
+		t.Fatalf("expected 237 PRs after paginating 3 pages, got %d", len(prs))
+	}
+	if got, want := len(requests), 3; got != want {
+		t.Errorf("expected %d HTTP calls (one per page), got %d (%v)", want, got, requests)
+	}
+}
+
+// TestGitHubEngine_ListOpenPRs_PageCap asserts we stop after the safety
+// cap when the provider keeps returning full pages forever. Without the
+// cap a misbehaving provider could hang the controller indefinitely.
+func TestGitHubEngine_ListOpenPRs_PageCap(t *testing.T) {
+	mux := http.NewServeMux()
+	var requests int
+
+	mux.HandleFunc("GET /repos/o/r/pulls", func(w http.ResponseWriter, req *http.Request) {
+		requests++
+		page := 1
+		if p := req.URL.Query().Get("page"); p != "" {
+			fmt.Sscanf(p, "%d", &page) //nolint:errcheck
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(makePRPage((page-1)*100+1, 100))
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	engine := &GitHubEngine{
+		http:    server.Client(),
+		log:     logr.Discard(),
+		baseURL: server.URL,
+	}
+
+	prs, err := engine.ListOpenPRs(context.Background(), "o", "r")
+	if err != nil {
+		t.Fatalf("ListOpenPRs failed: %v", err)
+	}
+	if requests != listOpenPRsMaxPages {
+		t.Errorf("expected exactly %d HTTP calls at the page cap, got %d", listOpenPRsMaxPages, requests)
+	}
+	if got, want := len(prs), listOpenPRsMaxPages*listOpenPRsPageSize; got != want {
+		t.Errorf("expected %d PRs at the page cap, got %d", want, got)
+	}
+}
+
+func makePRPage(startNum, count int) []map[string]interface{} {
+	out := make([]map[string]interface{}, 0, count)
+	for i := 0; i < count; i++ {
+		n := startNum + i
+		out = append(out, map[string]interface{}{
+			"number":     n,
+			"html_url":   fmt.Sprintf("https://github.com/o/r/pull/%d", n),
+			"head":       map[string]string{"ref": fmt.Sprintf("zelyo-operator/fix-%d", n)},
+			"created_at": time.Now().Format(time.RFC3339),
+			"labels":     []map[string]string{},
+		})
+	}
+	return out
+}
+
 func TestGitHubEngine_GetFile(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /repos/testowner/testrepo/contents/k8s/deployment.yaml", func(w http.ResponseWriter, _ *http.Request) {

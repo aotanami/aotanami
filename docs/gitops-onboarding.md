@@ -181,7 +181,7 @@ metadata:
 spec:
   gitOpsRepository: production-manifests   # must match a GitOpsRepository CR
   severityFilter: high                     # critical | high | medium | low
-  maxConcurrentPRs: 3                      # cap per reconcile cycle (not a global open-PR count)
+  maxConcurrentPRs: 3                      # cap on open Zelyo PRs in the target repo; surfaced on status.openPRs
   prTemplate:
     titlePrefix: "[Zelyo Operator]"
     labels: ["auto-fix", "security"]

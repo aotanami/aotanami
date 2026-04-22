@@ -325,7 +325,7 @@ All three pieces are required — skipping any one of them means no PRs:
 | --- | --- |
 | `ZelyoConfig.spec.mode: protect` | Flips the remediation engine from `dry-run` to `gitops-pr`. Without this, plans are logged but never submitted. |
 | `GitOpsRepository` | Tells Zelyo which repo, branch, and paths to write fixes into, and provides Git auth. |
-| `RemediationPolicy` | The only controller that calls `GeneratePlan` + `ApplyPlan`. `severityFilter` gates which incidents qualify; `maxConcurrentPRs` caps PR submissions per reconcile cycle (not a global limit on open PRs). |
+| `RemediationPolicy` | The only controller that calls `GeneratePlan` + `ApplyPlan`. `severityFilter` gates which incidents qualify; `maxConcurrentPRs` caps the number of open Zelyo PRs on the target repo — already-open PRs count against the budget, so new PRs only open when existing ones merge or close. The current count surfaces on `status.openPRs`. |
 
 **0. Switch `ZelyoConfig` to Protect mode** (`ZelyoConfig` is cluster-scoped — no `-n` flag):
 
@@ -373,7 +373,7 @@ spec:
     labels: ["security", "automated"]
     branchPrefix: "zelyo/fix-"
   severityFilter: high
-  maxConcurrentPRs: 3   # per reconcile cycle
+  maxConcurrentPRs: 3   # caps total open Zelyo PRs on the target repo
   dryRun: false
   autoMerge: false
 ```

@@ -41,7 +41,11 @@ type RemediationPolicySpec struct {
 	// +optional
 	DryRun bool `json:"dryRun,omitempty"`
 
-	// maxConcurrentPRs limits the number of open PRs at any time.
+	// maxConcurrentPRs limits the number of open Zelyo-generated PRs on
+	// the target repo at any time. Already-open PRs count against the
+	// budget, so new PRs only open when existing ones merge or close.
+	// Current count is surfaced on status.openPRs. Multiple
+	// RemediationPolicies targeting the same repo share this budget.
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:default=5
 	// +optional
