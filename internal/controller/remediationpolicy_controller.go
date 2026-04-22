@@ -247,14 +247,24 @@ func (r *RemediationPolicyReconciler) processIncidents(
 		}
 	}
 
-	var prsCreated int32
+	// prsCreated counts real PRs opened this cycle and drives the status
+	// counter. processed counts every incident that consumed an LLM plan
+	// generation — whether the outcome was a new PR or a dryRun preview.
+	// The per-cycle budget must bound BOTH paths: without this, a policy
+	// with N open incidents and dryRun=true would fire N LLM calls per
+	// reconcile regardless of maxConcurrentPRs, burning tokens and pushing
+	// the reconcile toward its timeout.
+	var prsCreated, processed int32
 	for _, incident := range incidents {
-		if prsCreated >= maxPRs {
-			log.Info("MaxConcurrentPRs limit reached", "limit", maxPRs)
+		if processed >= maxPRs {
+			log.Info("MaxConcurrentPRs limit reached", "limit", maxPRs, "dryRun", policy.Spec.DryRun)
 			break
 		}
-		opened := r.remediateIncident(ctx, policy, repo, incident,
+		opened, charged := r.remediateIncident(ctx, policy, repo, incident,
 			minSev, repoOwner, repoName, existingBranches)
+		if charged {
+			processed++
+		}
 		if opened {
 			prsCreated++
 		}
@@ -264,10 +274,16 @@ func (r *RemediationPolicyReconciler) processIncidents(
 }
 
 // remediateIncident handles the full severity-check → dedup →
-// GeneratePlan → ApplyPlan → resolve flow for a single incident. Returns
-// true if a new PR was opened (so the caller can tally against
-// MaxConcurrentPRs). Factored out of processIncidents to keep each unit
-// under the gocyclo threshold.
+// GeneratePlan → (dry-run preview | ApplyPlan) → resolve flow for a single
+// incident. Factored out of processIncidents to keep each unit under the
+// gocyclo threshold.
+//
+// Returns two flags so the caller can drive independent counters:
+//   - opened: a real PR was created (counts against status.RemediationsApplied)
+//   - charged: this incident consumed an LLM plan generation (counts against
+//     the per-cycle MaxConcurrentPRs budget — covers both real PRs and
+//     dryRun previews, but NOT incidents skipped by severity or dedup since
+//     no LLM call is made)
 func (r *RemediationPolicyReconciler) remediateIncident(
 	ctx context.Context,
 	policy *zelyov1alpha1.RemediationPolicy,
@@ -276,13 +292,13 @@ func (r *RemediationPolicyReconciler) remediateIncident(
 	minSev int,
 	repoOwner, repoName string,
 	existingBranches map[string]string,
-) bool {
+) (opened, charged bool) {
 	log := logf.FromContext(ctx)
 
 	// Severity filter.
 	incSev, ok := severityOrder[incident.Severity]
 	if !ok || incSev > minSev {
-		return false
+		return false, false
 	}
 
 	finding := incidentToFinding(incident)
@@ -293,12 +309,17 @@ func (r *RemediationPolicyReconciler) remediateIncident(
 	branch := gitops.BranchName(finding.ResourceName, finding.ResourceNamespace, finding.Title)
 	if existingURL, exists := existingBranches[branch]; exists {
 		log.Info("Skipping remediation — open PR already exists",
-			"incident", incident.ID, "branch", branch, "prURL", existingURL)
-		// Still mark the incident resolved so we don't loop on it; a
-		// future scan will regenerate the incident if the PR is closed
-		// without merging and the finding remains.
-		r.CorrelatorEngine.ResolveIncident(incident.ID)
-		return false
+			"incident", incident.ID, "branch", branch, "prURL", existingURL,
+			"dryRun", policy.Spec.DryRun)
+		// In a real reconcile, mark the incident resolved so we don't
+		// loop on it; a future scan will regenerate the incident if the
+		// PR is closed without merging and the finding remains. In
+		// dryRun we must NOT touch correlator state — leave it for the
+		// next non-dryRun reconcile.
+		if !policy.Spec.DryRun {
+			r.CorrelatorEngine.ResolveIncident(incident.ID)
+		}
+		return false, false
 	}
 
 	plan, err := r.RemediationEngine.GeneratePlan(ctx, finding, repo.Spec.Paths)
@@ -308,7 +329,8 @@ func (r *RemediationPolicyReconciler) remediateIncident(
 			"resource", fmt.Sprintf("%s/%s", incident.Namespace, incident.Resource))
 		r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 			fmt.Sprintf("LLM plan generation failed for incident %s: %v", incident.ID, err))
-		return false
+		// Still counts against the budget — the LLM call was made.
+		return false, true
 	}
 
 	log.Info("Generated remediation plan",
@@ -317,13 +339,24 @@ func (r *RemediationPolicyReconciler) remediateIncident(
 		"riskScore", plan.RiskScore,
 		"dryRun", policy.Spec.DryRun)
 
+	// spec.dryRun is a per-policy preview switch: generate the plan so
+	// operators can review fix count / risk, but do not submit a PR and
+	// do not resolve the incident — a later reconcile with dryRun=false
+	// should still pick it up and remediate.
+	if policy.Spec.DryRun {
+		r.Recorder.Event(policy, corev1.EventTypeNormal, "DryRunPreview",
+			fmt.Sprintf("Dry-run: would remediate incident %s (fixes=%d, risk=%d) — no PR opened",
+				incident.ID, len(plan.Fixes), plan.RiskScore))
+		return false, true
+	}
+
 	result, err := r.RemediationEngine.ApplyPlan(ctx, plan, repoOwner, repoName)
 	if err != nil {
 		log.Error(err, "Failed to apply remediation plan",
 			"incident", incident.ID)
 		r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 			fmt.Sprintf("Failed to apply fix for incident %s: %v", incident.ID, err))
-		return false
+		return false, true
 	}
 
 	if result != nil {
@@ -337,7 +370,7 @@ func (r *RemediationPolicyReconciler) remediateIncident(
 	}
 
 	r.CorrelatorEngine.ResolveIncident(incident.ID)
-	return true
+	return true, true
 }
 
 // incidentToFinding converts a correlator incident to a scanner finding for the
