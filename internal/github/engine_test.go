@@ -7,6 +7,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -148,7 +149,9 @@ func TestGitHubEngine_CreatePullRequest_SkipsWhenOpenPRExists(t *testing.T) {
 		_, _ = w.Write([]byte(`{"message":"Reference already exists"}`))
 	})
 
-	// PR lookup — returns one open PR covering the branch.
+	// PR lookup — returns one open PR covering the branch. `head.label`
+	// is the canonical "owner:ref" GitHub returns; the engine matches on
+	// that so a fork PR with the same ref name can't false-match.
 	mux.HandleFunc("GET /repos/testowner/testrepo/pulls", func(w http.ResponseWriter, req *http.Request) {
 		listPRCalls++
 		lastHeadQuery = req.URL.Query().Get("head")
@@ -157,7 +160,7 @@ func TestGitHubEngine_CreatePullRequest_SkipsWhenOpenPRExists(t *testing.T) {
 			{
 				"number":     99,
 				"html_url":   "https://github.com/testowner/testrepo/pull/99",
-				"head":       map[string]string{"ref": branch},
+				"head":       map[string]string{"ref": branch, "label": "testowner:" + branch},
 				"created_at": time.Now().Format(time.RFC3339),
 			},
 		})
@@ -318,6 +321,91 @@ func TestGitHubEngine_CreatePullRequest_BranchExistsWithoutOpenPR(t *testing.T) 
 	}
 	if openPRCalls != 1 {
 		t.Errorf("expected POST /pulls to run when no open PR exists, got %d call(s)", openPRCalls)
+	}
+}
+
+// TestGitHubEngine_CreatePullRequest_DoesNotMatchForkPRWithSameRef
+// defends the in-memory filter's owner+branch equality. GitHub's
+// head=owner:ref query should narrow server-side, but if a proxy or
+// mock ignores it, the response can include PRs from forks that use the
+// same ref name. Matching only on head.ref would false-match those; we
+// require head.label (canonical "owner:ref") to equal owner+":"+branch.
+//
+// Without this check, a heavily-forked repo could see CreatePullRequest
+// short-circuit on a fork PR and skip the remediation commit entirely.
+func TestGitHubEngine_CreatePullRequest_DoesNotMatchForkPRWithSameRef(t *testing.T) {
+	const branch = "zelyo-operator/fix/shared-name"
+	var putFileCalls, openPRCalls int
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /repos/testowner/testrepo/git/ref/heads/main", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"object": map[string]string{"sha": "basesha"}})
+	})
+	// Branch exists on our side → 422.
+	mux.HandleFunc("POST /repos/testowner/testrepo/git/refs", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"message":"Reference already exists"}`))
+	})
+	// Server returns a PR from a fork that happens to share the branch
+	// name. Simulates a proxy that ignored the head= query filter.
+	// head.label = "forkuser:<branch>" — distinct from the owner we sent.
+	mux.HandleFunc("GET /repos/testowner/testrepo/pulls", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+			{
+				"number":     12345,
+				"html_url":   "https://github.com/forkuser/testrepo/pull/12345",
+				"head":       map[string]string{"ref": branch, "label": "forkuser:" + branch},
+				"created_at": time.Now().Format(time.RFC3339),
+			},
+		})
+	})
+	// Content GET + PUT — the test expects the engine to REJECT the fork
+	// PR as a false-match and proceed with its own commit + openPR, so
+	// these do run.
+	mux.HandleFunc("GET /repos/testowner/testrepo/contents/", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	mux.HandleFunc("PUT /repos/testowner/testrepo/contents/", func(w http.ResponseWriter, _ *http.Request) {
+		putFileCalls++
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"content": map[string]string{"sha": "x"}})
+	})
+	mux.HandleFunc("POST /repos/testowner/testrepo/pulls", func(w http.ResponseWriter, _ *http.Request) {
+		openPRCalls++
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"number":     101,
+			"html_url":   "https://github.com/testowner/testrepo/pull/101",
+			"created_at": time.Now().Format(time.RFC3339),
+		})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	engine := &GitHubEngine{
+		http:    server.Client(),
+		log:     logr.Discard(),
+		baseURL: server.URL,
+	}
+
+	result, err := engine.CreatePullRequest(context.Background(), &gitops.PullRequest{
+		RepoOwner:  "testowner",
+		RepoName:   "testrepo",
+		BaseBranch: "main",
+		HeadBranch: branch,
+		Files:      []gitops.FileChange{{Path: "a.yaml", Content: "x", Operation: gitops.FileOpUpdate}},
+	})
+	if err != nil {
+		t.Fatalf("CreatePullRequest failed: %v", err)
+	}
+	if result == nil || result.Number != 101 {
+		t.Fatalf("expected new PR #101 (fork PR must NOT match), got %+v", result)
+	}
+	if putFileCalls != 1 {
+		t.Errorf("expected commit to proceed when only a fork PR exists — got %d PUT calls", putFileCalls)
+	}
+	if openPRCalls != 1 {
+		t.Errorf("expected openPR to run when only a fork PR exists — got %d POST /pulls calls", openPRCalls)
 	}
 }
 
@@ -577,6 +665,52 @@ func TestGitHubEngine_ErrorHandling(t *testing.T) {
 	_, err := engine.GetFile(context.Background(), "o", "r", "f", "main")
 	if err == nil {
 		t.Fatal("Expected error for 500 response")
+	}
+}
+
+// TestGitHubEngine_APIErrorTypedUnwrap pins the APIError contract. Callers
+// (createRef's 422-on-branch-exists check) rely on errors.As — not string
+// matching — to branch on HTTP status codes. A refactor that swallows the
+// typed error inside an untyped wrap would silently break CreatePullRequest's
+// dedup path; this test catches that.
+func TestGitHubEngine_APIErrorTypedUnwrap(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprint(w, `{"message":"Reference already exists"}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	engine := &GitHubEngine{
+		http:    server.Client(),
+		log:     logr.Discard(),
+		baseURL: server.URL,
+	}
+
+	// doRequest returns APIError directly; callers that wrap with %w
+	// must preserve it reachable via errors.As.
+	wrapped := fmt.Errorf("outer context: %w", &APIError{StatusCode: 422, Body: "x"})
+
+	var apiErr *APIError
+	if !errors.As(wrapped, &apiErr) {
+		t.Fatal("errors.As must unwrap APIError through %w-wrapped errors")
+	}
+	if apiErr.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("expected StatusCode %d, got %d", http.StatusUnprocessableEntity, apiErr.StatusCode)
+	}
+
+	// Also verify the live path from doRequest returns APIError on 4xx.
+	_, liveErr := engine.GetFile(context.Background(), "o", "r", "f", "main")
+	if liveErr == nil {
+		t.Fatal("expected error from 422 response")
+	}
+	var liveAPIErr *APIError
+	if !errors.As(liveErr, &liveAPIErr) {
+		t.Fatalf("expected live doRequest error to be APIError-typed, got %T: %v", liveErr, liveErr)
+	}
+	if liveAPIErr.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("expected StatusCode 422, got %d", liveAPIErr.StatusCode)
 	}
 }
 
