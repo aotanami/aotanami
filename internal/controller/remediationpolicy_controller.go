@@ -215,6 +215,24 @@ func (r *RemediationPolicyReconciler) processIncidents(
 
 	log.Info("Found open incidents", "count", len(incidents))
 
+	// Build target-policy allowlist. Empty spec.targetPolicies means "all
+	// SecurityPolicies apply" — skip the scope filter entirely.
+	//
+	// Keyed by NamespacedName because SecurityPolicy is a namespaced CRD:
+	// two tenants can legally register policies with the same name, and
+	// matching on name alone would let an incident from team-b/baseline
+	// satisfy team-a's target "baseline". The upstream validation loop
+	// already resolves targetPolicies against policy.Namespace, so using
+	// that namespace here keeps the runtime gate consistent with what
+	// was actually validated.
+	var targetSet map[types.NamespacedName]struct{}
+	if len(policy.Spec.TargetPolicies) > 0 {
+		targetSet = make(map[types.NamespacedName]struct{}, len(policy.Spec.TargetPolicies))
+		for _, name := range policy.Spec.TargetPolicies {
+			targetSet[types.NamespacedName{Name: name, Namespace: policy.Namespace}] = struct{}{}
+		}
+	}
+
 	// Determine severity threshold.
 	severityFilter := policy.Spec.SeverityFilter
 	if severityFilter == "" {
@@ -228,11 +246,12 @@ func (r *RemediationPolicyReconciler) processIncidents(
 		maxPRs = 5
 	}
 
-	// Snapshot the set of open Zelyo-generated PRs once. The result feeds
-	// two concerns that both need the same data:
+	// Snapshot open Zelyo-generated PRs once. Feeds two concerns:
 	//   - openPRs count → enforces the maxConcurrentPRs cap across reconciles
+	//     (the headline fix of this PR)
 	//   - existingBranches map → per-finding dedup in remediateIncident so we
-	//     never open a second PR against a branch that already has one open
+	//     never push a second commit/PR against a branch that's already open
+	//     (the fix originally added in #91)
 	openPRs, existingBranches := r.snapshotOpenPRs(ctx, repoOwner, repoName)
 	budget := maxPRs - openPRs
 	if budget <= 0 {
@@ -241,23 +260,39 @@ func (r *RemediationPolicyReconciler) processIncidents(
 		return 0, openPRs
 	}
 
-	// Two counters: incidentsHandled drives the per-cycle budget (caps the
-	// cost of LLM calls + apply attempts regardless of strategy), while
-	// prsCreated only counts real PRs so status.openPRs stays accurate in
-	// dry-run / report strategies where ApplyPlan returns nil.
-	var incidentsHandled int32
+	// Two counters:
+	//   - processed drives the per-cycle budget — ticks for every incident
+	//     that consumed an LLM plan generation, whether the outcome was a
+	//     real PR or a dryRun preview. This bounds BOTH token cost and
+	//     reconcile duration regardless of strategy.
+	//   - prsCreated only ticks when a real PR was opened (result != nil),
+	//     so status.openPRs stays accurate in audit / dryRun / report modes
+	//     where ApplyPlan returns nil.
+	var processed int32
 	for _, incident := range incidents {
-		if incidentsHandled >= budget {
+		if processed >= budget {
 			log.Info("MaxConcurrentPRs budget reached this cycle",
-				"limit", maxPRs, "openPRs", openPRs, "createdThisCycle", prsCreated)
+				"limit", maxPRs, "openPRs", openPRs, "createdThisCycle", prsCreated,
+				"dryRun", policy.Spec.DryRun)
 			break
 		}
-		handled, prCreated := r.remediateIncident(ctx, policy, repo, incident,
-			minSev, repoOwner, repoName, existingBranches)
-		if handled {
-			incidentsHandled++
+		// Scope gate: when spec.targetPolicies is set, only remediate
+		// incidents carrying at least one event from a listed
+		// SecurityPolicy. Checked in the loop (not inside
+		// remediateIncident) so filtered incidents are skipped without
+		// paying the dedup cost and without ever calling
+		// ResolveIncident on them — another RemediationPolicy may own
+		// that scope. Not charged against the budget since no LLM call
+		// is made.
+		if targetSet != nil && !incidentMatchesTargets(incident, targetSet) {
+			continue
 		}
-		if prCreated {
+		opened, charged := r.remediateIncident(ctx, policy, repo, incident,
+			minSev, repoOwner, repoName, existingBranches)
+		if charged {
+			processed++
+		}
+		if opened {
 			prsCreated++
 		}
 	}
@@ -362,17 +397,21 @@ func (r *RemediationPolicyReconciler) snapshotOpenPRs(
 	return int32(len(existing)), branchesByName
 }
 
-// remediateIncident handles the full severity-check → dedup →
-// GeneratePlan → ApplyPlan → resolve flow for a single incident. Factored
-// out of processIncidents to keep each unit under the gocyclo threshold.
+// remediateIncident handles the full severity-check → dedup → GeneratePlan
+// → (dry-run preview | ApplyPlan) → resolve flow for a single incident.
+// Factored out of processIncidents to keep each unit under the gocyclo
+// threshold. The targetPolicies scope gate is applied by the caller
+// (processIncidents), not here.
 //
-// Returns two signals:
-//   - handled: an LLM call + apply attempt took place — drives the per-cycle
-//     budget so we cap cost regardless of strategy (dry-run LLM calls still
-//     count). Fast-path skips (severity miss, dedup hit) do not set handled.
-//   - prCreated: a real PR was opened (result != nil). Only set under
-//     StrategyGitOpsPR on success. Drives status.openPRs so audit-mode
-//     (StrategyDryRun / StrategyReport) does not report phantom PRs.
+// Returns two flags so the caller can drive independent counters:
+//   - opened: a real PR was created (counts against status.RemediationsApplied
+//     and status.OpenPRs). Only true when ApplyPlan returned a non-nil result
+//     — covers the engine-level StrategyDryRun / StrategyReport case where
+//     ApplyPlan returns (nil, nil) and we must NOT report a phantom PR.
+//   - charged: this incident consumed an LLM plan generation (counts against
+//     the per-cycle MaxConcurrentPRs budget — covers both real PRs and
+//     dryRun previews, but NOT incidents skipped by severity or dedup since
+//     no LLM call is made)
 func (r *RemediationPolicyReconciler) remediateIncident(
 	ctx context.Context,
 	policy *zelyov1alpha1.RemediationPolicy,
@@ -381,7 +420,7 @@ func (r *RemediationPolicyReconciler) remediateIncident(
 	minSev int,
 	repoOwner, repoName string,
 	existingBranches map[string]string,
-) (handled, prCreated bool) {
+) (opened, charged bool) {
 	log := logf.FromContext(ctx)
 
 	// Severity filter — fast path, no cost, no budget consumption.
@@ -398,11 +437,16 @@ func (r *RemediationPolicyReconciler) remediateIncident(
 	branch := gitops.BranchName(finding.ResourceName, finding.ResourceNamespace, finding.Title)
 	if existingURL, exists := existingBranches[branch]; exists {
 		log.Info("Skipping remediation — open PR already exists",
-			"incident", incident.ID, "branch", branch, "prURL", existingURL)
-		// Still mark the incident resolved so we don't loop on it; a
-		// future scan will regenerate the incident if the PR is closed
-		// without merging and the finding remains.
-		r.CorrelatorEngine.ResolveIncident(incident.ID)
+			"incident", incident.ID, "branch", branch, "prURL", existingURL,
+			"dryRun", policy.Spec.DryRun)
+		// In a real reconcile, mark the incident resolved so we don't
+		// loop on it; a future scan will regenerate the incident if the
+		// PR is closed without merging and the finding remains. In
+		// dryRun we must NOT touch correlator state — leave it for the
+		// next non-dryRun reconcile.
+		if !policy.Spec.DryRun {
+			r.CorrelatorEngine.ResolveIncident(incident.ID)
+		}
 		return false, false
 	}
 
@@ -413,8 +457,8 @@ func (r *RemediationPolicyReconciler) remediateIncident(
 			"resource", fmt.Sprintf("%s/%s", incident.Namespace, incident.Resource))
 		r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 			fmt.Sprintf("LLM plan generation failed for incident %s: %v", incident.ID, err))
-		// LLM call was attempted (and cost incurred) — counts against budget.
-		return true, false
+		// Still counts against the budget — the LLM call was made.
+		return false, true
 	}
 
 	log.Info("Generated remediation plan",
@@ -423,13 +467,24 @@ func (r *RemediationPolicyReconciler) remediateIncident(
 		"riskScore", plan.RiskScore,
 		"dryRun", policy.Spec.DryRun)
 
+	// spec.dryRun is a per-policy preview switch: generate the plan so
+	// operators can review fix count / risk, but do not submit a PR and
+	// do not resolve the incident — a later reconcile with dryRun=false
+	// should still pick it up and remediate.
+	if policy.Spec.DryRun {
+		r.Recorder.Event(policy, corev1.EventTypeNormal, "DryRunPreview",
+			fmt.Sprintf("Dry-run: would remediate incident %s (fixes=%d, risk=%d) — no PR opened",
+				incident.ID, len(plan.Fixes), plan.RiskScore))
+		return false, true
+	}
+
 	result, err := r.RemediationEngine.ApplyPlan(ctx, plan, repoOwner, repoName)
 	if err != nil {
 		log.Error(err, "Failed to apply remediation plan",
 			"incident", incident.ID)
 		r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 			fmt.Sprintf("Failed to apply fix for incident %s: %v", incident.ID, err))
-		return true, false
+		return false, true
 	}
 
 	if result != nil {
@@ -443,7 +498,40 @@ func (r *RemediationPolicyReconciler) remediateIncident(
 	}
 
 	r.CorrelatorEngine.ResolveIncident(incident.ID)
-	return true, result != nil
+	// result==nil happens when the engine is in StrategyDryRun / StrategyReport
+	// (set by ZelyoConfig.spec.mode=audit, distinct from policy.Spec.DryRun).
+	// In that case: LLM was called (charged=true) but no PR was opened
+	// (opened=false). Guards Codex P2 — previously the success path
+	// returned (true, true) unconditionally and inflated status.openPRs
+	// under audit mode.
+	return result != nil, true
+}
+
+// incidentMatchesTargets reports whether the incident carries at least one
+// event from a SecurityPolicy in the given allowlist. An incident may be a
+// correlation of events from multiple SecurityPolicies on the same
+// resource; if any one of them is targeted, the RemediationPolicy applies.
+//
+// Matching is on the (name, namespace) pair because SecurityPolicy is a
+// namespaced CRD. An event missing either half is treated as unmatched —
+// anomaly/deployment events legitimately have both blank, and a
+// SecurityPolicy-originated event with an empty namespace is malformed
+// (see securitypolicy_controller.ingestFindingsToCorrelator) and must
+// not be allowed to satisfy the gate by coincidence.
+func incidentMatchesTargets(incident *correlator.Incident, targets map[types.NamespacedName]struct{}) bool {
+	if incident == nil || len(targets) == 0 {
+		return false
+	}
+	for _, ev := range incident.Events {
+		if ev == nil || ev.SecurityPolicy == "" || ev.SecurityPolicyNamespace == "" {
+			continue
+		}
+		key := types.NamespacedName{Name: ev.SecurityPolicy, Namespace: ev.SecurityPolicyNamespace}
+		if _, ok := targets[key]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // incidentToFinding converts a correlator incident to a scanner finding for the
