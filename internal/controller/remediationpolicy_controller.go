@@ -36,6 +36,7 @@ import (
 	"github.com/zelyo-ai/zelyo-operator/internal/conditions"
 	"github.com/zelyo-ai/zelyo-operator/internal/correlator"
 	"github.com/zelyo-ai/zelyo-operator/internal/github"
+	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
 	zelyometrics "github.com/zelyo-ai/zelyo-operator/internal/metrics"
 	"github.com/zelyo-ai/zelyo-operator/internal/remediation"
 	"github.com/zelyo-ai/zelyo-operator/internal/scanner"
@@ -219,22 +220,7 @@ func (r *RemediationPolicyReconciler) processIncidents(
 	minSev := severityOrder[severityFilter]
 
 	// ── Step 3: Initialize GitOps Engine from Secret ──
-	if repo.Spec.AuthSecret != "" {
-		secret := &corev1.Secret{}
-		secretKey := types.NamespacedName{Name: repo.Spec.AuthSecret, Namespace: repo.Namespace}
-		if err := r.Get(ctx, secretKey, secret); err == nil {
-			token := string(secret.Data["token"])
-			if token == "" {
-				token = string(secret.Data["api-key"])
-			}
-			if token != "" {
-				ghClient := github.NewPATClient(token, "")
-				ghEngine := github.NewEngine(ghClient, log.WithName("github-engine"))
-				r.RemediationEngine.SetGitOpsEngine(ghEngine)
-				log.Info("Successfully initialized GitOps engine for remediation", "repo", repo.Name)
-			}
-		}
-	}
+	r.initRemediationGitOps(ctx, repo)
 
 	// Respect MaxConcurrentPRs limit.
 	maxPRs := policy.Spec.MaxConcurrentPRs
@@ -245,16 +231,31 @@ func (r *RemediationPolicyReconciler) processIncidents(
 	// Parse repo owner/name from URL for PR submission.
 	repoOwner, repoName := parseRepoURL(repo.Spec.URL)
 
+	// One-shot dedup: snapshot the set of branches already backing an open
+	// Zelyo-authored PR, so we don't open a second PR for a finding whose
+	// last reconcile already produced one. This is the fix for "excessive
+	// PRs" — without it, every reconcile tick regenerated incidents for the
+	// same unfixed resource and opened another PR.
+	existingBranches := r.snapshotOpenPRBranches(ctx, repoOwner, repoName)
+
 	var prsCreated int32
 	for _, incident := range incidents {
 		if prsCreated >= maxPRs {
 			log.Info("MaxConcurrentPRs limit reached", "limit", maxPRs)
 			break
 		}
-		if !r.incidentInScope(incident, targetSet, minSev) {
+		// Scope gate: when spec.targetPolicies is set, only remediate
+		// incidents carrying at least one event from a listed
+		// SecurityPolicy. Checked in the loop (not inside
+		// remediateIncident) so filtered incidents are skipped without
+		// paying the dedup/ListOpenPRs cost and without ever calling
+		// ResolveIncident on them — another RemediationPolicy may own
+		// that scope.
+		if targetSet != nil && !incidentMatchesTargets(incident, targetSet) {
 			continue
 		}
-		if r.remediateIncident(ctx, policy, incident, repoOwner, repoName) {
+		if r.remediateIncident(ctx, policy, repo, incident,
+			minSev, repoOwner, repoName, existingBranches) {
 			prsCreated++
 		}
 	}
@@ -262,41 +263,106 @@ func (r *RemediationPolicyReconciler) processIncidents(
 	return prsCreated
 }
 
-// incidentInScope applies the RemediationPolicy's scope gates (target
-// SecurityPolicies and severity threshold) to a single incident. Both
-// gates MUST pass for the incident to be remediated. Extracted from
+// initRemediationGitOps resolves the GitOpsRepository's auth Secret and
+// wires a PAT-backed GitHub engine into the remediation engine. A missing
+// Secret, missing token, or missing AuthSecret field is silently skipped
+// — the remediation engine then has no way to open PRs but the controller
+// is still useful for dry-run/report strategies. Any hard failure is
+// non-fatal for reconcile, so this returns nothing. Extracted from
 // processIncidents to keep that function within the gocyclo budget.
-func (r *RemediationPolicyReconciler) incidentInScope(
-	incident *correlator.Incident,
-	targetSet map[types.NamespacedName]struct{},
-	minSev int,
-) bool {
-	if targetSet != nil && !incidentMatchesTargets(incident, targetSet) {
-		return false
+func (r *RemediationPolicyReconciler) initRemediationGitOps(
+	ctx context.Context,
+	repo *zelyov1alpha1.GitOpsRepository,
+) {
+	log := logf.FromContext(ctx)
+	if repo.Spec.AuthSecret == "" {
+		return
 	}
-	incSev, ok := severityOrder[incident.Severity]
-	if !ok {
-		return false
+	secret := &corev1.Secret{}
+	secretKey := types.NamespacedName{Name: repo.Spec.AuthSecret, Namespace: repo.Namespace}
+	if err := r.Get(ctx, secretKey, secret); err != nil {
+		return
 	}
-	return incSev <= minSev
+	token := string(secret.Data["token"])
+	if token == "" {
+		token = string(secret.Data["api-key"])
+	}
+	if token == "" {
+		return
+	}
+	ghClient := github.NewPATClient(token, "")
+	ghEngine := github.NewEngine(ghClient, log.WithName("github-engine"))
+	r.RemediationEngine.SetGitOpsEngine(ghEngine)
+	log.Info("Successfully initialized GitOps engine for remediation", "repo", repo.Name)
 }
 
-// remediateIncident runs the plan/apply pipeline for a single in-scope
-// incident and returns whether a PR-producing cycle completed (so the
-// caller can count it against MaxConcurrentPRs). Extracted from
-// processIncidents both for readability and to keep the outer loop within
-// the gocyclo budget.
+// snapshotOpenPRBranches returns a branch → PR-URL map for the currently
+// open, Zelyo-authored PRs against the given repo. A nil gitops engine,
+// or a ListOpenPRs failure, yields an empty map (dedup degrades to
+// no-dedup — the caller will open PRs even if duplicates already exist).
+// Extracted from processIncidents to keep that function within the
+// gocyclo budget.
+func (r *RemediationPolicyReconciler) snapshotOpenPRBranches(
+	ctx context.Context,
+	repoOwner, repoName string,
+) map[string]string {
+	log := logf.FromContext(ctx)
+	existing := map[string]string{}
+	ge := r.RemediationEngine.GitOpsEngineForRepo(repoOwner, repoName)
+	if ge == nil {
+		return existing
+	}
+	open, err := ge.ListOpenPRs(ctx, repoOwner, repoName)
+	if err != nil {
+		log.Info("PR dedup skipped: ListOpenPRs failed", "error", err.Error())
+		return existing
+	}
+	for _, pr := range open {
+		existing[pr.Branch] = pr.URL
+	}
+	return existing
+}
+
+// remediateIncident handles the full severity-check → dedup →
+// GeneratePlan → ApplyPlan → resolve flow for a single incident. Returns
+// true if a new PR was opened (so the caller can tally against
+// MaxConcurrentPRs). Factored out of processIncidents to keep each unit
+// under the gocyclo threshold. The targetPolicies scope gate is applied
+// by the caller, not here — see processIncidents.
 func (r *RemediationPolicyReconciler) remediateIncident(
 	ctx context.Context,
 	policy *zelyov1alpha1.RemediationPolicy,
+	repo *zelyov1alpha1.GitOpsRepository,
 	incident *correlator.Incident,
+	minSev int,
 	repoOwner, repoName string,
+	existingBranches map[string]string,
 ) bool {
 	log := logf.FromContext(ctx)
 
+	// Severity filter.
+	incSev, ok := severityOrder[incident.Severity]
+	if !ok || incSev > minSev {
+		return false
+	}
+
 	finding := incidentToFinding(incident)
 
-	plan, err := r.RemediationEngine.GeneratePlan(ctx, finding)
+	// Dedup: compute the branch name the PR would land on and skip if a
+	// PR is already open for it. The remediation engine uses the same
+	// BranchName helper so the keys line up.
+	branch := gitops.BranchName(finding.ResourceName, finding.ResourceNamespace, finding.Title)
+	if existingURL, exists := existingBranches[branch]; exists {
+		log.Info("Skipping remediation — open PR already exists",
+			"incident", incident.ID, "branch", branch, "prURL", existingURL)
+		// Still mark the incident resolved so we don't loop on it; a
+		// future scan will regenerate the incident if the PR is closed
+		// without merging and the finding remains.
+		r.CorrelatorEngine.ResolveIncident(incident.ID)
+		return false
+	}
+
+	plan, err := r.RemediationEngine.GeneratePlan(ctx, finding, repo.Spec.Paths)
 	if err != nil {
 		log.Error(err, "Failed to generate remediation plan",
 			"incident", incident.ID,
@@ -314,7 +380,8 @@ func (r *RemediationPolicyReconciler) remediateIncident(
 
 	result, err := r.RemediationEngine.ApplyPlan(ctx, plan, repoOwner, repoName)
 	if err != nil {
-		log.Error(err, "Failed to apply remediation plan", "incident", incident.ID)
+		log.Error(err, "Failed to apply remediation plan",
+			"incident", incident.ID)
 		r.Recorder.Event(policy, corev1.EventTypeWarning, zelyov1alpha1.EventReasonReconcileError,
 			fmt.Sprintf("Failed to apply fix for incident %s: %v", incident.ID, err))
 		return false
@@ -327,11 +394,9 @@ func (r *RemediationPolicyReconciler) remediateIncident(
 		r.Recorder.Event(policy, corev1.EventTypeNormal, "RemediationPRCreated",
 			fmt.Sprintf("Created PR %s for incident %s (risk=%d)",
 				result.URL, incident.ID, plan.RiskScore))
+		existingBranches[branch] = result.URL
 	}
 
-	// Resolve the incident after the remediation cycle completes without
-	// error — whether or not a PR was actually produced (dry-run and
-	// report strategies return result=nil with err=nil).
 	r.CorrelatorEngine.ResolveIncident(incident.ID)
 	return true
 }

@@ -10,14 +10,22 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"os"
+	pathpkg "path"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 
 	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 	"github.com/zelyo-ai/zelyo-operator/internal/events"
+	"github.com/zelyo-ai/zelyo-operator/internal/github"
+	"github.com/zelyo-ai/zelyo-operator/internal/gitops"
 )
 
 // mockPRCounter is a monotonically increasing suffix seeded from the
@@ -179,13 +187,61 @@ func (s *Server) handlePresetPropose(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	prURL := mockPRURL(p.ID, cfg.GitOpsRepo)
 	now := time.Now().UTC()
 
-	// Populate the remediation store so clicking the PR card in the Pipeline
-	// opens the same Before/Diff/After panel used for AI remediations.
-	items := make([]events.RemediationItem, 0, len(p.Files))
+	// Pick the real GitOpsRepository CR (we already know at least one exists
+	// because resolveConfigStatus set GitOpsConfigured=true). The repo
+	// carries the URL, auth Secret name, and the allowed path prefixes we
+	// must honor when committing preset files.
+	repo, err := s.firstGitOpsRepository(r.Context())
+	if err != nil {
+		s.log.Error(err, "loading GitOpsRepository for preset propose")
+		s.writeError(w, http.StatusBadGateway, "could not load GitOpsRepository for propose")
+		return
+	}
+
+	// Compose preset files into repo-relative paths under the first
+	// configured Spec.Paths entry so the PR lands where the user's GitOps
+	// controller is actually watching. Without this, preset files went to
+	// repo root regardless of the repo's configured directory layout.
+	prefix := ""
+	if len(repo.Spec.Paths) > 0 {
+		prefix = strings.TrimPrefix(strings.TrimSuffix(repo.Spec.Paths[0], "/"), "/")
+	}
+	committedFiles := make([]PresetFile, 0, len(p.Files))
 	for _, f := range p.Files {
+		dest := f.Path
+		if prefix != "" {
+			dest = pathpkg.Join(prefix, f.Path)
+		}
+		committedFiles = append(committedFiles, PresetFile{Path: dest, Content: f.Content})
+	}
+
+	// Demo mode takes the simulated path (fake PR URL, auto-merge goroutine)
+	// so staged environments and tests don't hit GitHub. Production
+	// deployments run with the env var unset and open a real PR.
+	demoMode := os.Getenv("ZELYO_DEMO_MODE") == "true"
+
+	var prURL string
+	if demoMode {
+		prURL = mockPRURL(p.ID, cfg.GitOpsRepo)
+	} else {
+		realURL, prErr := s.openPresetPR(r.Context(), p, repo, committedFiles)
+		if prErr != nil {
+			s.log.Error(prErr, "opening preset PR",
+				"preset", p.ID, "repo", repo.Name)
+			s.writeError(w, http.StatusBadGateway,
+				fmt.Sprintf("GitOps PR failed: %s", prErr.Error()))
+			return
+		}
+		prURL = realURL
+	}
+
+	// Populate the remediation store so clicking the PR card in the Pipeline
+	// opens the same Before/Diff/After panel used for AI remediations. We
+	// record the repo-prefixed paths that were actually committed.
+	items := make([]events.RemediationItem, 0, len(committedFiles))
+	for _, f := range committedFiles {
 		items = append(items, events.RemediationItem{
 			ResourceKey: f.Path,
 			Resource:    f.Path,
@@ -201,8 +257,8 @@ func (s *Server) handlePresetPropose(w http.ResponseWriter, r *http.Request) {
 		PRURL:        prURL,
 		Summary:      p.Name,
 		Findings:     items,
-		Diff:         BuildDiff(p),
-		FilesChanged: filePaths(p.Files),
+		Diff:         buildPresetDiff(committedFiles),
+		FilesChanged: presetFilePaths(committedFiles),
 	})
 
 	// Flip local state and fire pipeline events. Do the full
@@ -221,15 +277,13 @@ func (s *Server) handlePresetPropose(w http.ResponseWriter, r *http.Request) {
 		st.Message = "Waiting for PR review"
 	})
 
-	events.EmitConfigPRDrafted(p.Name, prURL, cfg.GitOpsRepo, p.Description, len(p.Files))
-	events.EmitPullRequestOpened(prURL, cfg.GitOpsRepo, len(p.Files))
+	events.EmitConfigPRDrafted(p.Name, prURL, cfg.GitOpsRepo, p.Description, len(committedFiles))
+	events.EmitPullRequestOpened(prURL, cfg.GitOpsRepo, len(committedFiles))
 
-	// In demo mode: auto-merge after a short delay so the Pipeline visibly
-	// progresses through open → merged → enabled without human action.
-	// Use the server's long-lived context (not the per-request one, which
-	// dies when the client disconnects) so the goroutine exits cleanly on
-	// server shutdown instead of mutating shared state into a race.
-	if cfg.DemoMode {
+	// In demo mode only: auto-merge after a short delay so the Pipeline
+	// visibly progresses through open → merged → enabled without human
+	// action. Real PRs wait for human review in the GitOps repo.
+	if demoMode {
 		go s.demoAdvancePreset(s.backgroundContext(), p, prURL, cfg.GitOpsRepo)
 	}
 
@@ -237,6 +291,127 @@ func (s *Server) handlePresetPropose(w http.ResponseWriter, r *http.Request) {
 		"status": status,
 		"prUrl":  prURL,
 	})
+}
+
+// firstGitOpsRepository returns the first GitOpsRepository in cluster. We
+// already validated (via resolveConfigStatus) that at least one exists.
+func (s *Server) firstGitOpsRepository(ctx context.Context) (*zelyov1alpha1.GitOpsRepository, error) {
+	repos := &zelyov1alpha1.GitOpsRepositoryList{}
+	if err := s.client.List(ctx, repos, &client.ListOptions{Limit: 1}); err != nil {
+		return nil, fmt.Errorf("listing GitOpsRepositories: %w", err)
+	}
+	if len(repos.Items) == 0 {
+		return nil, fmt.Errorf("no GitOpsRepository configured")
+	}
+	return &repos.Items[0], nil
+}
+
+// openPresetPR creates a real pull request for a preset using the github
+// engine. Auth comes from the Secret referenced by GitOpsRepository.Spec
+// .AuthSecret; we accept either "token" or "api-key" Data keys to match
+// what the RemediationPolicy controller accepts.
+func (s *Server) openPresetPR(ctx context.Context, p *Preset, repo *zelyov1alpha1.GitOpsRepository, files []PresetFile) (string, error) {
+	if repo.Spec.AuthSecret == "" {
+		return "", fmt.Errorf("GitOpsRepository %q has no authSecret", repo.Name)
+	}
+	secret := &corev1.Secret{}
+	key := types.NamespacedName{Name: repo.Spec.AuthSecret, Namespace: repo.Namespace}
+	if err := s.client.Get(ctx, key, secret); err != nil {
+		return "", fmt.Errorf("loading auth Secret %s/%s: %w", repo.Namespace, repo.Spec.AuthSecret, err)
+	}
+	token := string(secret.Data["token"])
+	if token == "" {
+		token = string(secret.Data["api-key"])
+	}
+	if token == "" {
+		return "", fmt.Errorf("auth Secret %s/%s has no token or api-key data", repo.Namespace, repo.Spec.AuthSecret)
+	}
+	owner, name := parseOwnerRepo(repo.Spec.URL)
+	if owner == "" || name == "" {
+		return "", fmt.Errorf("GitOpsRepository URL %q does not parse as owner/repo", repo.Spec.URL)
+	}
+
+	gh := github.NewEngine(github.NewPATClient(token, ""), s.log.WithName("github-engine"))
+
+	changes := make([]gitops.FileChange, 0, len(files))
+	for _, f := range files {
+		changes = append(changes, gitops.FileChange{
+			Path:      f.Path,
+			Content:   f.Content,
+			Operation: gitops.FileOpCreate,
+		})
+	}
+
+	baseBranch := repo.Spec.Branch
+	if baseBranch == "" {
+		baseBranch = "main"
+	}
+
+	pr := &gitops.PullRequest{
+		RepoOwner:  owner,
+		RepoName:   name,
+		Title:      fmt.Sprintf("[Zelyo] Enable %s (%s)", p.Name, p.Framework),
+		Body:       fmt.Sprintf("Enables the **%s** compliance preset.\n\n%s\n\n_Drafted by Zelyo Operator Compliance page._", p.Name, p.Description),
+		BaseBranch: baseBranch,
+		// Deterministic branch name keyed only on preset ID so dedup
+		// (ListOpenPRs lookup against this branch) still works across
+		// operator restarts and idempotent re-proposes.
+		HeadBranch: fmt.Sprintf("zelyo-operator/preset/%s", p.ID),
+		Labels:     []string{"zelyo-operator", "compliance", p.Framework},
+		Files:      changes,
+	}
+	result, err := gh.CreatePullRequest(ctx, pr)
+	if err != nil {
+		return "", fmt.Errorf("creating PR in %s/%s: %w", owner, name, err)
+	}
+	return result.URL, nil
+}
+
+// parseOwnerRepo pulls owner and repo from a git URL; duplicates the
+// controller-side parseRepoURL logic but avoids a cross-package import.
+func parseOwnerRepo(url string) (owner, repo string) {
+	u := strings.TrimSpace(url)
+	u = strings.TrimSuffix(u, ".git")
+	// Strip scheme://host/ prefix.
+	if i := strings.Index(u, "://"); i >= 0 {
+		rest := u[i+3:]
+		if j := strings.Index(rest, "/"); j >= 0 {
+			u = rest[j+1:]
+		}
+	}
+	// Strip user@host: prefix for SSH URLs.
+	if i := strings.LastIndex(u, ":"); i >= 0 && strings.Contains(u[:i], "@") {
+		u = u[i+1:]
+	}
+	parts := strings.SplitN(u, "/", 2)
+	if len(parts) != 2 {
+		return "", ""
+	}
+	return parts[0], parts[1]
+}
+
+// buildPresetDiff renders a unified-diff representation of creating the
+// repo-prefixed preset files. Mirrors BuildDiff but operates on the paths
+// that were actually committed.
+func buildPresetDiff(files []PresetFile) string {
+	var b strings.Builder
+	for _, f := range files {
+		lines := strings.Split(f.Content, "\n")
+		fmt.Fprintf(&b, "--- /dev/null\n+++ b/%s\n@@ +0,0 +1,%d @@\n", f.Path, len(lines))
+		for _, l := range lines {
+			fmt.Fprintf(&b, "+%s\n", l)
+		}
+	}
+	return b.String()
+}
+
+// presetFilePaths returns the committed paths.
+func presetFilePaths(files []PresetFile) []string {
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		out = append(out, f.Path)
+	}
+	return out
 }
 
 // handlePresetApply applies the preset directly without a PR (bootstrap
@@ -261,15 +436,83 @@ func (s *Server) handlePresetApply(w http.ResponseWriter, r *http.Request) {
 
 	store := DefaultPresetStore()
 	now := time.Now().UTC()
+
+	// Real cluster apply. Previously handlePresetApply just flipped
+	// in-memory state and emitted a "config.applied" event — nothing
+	// actually landed in the cluster. Now we decode each preset file as
+	// an unstructured object and create (or patch) it via the k8s client.
+	applied, applyErr := s.applyPresetFilesToCluster(r.Context(), p)
+	if applyErr != nil {
+		s.log.Error(applyErr, "applying preset files to cluster", "preset", p.ID)
+		status := store.update(p.ID, func(st *PresetStatus) {
+			st.Message = fmt.Sprintf("Direct apply failed: %s", applyErr.Error())
+		})
+		s.writeError(w, http.StatusBadGateway,
+			fmt.Sprintf("direct apply failed after %d/%d files: %s", applied, len(p.Files), applyErr.Error()))
+		_ = status
+		return
+	}
+
 	status := store.update(p.ID, func(st *PresetStatus) {
 		st.State = PresetStateEnabled
 		st.EnabledAt = &now
 		st.PRURL = ""
-		st.Message = "Applied directly to cluster"
+		st.Message = fmt.Sprintf("Applied %d resource(s) directly to cluster", applied)
 	})
-	events.EmitConfigApplied(p.Name, p.Description, len(p.Files))
+	events.EmitConfigApplied(p.Name, p.Description, applied)
 
-	s.writeJSON(w, map[string]interface{}{"status": status})
+	s.writeJSON(w, map[string]interface{}{"status": status, "applied": applied})
+}
+
+// applyPresetFilesToCluster decodes each preset file as Kubernetes YAML
+// and Server-Side-Applies it via the controller-runtime client. SSA is
+// idempotent: re-applying the same preset (or one whose resources were
+// partially applied earlier) converges the declared state without the
+// AlreadyExists errors a plain Create would raise. Zelyo owns its own
+// fields via the "zelyo-operator" field manager so manual overrides
+// stick around on re-apply.
+func (s *Server) applyPresetFilesToCluster(ctx context.Context, p *Preset) (int, error) {
+	if s.client == nil {
+		return 0, fmt.Errorf("dashboard has no k8s client")
+	}
+	// Preset catalog YAMLs (internal/dashboard/presets.go) intentionally
+	// omit metadata.namespace so the same preset can be rendered into
+	// whatever operator namespace the install uses. All of Zelyo's CRDs
+	// are namespaced, so decode → create without a namespace fails with
+	// "the namespace of the object (...) does not match the namespace on
+	// the request". Default to the operator namespace (ZELYO_OPERATOR_NAMESPACE
+	// env, falling back to zelyo-system) — matches the convention the
+	// ZelyoConfig controller uses when resolving its own Secret.
+	ns := os.Getenv("ZELYO_OPERATOR_NAMESPACE")
+	if ns == "" {
+		ns = "zelyo-system"
+	}
+	applied := 0
+	for _, f := range p.Files {
+		obj := &unstructured.Unstructured{}
+		if err := yaml.Unmarshal([]byte(f.Content), &obj.Object); err != nil {
+			return applied, fmt.Errorf("parsing %s: %w", f.Path, err)
+		}
+		if obj.GetKind() == "" {
+			return applied, fmt.Errorf("parsing %s: empty or non-object YAML", f.Path)
+		}
+		if obj.GetNamespace() == "" {
+			obj.SetNamespace(ns)
+		}
+		// client.Apply is deprecated in favor of Client.Apply, but the new
+		// API requires a typed runtime.ApplyConfiguration. Preset files
+		// are arbitrary user YAML decoded as *unstructured.Unstructured —
+		// there's no typed apply path for unstructured, so the
+		// Patch+client.Apply idiom is still the correct one here.
+		//nolint:staticcheck // SSA for unstructured objects legitimately needs client.Apply PatchType.
+		if err := s.client.Patch(ctx, obj, client.Apply,
+			client.ForceOwnership, client.FieldOwner("zelyo-operator")); err != nil {
+			return applied, fmt.Errorf("applying %s/%s (%s): %w",
+				obj.GetNamespace(), obj.GetName(), obj.GetKind(), err)
+		}
+		applied++
+	}
+	return applied, nil
 }
 
 // handlePresetStatus returns the current status for a preset — used by the
@@ -380,14 +623,6 @@ func mockPRURL(_, repo string) string {
 	suffix := mockPRCounter.Add(1)
 	n := base*1000 + (suffix % 1000)
 	return fmt.Sprintf("https://github.com/%s/pull/%d", repo, n)
-}
-
-func filePaths(files []PresetFile) []string {
-	out := make([]string, 0, len(files))
-	for _, f := range files {
-		out = append(out, f.Path)
-	}
-	return out
 }
 
 // MustEncodePreset is used in tests.

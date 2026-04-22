@@ -178,11 +178,17 @@ In this mode, the AI Security Agent detects and correlates, but **does not fix**
 5. **No repository modifications or PRs are created.**
 
 ### 🛡️ Protect Mode
-When a `GitOpsRepository` CRD is configured, the AI Security Agent gains autonomy.
+Setting `ZelyoConfig.spec.mode: protect` only flips the remediation engine's strategy from `dry-run` to `gitops-pr` — it does not, by itself, open any PRs. Actual PR creation requires **both**:
+
+- At least one `GitOpsRepository` CR onboarded (with auth secret and paths configured), and
+- At least one `RemediationPolicy` CR whose `spec.gitOpsRepository` points at that repo.
+
+Only then does the full loop fire:
+
 1. Correlator emits an incident
-2. RemediationPolicy queries the LLM for a structured JSON fix plan
-3. Remediation engine validates the plan and scores the risk
-4. GitHub engine creates a branch, commits the fix, and opens a PR
+2. `RemediationPolicy` controller filters open incidents by `spec.severityFilter` and caps PR submissions per reconcile cycle via `spec.maxConcurrentPRs`
+3. Remediation engine asks the LLM for a structured JSON fix plan and scores the risk
+4. GitHub engine creates a branch, commits the fix, and opens a PR (skipped globally when `ZelyoConfig.spec.mode: audit`, which leaves the engine in `dry-run`)
 5. Human team reviews and merges the PR
 6. ArgoCD/Flux applies the change to the cluster
 

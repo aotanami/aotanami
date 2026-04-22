@@ -115,8 +115,11 @@ Aggregate views, cross-cluster correlation, and centralized policy management ac
 
 | Mode | When | Behavior |
 |---|---|---|
-| **:material-magnify: Audit Mode** (default) | No GitOps repo onboarded | Detects, diagnoses, and sends alerts — zero cluster modifications |
-| **:material-shield-check: Protect Mode** | GitOps repo onboarded | Full autonomous remediation — generates fixes, opens PRs via GitHub App |
+| **:material-magnify: Audit Mode** (default) | `ZelyoConfig.spec.mode: audit` | Detects, diagnoses, and sends alerts. The remediation engine runs in `dry-run` — fix plans are logged but no PRs are opened. Zero cluster modifications. |
+| **:material-shield-check: Protect Mode** | `ZelyoConfig.spec.mode: protect` **and** at least one `RemediationPolicy` targeting a `GitOpsRepository` | Switches the remediation engine to the `gitops-pr` strategy. The `RemediationPolicy` controller drives PR creation — `severityFilter` gates which incidents qualify, `maxConcurrentPRs` caps submissions per reconcile cycle. |
+
+!!! note
+    `ZelyoConfig.spec.mode: protect` only flips the engine strategy from `dry-run` to `gitops-pr`. **No PRs are opened until you also create at least one `RemediationPolicy` that points at a `GitOpsRepository`.** See [GitOps Onboarding](gitops-onboarding.md) for the full setup.
 
 ---
 
