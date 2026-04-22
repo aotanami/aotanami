@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,6 +107,273 @@ func TestGitHubEngine_CreatePullRequest(t *testing.T) {
 	}
 	if result.Branch != "zelyo-operator/fix-test" {
 		t.Errorf("Unexpected branch: %s", result.Branch)
+	}
+}
+
+// TestGitHubEngine_CreatePullRequest_SkipsWhenOpenPRExists is the
+// regression guard for the "311 commits on one PR" footgun. When the
+// target head branch already exists AND an open PR covers it, the engine
+// must NOT commit new files and must NOT try to open a duplicate PR — it
+// must return the existing PR.
+//
+// Before the fix: createRef returned 422 (branch exists), the engine
+// silently continued, file commits landed on the open PR's branch, and
+// openPR finally failed with 422 (PR exists). Every reconcile piled
+// another commit on the same PR.
+func TestGitHubEngine_CreatePullRequest_SkipsWhenOpenPRExists(t *testing.T) {
+	const branch = "zelyo-operator/fix/payment-service"
+	var (
+		getRefCalls    int
+		createRefCalls int
+		listPRCalls    int
+		putFileCalls   int
+		openPRCalls    int
+		lastHeadQuery  string
+	)
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /repos/testowner/testrepo/git/ref/heads/main", func(w http.ResponseWriter, _ *http.Request) {
+		getRefCalls++
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"object": map[string]string{"sha": "basesha"},
+		})
+	})
+
+	// createRef returns 422 — branch already exists from a prior cycle.
+	mux.HandleFunc("POST /repos/testowner/testrepo/git/refs", func(w http.ResponseWriter, _ *http.Request) {
+		createRefCalls++
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"message":"Reference already exists"}`))
+	})
+
+	// PR lookup — returns one open PR covering the branch.
+	mux.HandleFunc("GET /repos/testowner/testrepo/pulls", func(w http.ResponseWriter, req *http.Request) {
+		listPRCalls++
+		lastHeadQuery = req.URL.Query().Get("head")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+			{
+				"number":     99,
+				"html_url":   "https://github.com/testowner/testrepo/pull/99",
+				"head":       map[string]string{"ref": branch},
+				"created_at": time.Now().Format(time.RFC3339),
+			},
+		})
+	})
+
+	// PUT /contents — MUST NOT be called. Failing here is the core
+	// regression assertion: landing commits on an existing open PR is
+	// what produced 311 duplicate commits in the original incident.
+	mux.HandleFunc("PUT /repos/testowner/testrepo/contents/", func(w http.ResponseWriter, _ *http.Request) {
+		putFileCalls++
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	})
+
+	// POST /pulls — MUST NOT be called.
+	mux.HandleFunc("POST /repos/testowner/testrepo/pulls", func(w http.ResponseWriter, _ *http.Request) {
+		openPRCalls++
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{}`))
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	engine := &GitHubEngine{
+		http:    server.Client(),
+		log:     logr.Discard(),
+		baseURL: server.URL,
+	}
+
+	result, err := engine.CreatePullRequest(context.Background(), &gitops.PullRequest{
+		RepoOwner:  "testowner",
+		RepoName:   "testrepo",
+		Title:      "[Zelyo Operator] Fix payment-service",
+		Body:       "x",
+		BaseBranch: "main",
+		HeadBranch: branch,
+		Files: []gitops.FileChange{
+			{Path: "k8s/payment-service.yaml", Content: "apiVersion: v1", Operation: gitops.FileOpUpdate},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreatePullRequest failed: %v", err)
+	}
+
+	// Existing PR must be returned.
+	if result == nil {
+		t.Fatal("expected existing PR to be returned, got nil result")
+	}
+	if result.Number != 99 {
+		t.Errorf("expected existing PR number 99, got %d", result.Number)
+	}
+	if result.URL != "https://github.com/testowner/testrepo/pull/99" {
+		t.Errorf("expected existing PR URL, got %s", result.URL)
+	}
+	if result.Branch != branch {
+		t.Errorf("expected branch %q, got %q", branch, result.Branch)
+	}
+
+	// Critical regression assertions.
+	if putFileCalls != 0 {
+		t.Errorf("PUT /contents must not run when an open PR already covers the branch — got %d call(s)", putFileCalls)
+	}
+	if openPRCalls != 0 {
+		t.Errorf("POST /pulls (openPR) must not run when an open PR already covers the branch — got %d call(s)", openPRCalls)
+	}
+
+	// The lookup must scope by head branch — otherwise a heavily-forked
+	// repo's PR list could shadow our matcher.
+	if lastHeadQuery == "" {
+		t.Error("expected head query parameter on PR lookup; got empty")
+	}
+	if !strings.Contains(lastHeadQuery, branch) {
+		t.Errorf("expected head query to contain branch %q, got %q", branch, lastHeadQuery)
+	}
+
+	// Sanity: the happy-path lookups DID run.
+	if getRefCalls != 1 {
+		t.Errorf("expected exactly 1 GET ref call, got %d", getRefCalls)
+	}
+	if createRefCalls != 1 {
+		t.Errorf("expected exactly 1 POST refs call, got %d", createRefCalls)
+	}
+	if listPRCalls != 1 {
+		t.Errorf("expected exactly 1 PR-lookup call, got %d", listPRCalls)
+	}
+}
+
+// TestGitHubEngine_CreatePullRequest_BranchExistsWithoutOpenPR guards the
+// legitimate case: a user manually closed/deleted a PR but left the
+// branch behind. The engine should proceed — commit fresh files, open a
+// new PR — not short-circuit.
+func TestGitHubEngine_CreatePullRequest_BranchExistsWithoutOpenPR(t *testing.T) {
+	const branch = "zelyo-operator/fix/orphan-branch"
+	var putFileCalls, openPRCalls int
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /repos/testowner/testrepo/git/ref/heads/main", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"object": map[string]string{"sha": "basesha"},
+		})
+	})
+	mux.HandleFunc("POST /repos/testowner/testrepo/git/refs", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"message":"Reference already exists"}`))
+	})
+	// No open PR on the branch.
+	mux.HandleFunc("GET /repos/testowner/testrepo/pulls", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
+	})
+	// Content GET (exists check inside createOrUpdateFile) — 404 so the
+	// upsert treats the file as new.
+	mux.HandleFunc("GET /repos/testowner/testrepo/contents/", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	mux.HandleFunc("PUT /repos/testowner/testrepo/contents/", func(w http.ResponseWriter, _ *http.Request) {
+		putFileCalls++
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"content": map[string]string{"sha": "x"}})
+	})
+	mux.HandleFunc("POST /repos/testowner/testrepo/pulls", func(w http.ResponseWriter, _ *http.Request) {
+		openPRCalls++
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"number":     42,
+			"html_url":   "https://github.com/testowner/testrepo/pull/42",
+			"created_at": time.Now().Format(time.RFC3339),
+		})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	engine := &GitHubEngine{
+		http:    server.Client(),
+		log:     logr.Discard(),
+		baseURL: server.URL,
+	}
+
+	result, err := engine.CreatePullRequest(context.Background(), &gitops.PullRequest{
+		RepoOwner:  "testowner",
+		RepoName:   "testrepo",
+		Title:      "t",
+		BaseBranch: "main",
+		HeadBranch: branch,
+		Files: []gitops.FileChange{
+			{Path: "a.yaml", Content: "x", Operation: gitops.FileOpUpdate},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreatePullRequest failed: %v", err)
+	}
+	if result == nil || result.Number != 42 {
+		t.Fatalf("expected new PR #42, got %+v", result)
+	}
+	if putFileCalls != 1 {
+		t.Errorf("expected PUT /contents to run when no open PR exists, got %d call(s)", putFileCalls)
+	}
+	if openPRCalls != 1 {
+		t.Errorf("expected POST /pulls to run when no open PR exists, got %d call(s)", openPRCalls)
+	}
+}
+
+// TestGitHubEngine_CreatePullRequest_BranchExistsLookupFails asserts we
+// fail closed when the dedup lookup itself errors. Proceeding blindly
+// after a failed lookup is how the 311-commits bug used to manifest;
+// better to surface a transient error and retry next cycle than to
+// pollute an open PR with duplicate commits.
+func TestGitHubEngine_CreatePullRequest_BranchExistsLookupFails(t *testing.T) {
+	var putFileCalls, openPRCalls int
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /repos/testowner/testrepo/git/ref/heads/main", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"object": map[string]string{"sha": "basesha"}})
+	})
+	mux.HandleFunc("POST /repos/testowner/testrepo/git/refs", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"message":"Reference already exists"}`))
+	})
+	// Lookup returns 500 — simulated GitHub transient error.
+	mux.HandleFunc("GET /repos/testowner/testrepo/pulls", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"upstream error"}`))
+	})
+	mux.HandleFunc("PUT /repos/testowner/testrepo/contents/", func(w http.ResponseWriter, _ *http.Request) {
+		putFileCalls++
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("POST /repos/testowner/testrepo/pulls", func(w http.ResponseWriter, _ *http.Request) {
+		openPRCalls++
+		w.WriteHeader(http.StatusCreated)
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	engine := &GitHubEngine{
+		http:    server.Client(),
+		log:     logr.Discard(),
+		baseURL: server.URL,
+	}
+
+	_, err := engine.CreatePullRequest(context.Background(), &gitops.PullRequest{
+		RepoOwner:  "testowner",
+		RepoName:   "testrepo",
+		BaseBranch: "main",
+		HeadBranch: "zelyo-operator/fix/lookup-fails",
+		Files:      []gitops.FileChange{{Path: "a.yaml", Content: "x", Operation: gitops.FileOpUpdate}},
+	})
+	if err == nil {
+		t.Fatal("expected error when dedup lookup fails; got nil")
+	}
+	if putFileCalls != 0 {
+		t.Errorf("must not commit files when lookup fails — got %d PUT calls", putFileCalls)
+	}
+	if openPRCalls != 0 {
+		t.Errorf("must not open PR when lookup fails — got %d POST /pulls calls", openPRCalls)
 	}
 }
 
