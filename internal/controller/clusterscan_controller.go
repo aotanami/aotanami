@@ -23,15 +23,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/robfig/cron/v3"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	zelyov1alpha1 "github.com/zelyo-ai/zelyo-operator/api/v1alpha1"
 	"github.com/zelyo-ai/zelyo-operator/internal/compliance"
@@ -122,7 +126,7 @@ func (r *ClusterScanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Status().Update(ctx, scan); err != nil {
 			return ctrl.Result{}, fmt.Errorf("updating status: %w", err)
 		}
-		return ctrl.Result{RequeueAfter: defaultScanInterval}, nil
+		return ctrl.Result{RequeueAfter: scanRequeueInterval(scan)}, nil
 	}
 
 	// ── Run the scan ──
@@ -183,7 +187,7 @@ func (r *ClusterScanReconciler) handleTargetResolutionError(ctx context.Context,
 	if statusErr := r.Status().Update(ctx, scan); statusErr != nil {
 		return ctrl.Result{}, fmt.Errorf("updating status: %w", statusErr)
 	}
-	return ctrl.Result{RequeueAfter: defaultScanInterval}, nil
+	return ctrl.Result{RequeueAfter: scanRequeueInterval(scan)}, nil
 }
 
 // updateFinalStatus writes the scan result into the ClusterScan status and records metrics.
@@ -228,7 +232,7 @@ func (r *ClusterScanReconciler) updateFinalStatus(ctx context.Context, scan *zel
 	zelyometrics.ResourcesScannedTotal.WithLabelValues("clusterscan").Add(float64(sr.summary.ResourcesScanned))
 	zelyometrics.ReconcileTotal.WithLabelValues("clusterscan", "success").Inc()
 
-	return ctrl.Result{RequeueAfter: defaultScanInterval}, nil
+	return ctrl.Result{RequeueAfter: scanRequeueInterval(scan)}, nil
 }
 
 // executeScan runs all requested scanners against the target pods and returns
@@ -510,12 +514,53 @@ func (r *ClusterScanReconciler) enforceHistoryLimit(ctx context.Context, scan *z
 }
 
 // SetupWithManager sets up the controller with the Manager.
+//
+// GenerationChangedPredicate is critical: the Reconcile loop writes the
+// ClusterScan status on every run (Phase=Running, Phase=Complete,
+// LastScheduleTime), which otherwise retriggers Reconcile immediately in
+// a tight loop — the scanner runs again → status writes again → Reconcile
+// again. With the predicate the controller only re-runs on spec changes,
+// owned-resource events, and the explicit RequeueAfter interval.
 func (r *ClusterScanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&zelyov1alpha1.ClusterScan{}).
+		For(&zelyov1alpha1.ClusterScan{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&zelyov1alpha1.ScanReport{}).
 		Named("clusterscan").
 		Complete(r)
+}
+
+// scanRequeueInterval returns the next-tick interval derived from the
+// scan's schedule. Uses robfig/cron/v3's standard parser so any valid
+// 5-field cron expression works ("*/10 * * * *", "0 * * * *",
+// "0 0 * * *", "30 2 * * 1-5", ...). We compute the interval from now
+// to the parser's next-trigger, clamp to [1m, 24h] to stop misconfig
+// from collapsing into a scan-per-second hot-loop (the
+// GenerationChangedPredicate also guards this), and fall back to
+// defaultScanInterval if the expression is empty or doesn't parse.
+// Unparseable expressions are logged at the caller's discretion.
+func scanRequeueInterval(scan *zelyov1alpha1.ClusterScan) time.Duration {
+	if scan == nil {
+		return defaultScanInterval
+	}
+	sch := strings.TrimSpace(scan.Spec.Schedule)
+	if sch == "" {
+		return defaultScanInterval
+	}
+	expr, err := cron.ParseStandard(sch)
+	if err != nil {
+		return defaultScanInterval
+	}
+	now := time.Now()
+	next := expr.Next(now)
+	interval := next.Sub(now)
+	if interval < time.Minute {
+		interval = time.Minute
+	}
+	if interval > 24*time.Hour {
+		interval = 24 * time.Hour
+	}
+	return interval
 }
 
 // truncateRunes returns s truncated to at most maxRunes runes. Slicing a
