@@ -194,6 +194,24 @@ func (r *RemediationPolicyReconciler) processIncidents(
 
 	log.Info("Found open incidents", "count", len(incidents))
 
+	// Build target-policy allowlist. Empty spec.targetPolicies means "all
+	// SecurityPolicies apply" — skip the scope filter entirely.
+	//
+	// Keyed by NamespacedName because SecurityPolicy is a namespaced CRD:
+	// two tenants can legally register policies with the same name, and
+	// matching on name alone would let an incident from team-b/baseline
+	// satisfy team-a's target "baseline". The upstream validation loop
+	// already resolves targetPolicies against policy.Namespace, so using
+	// that namespace here keeps the runtime gate consistent with what
+	// was actually validated.
+	var targetSet map[types.NamespacedName]struct{}
+	if len(policy.Spec.TargetPolicies) > 0 {
+		targetSet = make(map[types.NamespacedName]struct{}, len(policy.Spec.TargetPolicies))
+		for _, name := range policy.Spec.TargetPolicies {
+			targetSet[types.NamespacedName{Name: name, Namespace: policy.Namespace}] = struct{}{}
+		}
+	}
+
 	// Determine severity threshold.
 	severityFilter := policy.Spec.SeverityFilter
 	if severityFilter == "" {
@@ -202,22 +220,7 @@ func (r *RemediationPolicyReconciler) processIncidents(
 	minSev := severityOrder[severityFilter]
 
 	// ── Step 3: Initialize GitOps Engine from Secret ──
-	if repo.Spec.AuthSecret != "" {
-		secret := &corev1.Secret{}
-		secretKey := types.NamespacedName{Name: repo.Spec.AuthSecret, Namespace: repo.Namespace}
-		if err := r.Get(ctx, secretKey, secret); err == nil {
-			token := string(secret.Data["token"])
-			if token == "" {
-				token = string(secret.Data["api-key"])
-			}
-			if token != "" {
-				ghClient := github.NewPATClient(token, "")
-				ghEngine := github.NewEngine(ghClient, log.WithName("github-engine"))
-				r.RemediationEngine.SetGitOpsEngine(ghEngine)
-				log.Info("Successfully initialized GitOps engine for remediation", "repo", repo.Name)
-			}
-		}
-	}
+	r.initRemediationGitOps(ctx, repo)
 
 	// Respect MaxConcurrentPRs limit.
 	maxPRs := policy.Spec.MaxConcurrentPRs
@@ -233,19 +236,7 @@ func (r *RemediationPolicyReconciler) processIncidents(
 	// last reconcile already produced one. This is the fix for "excessive
 	// PRs" — without it, every reconcile tick regenerated incidents for the
 	// same unfixed resource and opened another PR.
-	existingBranches := map[string]string{}
-	if ge := r.RemediationEngine.GitOpsEngineForRepo(repoOwner, repoName); ge != nil {
-		open, listErr := ge.ListOpenPRs(ctx, repoOwner, repoName)
-		if listErr != nil {
-			// A ListOpenPRs failure is not fatal for reconcile — fall back
-			// to no-dedup but log so operators can see why PRs may stack.
-			log.Info("PR dedup skipped: ListOpenPRs failed", "error", listErr.Error())
-		} else {
-			for _, pr := range open {
-				existingBranches[pr.Branch] = pr.URL
-			}
-		}
-	}
+	existingBranches := r.snapshotOpenPRBranches(ctx, repoOwner, repoName)
 
 	// prsCreated counts real PRs opened this cycle and drives the status
 	// counter. processed counts every incident that consumed an LLM plan
@@ -260,6 +251,17 @@ func (r *RemediationPolicyReconciler) processIncidents(
 			log.Info("MaxConcurrentPRs limit reached", "limit", maxPRs, "dryRun", policy.Spec.DryRun)
 			break
 		}
+		// Scope gate: when spec.targetPolicies is set, only remediate
+		// incidents carrying at least one event from a listed
+		// SecurityPolicy. Checked in the loop (not inside
+		// remediateIncident) so filtered incidents are skipped without
+		// paying the dedup/ListOpenPRs cost and without ever calling
+		// ResolveIncident on them — another RemediationPolicy may own
+		// that scope. Also not charged against MaxConcurrentPRs since
+		// no LLM call is made.
+		if targetSet != nil && !incidentMatchesTargets(incident, targetSet) {
+			continue
+		}
 		opened, charged := r.remediateIncident(ctx, policy, repo, incident,
 			minSev, repoOwner, repoName, existingBranches)
 		if charged {
@@ -273,10 +275,71 @@ func (r *RemediationPolicyReconciler) processIncidents(
 	return prsCreated
 }
 
+// initRemediationGitOps resolves the GitOpsRepository's auth Secret and
+// wires a PAT-backed GitHub engine into the remediation engine. A missing
+// Secret, missing token, or missing AuthSecret field is silently skipped
+// — the remediation engine then has no way to open PRs but the controller
+// is still useful for dry-run/report strategies. Any hard failure is
+// non-fatal for reconcile, so this returns nothing. Extracted from
+// processIncidents to keep that function within the gocyclo budget.
+func (r *RemediationPolicyReconciler) initRemediationGitOps(
+	ctx context.Context,
+	repo *zelyov1alpha1.GitOpsRepository,
+) {
+	log := logf.FromContext(ctx)
+	if repo.Spec.AuthSecret == "" {
+		return
+	}
+	secret := &corev1.Secret{}
+	secretKey := types.NamespacedName{Name: repo.Spec.AuthSecret, Namespace: repo.Namespace}
+	if err := r.Get(ctx, secretKey, secret); err != nil {
+		return
+	}
+	token := string(secret.Data["token"])
+	if token == "" {
+		token = string(secret.Data["api-key"])
+	}
+	if token == "" {
+		return
+	}
+	ghClient := github.NewPATClient(token, "")
+	ghEngine := github.NewEngine(ghClient, log.WithName("github-engine"))
+	r.RemediationEngine.SetGitOpsEngine(ghEngine)
+	log.Info("Successfully initialized GitOps engine for remediation", "repo", repo.Name)
+}
+
+// snapshotOpenPRBranches returns a branch → PR-URL map for the currently
+// open, Zelyo-authored PRs against the given repo. A nil gitops engine,
+// or a ListOpenPRs failure, yields an empty map (dedup degrades to
+// no-dedup — the caller will open PRs even if duplicates already exist).
+// Extracted from processIncidents to keep that function within the
+// gocyclo budget.
+func (r *RemediationPolicyReconciler) snapshotOpenPRBranches(
+	ctx context.Context,
+	repoOwner, repoName string,
+) map[string]string {
+	log := logf.FromContext(ctx)
+	existing := map[string]string{}
+	ge := r.RemediationEngine.GitOpsEngineForRepo(repoOwner, repoName)
+	if ge == nil {
+		return existing
+	}
+	open, err := ge.ListOpenPRs(ctx, repoOwner, repoName)
+	if err != nil {
+		log.Info("PR dedup skipped: ListOpenPRs failed", "error", err.Error())
+		return existing
+	}
+	for _, pr := range open {
+		existing[pr.Branch] = pr.URL
+	}
+	return existing
+}
+
 // remediateIncident handles the full severity-check → dedup →
 // GeneratePlan → (dry-run preview | ApplyPlan) → resolve flow for a single
 // incident. Factored out of processIncidents to keep each unit under the
-// gocyclo threshold.
+// gocyclo threshold. The targetPolicies scope gate is applied by the
+// caller (processIncidents), not here.
 //
 // Returns two flags so the caller can drive independent counters:
 //   - opened: a real PR was created (counts against status.RemediationsApplied)
@@ -371,6 +434,33 @@ func (r *RemediationPolicyReconciler) remediateIncident(
 
 	r.CorrelatorEngine.ResolveIncident(incident.ID)
 	return true, true
+}
+
+// incidentMatchesTargets reports whether the incident carries at least one
+// event from a SecurityPolicy in the given allowlist. An incident may be a
+// correlation of events from multiple SecurityPolicies on the same
+// resource; if any one of them is targeted, the RemediationPolicy applies.
+//
+// Matching is on the (name, namespace) pair because SecurityPolicy is a
+// namespaced CRD. An event missing either half is treated as unmatched —
+// anomaly/deployment events legitimately have both blank, and a
+// SecurityPolicy-originated event with an empty namespace is malformed
+// (see securitypolicy_controller.ingestFindingsToCorrelator) and must
+// not be allowed to satisfy the gate by coincidence.
+func incidentMatchesTargets(incident *correlator.Incident, targets map[types.NamespacedName]struct{}) bool {
+	if incident == nil || len(targets) == 0 {
+		return false
+	}
+	for _, ev := range incident.Events {
+		if ev == nil || ev.SecurityPolicy == "" || ev.SecurityPolicyNamespace == "" {
+			continue
+		}
+		key := types.NamespacedName{Name: ev.SecurityPolicy, Namespace: ev.SecurityPolicyNamespace}
+		if _, ok := targets[key]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // incidentToFinding converts a correlator incident to a scanner finding for the

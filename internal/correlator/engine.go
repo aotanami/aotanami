@@ -30,15 +30,28 @@ const (
 
 // Event represents a single observable event in the cluster.
 type Event struct {
-	Type         EventType         `json:"type"`
-	Source       string            `json:"source"`
-	Severity     string            `json:"severity"`
-	Namespace    string            `json:"namespace"`
-	Resource     string            `json:"resource"`
-	ResourceKind string            `json:"resource_kind"`
-	Message      string            `json:"message"`
-	Timestamp    time.Time         `json:"timestamp"`
-	Metadata     map[string]string `json:"metadata,omitempty"`
+	Type EventType `json:"type"`
+	// Source is a free-form origin label (e.g. "securitypolicy/foo"). Kept
+	// for human-readable logging/debug; do NOT parse it to derive the
+	// triggering SecurityPolicy — use SecurityPolicy instead.
+	Source   string `json:"source"`
+	Severity string `json:"severity"`
+	// SecurityPolicy and SecurityPolicyNamespace together identify the
+	// SecurityPolicy CR whose scan produced this event. Both are
+	// populated for EventSecurityViolation; other event types (anomaly,
+	// config_change, etc.) leave them empty. Consumers MUST match on the
+	// (name, namespace) pair — SecurityPolicy is a namespaced resource
+	// and two namespaces can legally hold policies with the same name,
+	// so matching on name alone leaks remediation scope across tenants.
+	// See RemediationPolicy.spec.targetPolicies for the contract.
+	SecurityPolicy          string            `json:"security_policy,omitempty"`
+	SecurityPolicyNamespace string            `json:"security_policy_namespace,omitempty"`
+	Namespace               string            `json:"namespace"`
+	Resource                string            `json:"resource"`
+	ResourceKind            string            `json:"resource_kind"`
+	Message                 string            `json:"message"`
+	Timestamp               time.Time         `json:"timestamp"`
+	Metadata                map[string]string `json:"metadata,omitempty"`
 }
 
 // Incident represents a correlated group of events.
